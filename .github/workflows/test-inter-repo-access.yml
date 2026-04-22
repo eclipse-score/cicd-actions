@@ -1,0 +1,148 @@
+# *******************************************************************************
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+name: Test Inter-Repo Access
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # GitHub App mode is supported by inter-repo-access, but not self-tested here
+  # because this repository/org does not have a configured test App installation.
+  github-token-mode:
+    name: Self-test github.token mode
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Configure inter-repo access
+        id: access
+        uses: ./inter-repo-access
+
+      - name: Checkout probe repository without explicit token
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}
+          path: checkout-probe
+          persist-credentials: false
+
+      - name: Verify configured access
+        shell: bash
+        env:
+          EXPECTED_MODE: github-token
+          ACTUAL_MODE: ${{ steps.access.outputs.mode }}
+          SELECTED_TOKEN: ${{ steps.access.outputs.token }}
+          SERVER_URL: ${{ github.server_url }}
+          TARGET_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$ACTUAL_MODE" != "$EXPECTED_MODE" ]]; then
+            echo "Expected mode '$EXPECTED_MODE' but got '$ACTUAL_MODE'."
+            exit 1
+          fi
+
+          if [[ -z "$SELECTED_TOKEN" ]]; then
+            echo "Expected a non-empty selected token output."
+            exit 1
+          fi
+
+          if git config --local --get-all "http.${SERVER_URL}/.extraheader" >/dev/null; then
+            echo "actions/checkout extraheader is still configured in the workspace repo."
+            exit 1
+          fi
+
+          if git -C "$GITHUB_WORKSPACE/checkout-probe" config --local --get-all "http.${SERVER_URL}/.extraheader" >/dev/null; then
+            echo "actions/checkout extraheader is configured in checkout-probe despite persist-credentials=false."
+            exit 1
+          fi
+
+          git config --global --get-all safe.directory | grep -Fx "$GITHUB_WORKSPACE" >/dev/null
+
+          git clone --depth 1 "https://github.com/${TARGET_REPOSITORY}.git" clone-https >/dev/null
+          git clone --depth 1 "git@github.com:${TARGET_REPOSITORY}.git" clone-ssh >/dev/null
+
+  token-mode:
+    name: Self-test token mode
+    # Secrets are only available for this manual path; workflow_call covers github.token mode.
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Ensure token is configured
+        shell: bash
+        env:
+          DIRECT_TOKEN: ${{ secrets.SCORE_BOT_CLASSIC_PAT }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$DIRECT_TOKEN" ]]; then
+            echo "Repository secret SCORE_BOT_CLASSIC_PAT is required for this test."
+            exit 1
+          fi
+
+      - name: Configure inter-repo access
+        id: access
+        uses: ./inter-repo-access
+        with:
+          token: ${{ secrets.SCORE_BOT_CLASSIC_PAT }}
+
+      - name: Checkout probe repository without explicit token
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}
+          path: checkout-probe
+          persist-credentials: false
+
+      - name: Verify configured access
+        shell: bash
+        env:
+          EXPECTED_MODE: token
+          ACTUAL_MODE: ${{ steps.access.outputs.mode }}
+          SELECTED_TOKEN: ${{ steps.access.outputs.token }}
+          SERVER_URL: ${{ github.server_url }}
+          TARGET_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$ACTUAL_MODE" != "$EXPECTED_MODE" ]]; then
+            echo "Expected mode '$EXPECTED_MODE' but got '$ACTUAL_MODE'."
+            exit 1
+          fi
+
+          if [[ -z "$SELECTED_TOKEN" ]]; then
+            echo "Expected a non-empty selected token output."
+            exit 1
+          fi
+
+          if git config --local --get-all "http.${SERVER_URL}/.extraheader" >/dev/null; then
+            echo "actions/checkout extraheader is still configured in the workspace repo."
+            exit 1
+          fi
+
+          if git -C "$GITHUB_WORKSPACE/checkout-probe" config --local --get-all "http.${SERVER_URL}/.extraheader" >/dev/null; then
+            echo "actions/checkout extraheader is configured in checkout-probe despite persist-credentials=false."
+            exit 1
+          fi
+
+          git config --global --get-all safe.directory | grep -Fx "$GITHUB_WORKSPACE" >/dev/null
+
+          git clone --depth 1 "https://github.com/${TARGET_REPOSITORY}.git" clone-https >/dev/null
+          git clone --depth 1 "git@github.com:${TARGET_REPOSITORY}.git" clone-ssh >/dev/null

@@ -1,0 +1,151 @@
+# *******************************************************************************
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+name: Inter-Repo Access
+description: Resolve one token source and configure git for consistent GitHub cross-repository access.
+
+inputs:
+  github-app-client-id:
+    description: GitHub App client ID. When this and github-app-private-key are set, GitHub App auth takes precedence.
+    required: false
+    default: ""
+  github-app-private-key:
+    description: GitHub App private key for actions/create-github-app-token.
+    required: false
+    default: ""
+  token:
+    description: Token used when GitHub App credentials are not provided. Pass a secret-backed value when needed.
+    required: false
+    default: ""
+
+outputs:
+  token:
+    description: Selected token for use in later steps in the same job.
+    value: ${{ steps.select-token.outputs.token }}
+  mode:
+    description: "Selected auth mode: github-app, token, or github-token."
+    value: ${{ steps.select-token.outputs.mode }}
+  actor:
+    description: Best-effort actor string associated with the selected auth mode.
+    value: ${{ steps.select-token.outputs.actor }}
+  app-slug:
+    description: GitHub App slug when app auth is selected.
+    value: ${{ steps.select-token.outputs.app_slug }}
+  installation-id:
+    description: GitHub App installation ID when app auth is selected.
+    value: ${{ steps.select-token.outputs.installation_id }}
+
+runs:
+  using: composite
+  steps:
+    - name: Validate auth inputs
+      shell: bash
+      env:
+        APP_CLIENT_ID: ${{ inputs.github-app-client-id }}
+        APP_PRIVATE_KEY: ${{ inputs.github-app-private-key }}
+      run: |
+        set -euo pipefail
+
+        # GitHub App auth is only valid when both credentials are present.
+        if [[ -n "$APP_CLIENT_ID" && -z "$APP_PRIVATE_KEY" ]]; then
+          echo "github-app-private-key is required when github-app-client-id is set."
+          exit 1
+        fi
+
+        if [[ -z "$APP_CLIENT_ID" && -n "$APP_PRIVATE_KEY" ]]; then
+          echo "github-app-client-id is required when github-app-private-key is set."
+          exit 1
+        fi
+
+    - name: Create GitHub App token
+      if: ${{ inputs.github-app-client-id != '' && inputs.github-app-private-key != '' }}
+      id: app-token
+      uses: actions/create-github-app-token@v3
+      with:
+        client-id: ${{ inputs.github-app-client-id }}
+        private-key: ${{ inputs.github-app-private-key }}
+        owner: ${{ github.repository_owner }}
+
+    - name: Select auth mode
+      id: select-token
+      shell: bash
+      env:
+        APP_TOKEN: ${{ steps.app-token.outputs.token }}
+        APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+        INSTALLATION_ID: ${{ steps.app-token.outputs.installation-id }}
+        TOKEN_INPUT: ${{ inputs.token }}
+        GITHUB_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+
+        # Pick one credential source so later steps can use a single token.
+        if [[ -n "$APP_TOKEN" ]]; then
+          mode="github-app"
+          token="$APP_TOKEN"
+          actor="${APP_SLUG}[bot]"
+        elif [[ -n "$TOKEN_INPUT" ]]; then
+          mode="token"
+          token="$TOKEN_INPUT"
+          actor="$GITHUB_ACTOR"
+        else
+          mode="github-token"
+          token="$GITHUB_TOKEN"
+          actor="$GITHUB_ACTOR"
+        fi
+
+        echo "::add-mask::$token"
+        echo "mode=$mode" >> "$GITHUB_OUTPUT"
+        echo "actor=$actor" >> "$GITHUB_OUTPUT"
+        echo "app_slug=$APP_SLUG" >> "$GITHUB_OUTPUT"
+        echo "installation_id=$INSTALLATION_ID" >> "$GITHUB_OUTPUT"
+        {
+          echo "token<<__EOF__"
+          printf '%s\n' "$token"
+          echo "__EOF__"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Configure git for GitHub access
+      shell: bash
+      env:
+        SELECTED_TOKEN: ${{ steps.select-token.outputs.token }}
+      run: |
+        set -euo pipefail
+
+        server_url="${GITHUB_SERVER_URL%/}"
+        host="${server_url#https://}"
+        token_url="https://x-access-token:${SELECTED_TOKEN}@${host}/"
+
+        # Rewrite every GitHub remote style we expect later steps to use.
+        git config --global --replace-all "url.${token_url}.insteadOf" "${server_url}/"
+        git config --global --add "url.${token_url}.insteadOf" "git@${host}:"
+        git config --global --add "url.${token_url}.insteadOf" "ssh://git@${host}/"
+
+        # actions/checkout can leave a repo-local auth header behind; remove it so git uses the selected token consistently.
+        if git -C "$GITHUB_WORKSPACE" rev-parse --git-dir >/dev/null 2>&1; then
+          git -C "$GITHUB_WORKSPACE" config --local --unset-all "http.${server_url}/.extraheader" || true
+        fi
+
+        echo "Configured git URL rewrites for ${server_url}."
+
+    - name: Configure workspace safe.directory
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        # Git operations in later steps may run from the checked-out workspace path.
+        if git config --global --get-all safe.directory | grep -Fx -- "$GITHUB_WORKSPACE" >/dev/null 2>&1; then
+          echo "safe.directory already configured: $GITHUB_WORKSPACE"
+        else
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          echo "Configured safe.directory: $GITHUB_WORKSPACE"
+        fi
