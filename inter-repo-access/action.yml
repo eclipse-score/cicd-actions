@@ -121,8 +121,13 @@ runs:
       run: |
         set -euo pipefail
 
+        # remove trailing "/" from URL (if present)
         server_url="${GITHUB_SERVER_URL%/}"
+
+        # strip "https://" prefix to get host
         host="${server_url#https://}"
+
+        # build authenticated HTTPS URL using token
         token_url="https://x-access-token:${SELECTED_TOKEN}@${host}/"
 
         # Rewrite every GitHub remote style we expect later steps to use.
