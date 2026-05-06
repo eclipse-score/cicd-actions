@@ -21,35 +21,35 @@
 # - name: Setup qnx
 #   uses: eclipse-score/cicd-actions/.github/actions/setup-qnx-sdp@<git sha1>
 #   with:
-#     qnx_license: ${{ secrets.QNX_LICENSE }}
-#     qnx_user: ${{ secrets.QNX_USER }}
-#     qnx_password: ${{ secrets.QNX_PASSWORD }}
-#     qnx_license_server: ${{ vars.QNX_LICENSE_SERVER }}
+#     qnx-license: ${{ secrets.QNX_LICENSE }}
+#     qnx-user: ${{ secrets.QNX_USER }}
+#     qnx-password: ${{ secrets.QNX_PASSWORD }}
+#     qnx-license-server: ${{ vars.QNX_LICENSE_SERVER }}
 #
 #  Optional parameters are:
-#     qnx_license_dir    # default: "/opt/qnx/license"
-#     qnx_license_server # optional, if not provided no license server will be configured
+#     qnx-license-dir    # default: "/opt/qnx/license"
+#     qnx-license-server # optional, if not provided no license server will be configured
 #
 
 name: Setup QNX SDP
 description: Setup runner environment for using QNX SDP, including licence server configuration.
 
 inputs:
-  qnx_license:
+  qnx-license:
     description: "Base64 encoded content of the QNX client license file. Value will be masked in all workflow logs!"
     required: true
-  qnx_license_dir:
+  qnx-license-dir:
     description: "Directory where the QNX client license file will be stored. If the path starts with '/' then
                   sudo permissions are required when running this action. To store it somewhere in the home folder use '~/...' as path."
     required: true
     default: "/opt/qnx/license"
-  qnx_user:
+  qnx-user:
     description: "Username of the QNX user account for accessing qnx.com. Value will be masked in all workflow logs!"
     required: true
-  qnx_password:
+  qnx-password:
     description: "Password of the QNX user account for accessing qnx.com. Value will be masked in all workflow logs!"
     required: true
-  qnx_license_server:
+  qnx-license-server:
     description: "Address of the QNX license server (e.g. '6287@license-server-hostname'). If not provided, no license server will be configured."
     required: false
   credential-helper:
@@ -64,9 +64,9 @@ runs:
     - name: Configure secrets to be masked in logs
       shell: bash
       env:
-        QNX_LICENSE: ${{ inputs.qnx_license }}
-        QNX_USER: ${{ inputs.qnx_user }}
-        QNX_PASSWORD: ${{ inputs.qnx_password }}
+        QNX_LICENSE: ${{ inputs.qnx-license }}
+        QNX_USER: ${{ inputs.qnx-user }}
+        QNX_PASSWORD: ${{ inputs.qnx-password }}
       run: |
         echo "::group::  Configure secrets to be masked in logs"
 
@@ -80,6 +80,7 @@ runs:
         echo "::endgroup::"
 
     - name: Prepare qnx.com credential helper
+      if: ${{ inputs.credential-helper != '' }}
       shell: bash
       run: |
         echo "::group::  Prepare qnx.com credential helper"
@@ -106,12 +107,12 @@ runs:
     - name: Prepare QNX license file
       shell: bash
       env:
-        QNX_LICENSE: ${{ inputs.qnx_license }}
-        LICENSE_DIR: ${{ inputs.qnx_license_dir }}
+        QNX_LICENSE: ${{ inputs.qnx-license }}
+        LICENSE_DIR: ${{ inputs.qnx-license-dir }}
         # Assuming that if license dir starts with "/" it is a system folder that needs sudo for access.
         SUDO: |-
           ${{ case(
-            startsWith(inputs.qnx_license_dir, '/'), 'sudo',
+            startsWith(inputs.qnx-license-dir, '/'), 'sudo',
             ''
           ) }}
       run: |
@@ -153,10 +154,10 @@ runs:
         echo "::endgroup::"
 
     - name: Configure qnx license server
-      if: ${{ inputs.qnx_license_server != '' }}
+      if: ${{ inputs.qnx-license-server != '' }}
       shell: bash
       env:
-        QNX_LICENSE_SERVER: ${{ inputs.qnx_license_server }}
+        QNX_LICENSE_SERVER: ${{ inputs.qnx-license-server }}
       run: |
         export QNX_LICENSE_EXTSERVER_DELAY=59
         export QNX_LICENSE_QUEUE_TIMEOUT=60
@@ -175,5 +176,5 @@ runs:
       uses: extractions/netrc@c3879108aae6b4ed5c4eb60854ae04f06d2f2f68 #v3.0.0
       with:
         machine: qnx.com
-        username: ${{ inputs.qnx_user }}
-        password: ${{ inputs.qnx_password }}
+        username: ${{ inputs.qnx-user }}
+        password: ${{ inputs.qnx-password }}
