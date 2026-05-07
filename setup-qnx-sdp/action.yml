@@ -31,6 +31,13 @@
 #  Optional parameters are:
 #     qnx-license-server: ${{ vars.QNX_LICENSE_SERVER }} # optional, if not provided no license server will be configured
 #
+# ATTENTION: Cleanup license file after usage in the workflow with a final step to avoid leaving sensitive information on the runner after the workflow finishes:
+#            Example cleanup step:
+#
+#        - name: Cleanup QNX license
+#          if: always()
+#          run: sudo rm -rf /opt/score_qnx || true
+#
 
 name: Setup QNX SDP
 description: Setup runner environment for using QNX SDP, including licence server configuration.
@@ -42,7 +49,7 @@ inputs:
   qnx-license-dir:
     description: "Directory where the QNX client license file will be stored. If the path starts with '/' then
                   potentially sudo permissions are required when decoding and storing the license file. To store it somewhere in the home folder
-                  use '~/...' as path."
+                  use '~/...' as path. It is advised to remove the folder at the end of the workflow job in case it is stored in a workspace external folder."
     required: true
     default: "/opt/qnx/license"
   qnx-license-server:
