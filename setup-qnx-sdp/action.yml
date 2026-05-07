@@ -24,11 +24,12 @@
 #     qnx-license: ${{ secrets.QNX_LICENSE }}
 #     qnx-user: ${{ secrets.QNX_USER }}
 #     qnx-password: ${{ secrets.QNX_PASSWORD }}
-#     qnx-license-server: ${{ vars.QNX_LICENSE_SERVER }}
+#
+#  Parameters with default values:
+#     qnx-license-dir    # default: "/opt/qnx/license"
 #
 #  Optional parameters are:
-#     qnx-license-dir    # default: "/opt/qnx/license"
-#     qnx-license-server # optional, if not provided no license server will be configured
+#     qnx-license-server: ${{ vars.QNX_LICENSE_SERVER }} # optional, if not provided no license server will be configured
 #
 
 name: Setup QNX SDP
@@ -40,22 +41,26 @@ inputs:
     required: true
   qnx-license-dir:
     description: "Directory where the QNX client license file will be stored. If the path starts with '/' then
-                  sudo permissions are required when running this action. To store it somewhere in the home folder use '~/...' as path."
+                  potentially sudo permissions are required when decoding and storing the license file. To store it somewhere in the home folder
+                  use '~/...' as path."
     required: true
     default: "/opt/qnx/license"
+  qnx-license-server:
+    description: "Address of the QNX license server (e.g. '6287@license-server-hostname'). If not provided, no license server will be configured."
+    required: false
+  qnx-credential-helper:
+    description: "Workspace root relative or absolute path to the QNX credential helper script that allows Bazel to access qnx.com with the provided credentials
+                  (qnx-user and qnx-password). If path is given but file does not exist an error will be raised. If an empty string is given no check will be
+                  performed. If file exists it is set to be executable. Finally a GITHUB_ENV var QNX_CREDENTIAL_HELPER is set with the absolute path to the
+                  credential helper script."
+    required: false
+    default: ".github/tools/qnx_credential_helper.py"
   qnx-user:
     description: "Username of the QNX user account for accessing qnx.com. Value will be masked in all workflow logs!"
     required: true
   qnx-password:
     description: "Password of the QNX user account for accessing qnx.com. Value will be masked in all workflow logs!"
     required: true
-  qnx-license-server:
-    description: "Address of the QNX license server (e.g. '6287@license-server-hostname'). If not provided, no license server will be configured."
-    required: false
-  credential-helper:
-    description: "Relative or absolute path to the QNX credential helper script"
-    required: false
-    default: ".github/tools/qnx_credential_helper.py"
 
 
 runs:
@@ -80,14 +85,14 @@ runs:
         echo "::endgroup::"
 
     - name: Prepare qnx.com credential helper
-      if: ${{ inputs.credential-helper != '' }}
+      if: ${{ inputs.qnx-credential-helper != '' }}
       shell: bash
       run: |
         echo "::group::  Prepare qnx.com credential helper"
 
         set -euo pipefail
 
-        CRED_HELPER="${{ inputs.credential-helper }}"
+        CRED_HELPER="${{ inputs.qnx-credential-helper }}"
         if [[ "${CRED_HELPER}" != /* ]]; then
           CRED_HELPER="${GITHUB_WORKSPACE}/${CRED_HELPER}"
         fi
@@ -101,7 +106,11 @@ runs:
           chmod +x "${CRED_HELPER}"
         fi
 
-        echo "CRED_HELPER=${CRED_HELPER}" >> "${GITHUB_ENV}"
+        echo "QNX_CREDENTIAL_HELPER=${CRED_HELPER}" >> "${GITHUB_ENV}"
+
+        echo "Using helper at: ${QNX_CREDENTIAL_HELPER}"
+        ls -l "${QNX_CREDENTIAL_HELPER}"
+
         echo "::endgroup::"
 
     - name: Prepare QNX license file
@@ -117,6 +126,8 @@ runs:
           ) }}
       run: |
         echo "::group::  Prepare QNX license file"
+
+        set -euo pipefail
 
         # replace tilde by $HOME since the tilde char makes problems in github actions
         LICENSE_DIR="${LICENSE_DIR/#\~/$HOME}"
@@ -159,6 +170,10 @@ runs:
       env:
         QNX_LICENSE_SERVER: ${{ inputs.qnx-license-server }}
       run: |
+        echo "::group::  Configure qnx license server"
+
+        set -euo pipefail
+
         export QNX_LICENSE_EXTSERVER_DELAY=59
         export QNX_LICENSE_QUEUE_TIMEOUT=60
         echo "QNXLM_LICENSE_FILE=${QNX_LICENSE_SERVER}" >> $GITHUB_ENV
@@ -171,6 +186,8 @@ runs:
         #    license related metadata files need to be stored during the build and therefore it needs to be writable.
         # Set /var/tmp as writable because /var/tmp/.qnx might not be existing when Bazel starts
         echo "common --sandbox_writable_path=/var/tmp" >> user.bazelrc
+
+        echo "::endgroup::"
 
     - name: Configure access to qnx.com via .netrc
       uses: extractions/netrc@c3879108aae6b4ed5c4eb60854ae04f06d2f2f68 #v3.0.0
