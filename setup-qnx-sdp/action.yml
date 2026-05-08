@@ -10,34 +10,6 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 # *******************************************************************************
-#
-# Composite action to enable the GHA workflow to use the QNX Software Development Platform (SDP) for building and testing software.
-# This includes configuring proper access to the licence server by setting the related environment variables for local development
-# but also within Bazel by adding some bazel config entries to the file user.bazelrc within the current workspace.
-# Additionally allows access to qnx.com by configuring the .netrc file with provided credentials of a specific QNX user account.
-#
-# Recommended default usage with mandatory input params:
-#
-# - name: Setup qnx
-#   uses: eclipse-score/cicd-actions/.github/actions/setup-qnx-sdp@<git sha1>
-#   with:
-#     qnx-license: ${{ secrets.QNX_LICENSE }}
-#     qnx-user: ${{ secrets.QNX_USER }}
-#     qnx-password: ${{ secrets.QNX_PASSWORD }}
-#
-#  Parameters with default values:
-#     qnx-license-dir    # default: "/opt/qnx/license"
-#
-#  Optional parameters are:
-#     qnx-license-server: ${{ vars.QNX_LICENSE_SERVER }} # optional, if not provided no license server will be configured
-#
-# ATTENTION: Cleanup license file after usage in the workflow with a final step to avoid leaving sensitive information on the runner after the workflow finishes:
-#            Example cleanup step:
-#
-#        - name: Cleanup QNX license
-#          if: always()
-#          run: sudo rm -rf /opt/score_qnx || true
-#
 
 name: Setup QNX SDP
 description: Setup runner environment for using QNX SDP, including licence server
@@ -61,7 +33,7 @@ inputs:
       If not provided, no license server will be configured. When given it will be
       added to the user.bazelrc with the necessary environment variables for both
       build and test execution environments. Additionally sets some env vars for more
-      reliable license server communication.                                                       # optional, if not provided no license server will be configured
+      reliable license server communication.
     required: false
   qnx-credential-helper:
     description: Workspace root relative or absolute path to the QNX credential helper
