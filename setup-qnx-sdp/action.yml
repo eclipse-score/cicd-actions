@@ -198,9 +198,12 @@ runs:
         echo "QNXLM_LICENSE_FILE=${QNX_LICENSE_SERVER}" >> $GITHUB_ENV
         echo "QNX_LICENSE_EXTSERVER_DELAY=${QNX_LICENSE_EXTSERVER_DELAY}" >> $GITHUB_ENV
         echo "QNX_LICENSE_QUEUE_TIMEOUT=${QNX_LICENSE_QUEUE_TIMEOUT}" >> $GITHUB_ENV
-        echo "build --action_env=QNXLM_LICENSE_FILE=${QNX_LICENSE_SERVER} --action_env=QNX_LICENSE_EXTSERVER_DELAY --action_env=QNX_LICENSE_QUEUE_TIMEOUT" >> user.bazelrc
+
+        echo "common --action_env=QNXLM_LICENSE_FILE=${QNX_LICENSE_SERVER} --action_env=QNX_LICENSE_EXTSERVER_DELAY --action_env=QNX_LICENSE_QUEUE_TIMEOUT" >> user.bazelrc
+
         # In case the tests are also executing tools from the QNX sdp that require a license then also set these env vars for the test execution environment
-        echo "build --test_env=QNXLM_LICENSE_FILE=${QNX_LICENSE_SERVER} --test_env=QNX_LICENSE_EXTSERVER_DELAY --test_env=QNX_LICENSE_QUEUE_TIMEOUT" >> user.bazelrc
+        echo "common --test_env=QNXLM_LICENSE_FILE=${QNX_LICENSE_SERVER} --test_env=QNX_LICENSE_EXTSERVER_DELAY --test_env=QNX_LICENSE_QUEUE_TIMEOUT" >> user.bazelrc
+
         # Required as the bazel qnx toolchain configures /var/tmp/.qnx as QNX_CONFIGURATION_EXCLUSIVE env var. In this folder
         #    license related metadata files need to be stored during the build and therefore it needs to be writable.
         # Set /var/tmp as writable because /var/tmp/.qnx might not be existing when Bazel starts
