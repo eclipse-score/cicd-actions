@@ -40,180 +40,190 @@
 #
 
 name: Setup QNX SDP
-description: Setup runner environment for using QNX SDP, including licence server configuration.
+description: Setup runner environment for using QNX SDP, including licence server
+  configuration.
 
 inputs:
   qnx-license:
-    description: "Base64 encoded content of the QNX client license file. Value will be masked in all workflow logs!"
+    description: Base64 encoded content of the QNX client license file. Value will
+      be masked in all workflow logs!
     required: true
   qnx-license-dir:
-    description: "Directory where the QNX client license file will be stored. If the path starts with '/' then
-                  potentially sudo permissions are required when decoding and storing the license file. To store it somewhere in the home folder
-                  use '~/...' as path. It is advised to remove the folder at the end of the workflow job in case it is stored in a workspace external folder."
+    description: Directory where the QNX client license file will be stored. If the
+      path starts with '/' then potentially sudo permissions are required when decoding
+      and storing the license file. To store it somewhere in the home folder use '~/...'
+      as path. It is advised to remove the folder at the end of the workflow job in
+      case it is stored in a workspace external folder.
     required: true
-    default: "/opt/qnx/license"
+    default: /opt/qnx/license
   qnx-license-server:
-    description: "Address of the QNX license server (e.g. '6287@license-server-hostname'). If not provided, no license server will be configured.
-                  When given it will be added to the user.bazelrc with the necessary environment variables for both build and test execution environments.
-                  Additionally sets some env vars for more reliable license server communication." # optional, if not provided no license server will be configured
+    description: Address of the QNX license server (e.g. '6287@license-server-hostname').
+      If not provided, no license server will be configured. When given it will be
+      added to the user.bazelrc with the necessary environment variables for both
+      build and test execution environments. Additionally sets some env vars for more
+      reliable license server communication.                                                       # optional, if not provided no license server will be configured
     required: false
   qnx-credential-helper:
-    description: "Workspace root relative or absolute path to the QNX credential helper script that allows Bazel to access qnx.com with the provided credentials
-                  (qnx-user and qnx-password). If path is given but file does not exist an error will be raised. If an empty string is given no check will be
-                  performed. If file exists it is set to be executable. Finally a GITHUB_ENV var QNX_CREDENTIAL_HELPER is set with the absolute path to the
-                  credential helper script."
+    description: Workspace root relative or absolute path to the QNX credential helper
+      script that allows Bazel to access qnx.com with the provided credentials (qnx-user
+      and qnx-password). If path is given but file does not exist an error will be
+      raised. If an empty string is given no check will be performed. If file exists
+      it is set to be executable. Finally a GITHUB_ENV var QNX_CREDENTIAL_HELPER is
+      set with the absolute path to the credential helper script.
     required: false
-    default: ".github/tools/qnx_credential_helper.py"
+    default: .github/tools/qnx_credential_helper.py
   qnx-user:
-    description: "Username of the QNX user account for accessing qnx.com. Value will be masked in all workflow logs!"
+    description: Username of the QNX user account for accessing qnx.com. Value will
+      be masked in all workflow logs!
     required: true
   qnx-password:
-    description: "Password of the QNX user account for accessing qnx.com. Value will be masked in all workflow logs!"
+    description: Password of the QNX user account for accessing qnx.com. Value will
+      be masked in all workflow logs!
     required: true
 
 
 runs:
-  using: "composite"
+  using: composite
   steps:
-    - name: Configure secrets to be masked in logs
-      shell: bash
-      env:
-        QNX_LICENSE: ${{ inputs.qnx-license }}
-        QNX_USER: ${{ inputs.qnx-user }}
-        QNX_PASSWORD: ${{ inputs.qnx-password }}
-      run: |
-        echo "::group::  Configure secrets to be masked in logs"
+  - name: Configure secrets to be masked in logs
+    shell: bash
+    env:
+      QNX_LICENSE: ${{ inputs.qnx-license }}
+      QNX_USER: ${{ inputs.qnx-user }}
+      QNX_PASSWORD: ${{ inputs.qnx-password }}
+    run: |
+      echo "::group::  Configure secrets to be masked in logs"
 
-        set -euo pipefail
+      set -euo pipefail
 
-        echo "Masking secrets in logs: QNX_PASSWORD, QNX_USER, QNX_LICENSE"
-        echo "::add-mask::$QNX_LICENSE"
-        echo "::add-mask::$QNX_USER"
-        echo "::add-mask::$QNX_PASSWORD"
+      echo "Masking secrets in logs: QNX_PASSWORD, QNX_USER, QNX_LICENSE"
+      echo "::add-mask::$QNX_LICENSE"
+      echo "::add-mask::$QNX_USER"
+      echo "::add-mask::$QNX_PASSWORD"
 
-        echo "::endgroup::"
+      echo "::endgroup::"
 
-    - name: Prepare qnx.com credential helper
-      if: ${{ inputs.qnx-credential-helper != '' }}
-      shell: bash
-      run: |
-        echo "::group::  Prepare qnx.com credential helper"
+  - name: Prepare qnx.com credential helper
+    if: ${{ inputs.qnx-credential-helper != '' }}
+    shell: bash
+    run: |
+      echo "::group::  Prepare qnx.com credential helper"
 
-        set -euo pipefail
+      set -euo pipefail
 
-        CRED_HELPER="${{ inputs.qnx-credential-helper }}"
-        if [[ "${CRED_HELPER}" != /* ]]; then
-          CRED_HELPER="${GITHUB_WORKSPACE}/${CRED_HELPER}"
-        fi
+      CRED_HELPER="${{ inputs.qnx-credential-helper }}"
+      if [[ "${CRED_HELPER}" != /* ]]; then
+        CRED_HELPER="${GITHUB_WORKSPACE}/${CRED_HELPER}"
+      fi
 
-        if [[ ! -f "${CRED_HELPER}" ]]; then
-          echo "::error::Credential helper not found at ${CRED_HELPER}" >&2
-          exit 1
-        fi
+      if [[ ! -f "${CRED_HELPER}" ]]; then
+        echo "::error::Credential helper not found at ${CRED_HELPER}" >&2
+        exit 1
+      fi
 
-        if [[ ! -x "${CRED_HELPER}" ]]; then
-          chmod +x "${CRED_HELPER}"
-        fi
+      if [[ ! -x "${CRED_HELPER}" ]]; then
+        chmod +x "${CRED_HELPER}"
+      fi
 
-        echo "QNX_CREDENTIAL_HELPER=${CRED_HELPER}" >> "${GITHUB_ENV}"
+      echo "QNX_CREDENTIAL_HELPER=${CRED_HELPER}" >> "${GITHUB_ENV}"
 
-        echo "Using helper at: ${CRED_HELPER}"
-        ls -l "${CRED_HELPER}"
+      echo "Using helper at: ${CRED_HELPER}"
+      ls -l "${CRED_HELPER}"
 
-        echo "::endgroup::"
+      echo "::endgroup::"
 
-    - name: Prepare QNX license file
-      shell: bash
-      env:
-        QNX_LICENSE: ${{ inputs.qnx-license }}
-        LICENSE_DIR: ${{ inputs.qnx-license-dir }}
+  - name: Prepare QNX license file
+    shell: bash
+    env:
+      QNX_LICENSE: ${{ inputs.qnx-license }}
+      LICENSE_DIR: ${{ inputs.qnx-license-dir }}
         # Assuming that if license dir starts with "/" it is a system folder that needs sudo for access.
-        SUDO: |-
-          ${{ case(
-            startsWith(inputs.qnx-license-dir, '/'), 'sudo',
-            ''
-          ) }}
-      run: |
-        echo "::group::  Prepare QNX license file"
+      SUDO: |-
+        ${{ case(
+          startsWith(inputs.qnx-license-dir, '/'), 'sudo',
+          ''
+        ) }}
+    run: |
+      echo "::group::  Prepare QNX license file"
 
-        set -euo pipefail
+      set -euo pipefail
 
-        # replace tilde by $HOME since the tilde char makes problems in github actions
-        LICENSE_DIR="${LICENSE_DIR/#\~/$HOME}"
-        LICENSE_FILE="${LICENSE_DIR}/licenses"
-        FILE_OP_SUDO=""
+      # replace tilde by $HOME since the tilde char makes problems in github actions
+      LICENSE_DIR="${LICENSE_DIR/#\~/$HOME}"
+      LICENSE_FILE="${LICENSE_DIR}/licenses"
+      FILE_OP_SUDO=""
 
-        if ! mkdir -p "${LICENSE_DIR}" 2>/dev/null; then
-          if [[ -n "${SUDO}" ]]; then
-            ${SUDO} mkdir -p "${LICENSE_DIR}"
-            FILE_OP_SUDO="${SUDO}"
-          else
-            mkdir -p "${LICENSE_DIR}"
-          fi
+      if ! mkdir -p "${LICENSE_DIR}" 2>/dev/null; then
+        if [[ -n "${SUDO}" ]]; then
+          ${SUDO} mkdir -p "${LICENSE_DIR}"
+          FILE_OP_SUDO="${SUDO}"
+        else
+          mkdir -p "${LICENSE_DIR}"
         fi
+      fi
 
-        if test -f "${LICENSE_FILE}"; then
-          echo "License file already exists and will be overwritten: ${LICENSE_FILE}"
+      if test -f "${LICENSE_FILE}"; then
+        echo "License file already exists and will be overwritten: ${LICENSE_FILE}"
 
-          if [[ ! -w "${LICENSE_FILE}" ]]; then
-            FILE_OP_SUDO="${SUDO}"
-          fi
-        elif [[ ! -w "${LICENSE_DIR}" ]]; then
+        if [[ ! -w "${LICENSE_FILE}" ]]; then
           FILE_OP_SUDO="${SUDO}"
         fi
+      elif [[ ! -w "${LICENSE_DIR}" ]]; then
+        FILE_OP_SUDO="${SUDO}"
+      fi
 
-        echo "${QNX_LICENSE}" | base64 --decode | ${FILE_OP_SUDO} tee "${LICENSE_FILE}" >/dev/null
-        # Set permissions to be readable for all users, otherwise the runner user might not be able to consume the license if the license file is stored in a
-        # system folder that requires sudo for access. Also if this file content is somehow compromised it does not help the attacker/thief because they are not
-        # allowed to access the license server.
-        ${FILE_OP_SUDO} chmod 644 "${LICENSE_FILE}"
+      echo "${QNX_LICENSE}" | base64 --decode | ${FILE_OP_SUDO} tee "${LICENSE_FILE}" >/dev/null
+      # Set permissions to be readable for all users, otherwise the runner user might not be able to consume the license if the license file is stored in a
+      # system folder that requires sudo for access. Also if this file content is somehow compromised it does not help the attacker/thief because they are not
+      # allowed to access the license server.
+      ${FILE_OP_SUDO} chmod 644 "${LICENSE_FILE}"
 
-        echo "Prepared license file is located here:"
-        ${FILE_OP_SUDO} ls -l "${LICENSE_FILE}"
+      echo "Prepared license file is located here:"
+      ${FILE_OP_SUDO} ls -l "${LICENSE_FILE}"
 
-        echo "::endgroup::"
+      echo "::endgroup::"
 
-    - name: Configure qnx license server
-      if: ${{ inputs.qnx-license-server != '' }}
-      shell: bash
-      env:
-        QNX_LICENSE_SERVER: ${{ inputs.qnx-license-server }}
-      run: |
-        echo "::group::  Configure qnx license server"
+  - name: Configure qnx license server
+    if: ${{ inputs.qnx-license-server != '' }}
+    shell: bash
+    env:
+      QNX_LICENSE_SERVER: ${{ inputs.qnx-license-server }}
+    run: |
+      echo "::group::  Configure qnx license server"
 
-        set -euo pipefail
+      set -euo pipefail
 
-        # Check if .bazelrc exists in repo root
-        if [[ ! -f "${GITHUB_WORKSPACE}/.bazelrc" ]]; then
-          echo "::warning::No .bazelrc file found in repository root. License server configuration added to user.bazelrc will have no effect!"
-        fi
+      # Check if .bazelrc exists in repo root
+      if [[ ! -f "${GITHUB_WORKSPACE}/.bazelrc" ]]; then
+        echo "::warning::No .bazelrc file found in repository root. License server configuration added to user.bazelrc will have no effect!"
+      fi
 
-        # Check if .bazelrc contains the try-import statement for user.bazelrc
-        if ! grep -q "try-import %workspace%/user.bazelrc" "${GITHUB_WORKSPACE}/.bazelrc"; then
-          echo "::warning::The .bazelrc file in repository root does not contain 'try-import %workspace%/user.bazelrc'. License server configuration added to user.bazelrc will have no effect!"
-        fi
+      # Check if .bazelrc contains the try-import statement for user.bazelrc
+      if ! grep -q "try-import %workspace%/user.bazelrc" "${GITHUB_WORKSPACE}/.bazelrc"; then
+        echo "::warning::The .bazelrc file in repository root does not contain 'try-import %workspace%/user.bazelrc'. License server configuration added to user.bazelrc will have no effect!"
+      fi
 
-        export QNX_LICENSE_EXTSERVER_DELAY=59
-        export QNX_LICENSE_QUEUE_TIMEOUT=180
-        echo "QNXLM_LICENSE_FILE=${QNX_LICENSE_SERVER}" >> $GITHUB_ENV
-        echo "QNX_LICENSE_EXTSERVER_DELAY=${QNX_LICENSE_EXTSERVER_DELAY}" >> $GITHUB_ENV
-        echo "QNX_LICENSE_QUEUE_TIMEOUT=${QNX_LICENSE_QUEUE_TIMEOUT}" >> $GITHUB_ENV
+      export QNX_LICENSE_EXTSERVER_DELAY=59
+      export QNX_LICENSE_QUEUE_TIMEOUT=180
+      echo "QNXLM_LICENSE_FILE=${QNX_LICENSE_SERVER}" >> $GITHUB_ENV
+      echo "QNX_LICENSE_EXTSERVER_DELAY=${QNX_LICENSE_EXTSERVER_DELAY}" >> $GITHUB_ENV
+      echo "QNX_LICENSE_QUEUE_TIMEOUT=${QNX_LICENSE_QUEUE_TIMEOUT}" >> $GITHUB_ENV
 
-        echo "common --action_env=QNXLM_LICENSE_FILE=${QNX_LICENSE_SERVER} --action_env=QNX_LICENSE_EXTSERVER_DELAY --action_env=QNX_LICENSE_QUEUE_TIMEOUT" >> user.bazelrc
+      echo "common --action_env=QNXLM_LICENSE_FILE=${QNX_LICENSE_SERVER} --action_env=QNX_LICENSE_EXTSERVER_DELAY --action_env=QNX_LICENSE_QUEUE_TIMEOUT" >> user.bazelrc
 
-        # In case the tests are also executing tools from the QNX sdp that require a license then also set these env vars for the test execution environment
-        echo "common --test_env=QNXLM_LICENSE_FILE=${QNX_LICENSE_SERVER} --test_env=QNX_LICENSE_EXTSERVER_DELAY --test_env=QNX_LICENSE_QUEUE_TIMEOUT" >> user.bazelrc
+      # In case the tests are also executing tools from the QNX sdp that require a license then also set these env vars for the test execution environment
+      echo "common --test_env=QNXLM_LICENSE_FILE=${QNX_LICENSE_SERVER} --test_env=QNX_LICENSE_EXTSERVER_DELAY --test_env=QNX_LICENSE_QUEUE_TIMEOUT" >> user.bazelrc
 
-        # Required as the bazel qnx toolchain configures /var/tmp/.qnx as QNX_CONFIGURATION_EXCLUSIVE env var. In this folder
-        #    license related metadata files need to be stored during the build and therefore it needs to be writable.
-        # Set /var/tmp as writable because /var/tmp/.qnx might not be existing when Bazel starts
-        echo "common --sandbox_writable_path=/var/tmp" >> user.bazelrc
+      # Required as the bazel qnx toolchain configures /var/tmp/.qnx as QNX_CONFIGURATION_EXCLUSIVE env var. In this folder
+      #    license related metadata files need to be stored during the build and therefore it needs to be writable.
+      # Set /var/tmp as writable because /var/tmp/.qnx might not be existing when Bazel starts
+      echo "common --sandbox_writable_path=/var/tmp" >> user.bazelrc
 
-        echo "::endgroup::"
+      echo "::endgroup::"
 
-    - name: Configure access to qnx.com via .netrc
-      uses: extractions/netrc@c3879108aae6b4ed5c4eb60854ae04f06d2f2f68 #v3.0.0
-      with:
-        machine: qnx.com
-        username: ${{ inputs.qnx-user }}
-        password: ${{ inputs.qnx-password }}
+  - name: Configure access to qnx.com via .netrc
+    uses: extractions/netrc@c3879108aae6b4ed5c4eb60854ae04f06d2f2f68   #v3.0.0
+    with:
+      machine: qnx.com
+      username: ${{ inputs.qnx-user }}
+      password: ${{ inputs.qnx-password }}
