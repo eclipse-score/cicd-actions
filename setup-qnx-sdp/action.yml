@@ -183,6 +183,16 @@ runs:
 
         set -euo pipefail
 
+        # Check if .bazelrc exists in repo root
+        if [[ ! -f "${GITHUB_WORKSPACE}/.bazelrc" ]]; then
+          echo "::warning::No .bazelrc file found in repository root. License server configuration added to user.bazelrc will have no effect!"
+        fi
+
+        # Check if .bazelrc contains the try-import statement for user.bazelrc
+        if ! grep -q "try-import %workspace%/user.bazelrc" "${GITHUB_WORKSPACE}/.bazelrc"; then
+          echo "::warning::The .bazelrc file in repository root does not contain 'try-import %workspace%/user.bazelrc'. License server configuration added to user.bazelrc will have no effect!"
+        fi
+
         export QNX_LICENSE_EXTSERVER_DELAY=59
         export QNX_LICENSE_QUEUE_TIMEOUT=60
         echo "QNXLM_LICENSE_FILE=${QNX_LICENSE_SERVER}" >> $GITHUB_ENV
