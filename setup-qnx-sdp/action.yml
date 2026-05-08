@@ -117,8 +117,8 @@ runs:
 
         echo "QNX_CREDENTIAL_HELPER=${CRED_HELPER}" >> "${GITHUB_ENV}"
 
-        echo "Using helper at: ${QNX_CREDENTIAL_HELPER}"
-        ls -l "${QNX_CREDENTIAL_HELPER}"
+        echo "Using helper at: ${CRED_HELPER}"
+        ls -l "${CRED_HELPER}"
 
         echo "::endgroup::"
 
