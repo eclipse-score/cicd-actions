@@ -53,7 +53,9 @@ inputs:
     required: true
     default: "/opt/qnx/license"
   qnx-license-server:
-    description: "Address of the QNX license server (e.g. '6287@license-server-hostname'). If not provided, no license server will be configured."
+    description: "Address of the QNX license server (e.g. '6287@license-server-hostname'). If not provided, no license server will be configured.
+                  When given it will be added to the user.bazelrc with the necessary environment variables for both build and test execution environments.
+                  Additionally sets some env vars for more reliable license server communication." # optional, if not provided no license server will be configured
     required: false
   qnx-credential-helper:
     description: "Workspace root relative or absolute path to the QNX credential helper script that allows Bazel to access qnx.com with the provided credentials
