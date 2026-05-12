@@ -31025,6 +31025,55 @@ module.exports = {
 
 /***/ }),
 
+/***/ 5128:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+"use strict";
+// *******************************************************************************
+// Copyright (c) 2026 Contributors to the Eclipse Foundation
+//
+// See the NOTICE file(s) distributed with this work for additional
+// information regarding copyright ownership.
+//
+// This program and the accompanying materials are made available under the
+// terms of the Apache License Version 2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
+//
+// SPDX-License-Identifier: Apache-2.0
+// *******************************************************************************
+
+
+
+const os = __nccwpck_require__(857);
+const path = __nccwpck_require__(6928);
+
+/** Absolute path to the current user's .netrc file. */
+const NETRC_PATH = path.join(os.homedir(), '.netrc');
+
+/** Hostname used for the qnx.com netrc entry. */
+const NETRC_MACHINE = 'qnx.com';
+
+/**
+ * Builds the netrc entry block that configures qnx.com credentials.
+ * @param {string} username
+ * @param {string} password
+ * @returns {string}
+ */
+function buildNetrcEntry(username, password) {
+  return `\nmachine ${NETRC_MACHINE}\n  login ${username}\n  password ${password}\n`;
+}
+
+/**
+ * Regex that matches the netrc entry block written by buildNetrcEntry.
+ * Designed to match the leading newline, the machine line, and the two indented sub-fields.
+ */
+const NETRC_ENTRY_REGEX = new RegExp(`\\nmachine ${NETRC_MACHINE}\\n[ \\t]+login [^\\n]*\\n[ \\t]+password [^\\n]*\\n`, 'g');
+
+module.exports = { NETRC_PATH, NETRC_MACHINE, buildNetrcEntry, NETRC_ENTRY_REGEX };
+
+
+/***/ }),
+
 /***/ 2613:
 /***/ ((module) => {
 
@@ -31358,23 +31407,19 @@ const core = __nccwpck_require__(7484);
 const exec = __nccwpck_require__(5236);
 const fs = __nccwpck_require__(9896);
 const os = __nccwpck_require__(857);
+const { NETRC_PATH, NETRC_ENTRY_REGEX } = __nccwpck_require__(5128);
 
 async function cleanupNetrc() {
   core.startGroup('Cleanup qnx.com entry from .netrc');
   try {
-    const netrcPath = (__nccwpck_require__(6928).join)(os.homedir(), '.netrc');
+    const netrcPath = NETRC_PATH;
     if (!fs.existsSync(netrcPath)) {
       core.info('.netrc does not exist, nothing to clean up.');
       return;
     }
 
     const original = fs.readFileSync(netrcPath, 'utf8');
-    // Remove the block that main.js appended: a leading newline, the "machine qnx.com"
-    // line, and the two indented sub-fields that follow it.
-    const cleaned = original.replace(
-      /\nmachine qnx\.com\n[ \t]+login [^\n]*\n[ \t]+password [^\n]*\n/g,
-      ''
-    );
+    const cleaned = original.replace(NETRC_ENTRY_REGEX, '');
 
     if (cleaned === original) {
       core.info('No qnx.com entry found in .netrc, nothing to remove.');

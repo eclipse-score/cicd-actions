@@ -18,6 +18,7 @@ const exec = require('@actions/exec');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { NETRC_PATH, buildNetrcEntry } = require('./common');
 
 async function prepareCredentialHelper(credHelper) {
   core.startGroup('Check for qnx.com credential helper existence');
@@ -154,9 +155,9 @@ async function configureLicenseServer(licenseServer) {
 async function configureNetrc(username, password) {
   core.startGroup('Configure access to qnx.com via .netrc');
   try {
-    const netrcPath = path.join(os.homedir(), '.netrc');
+    const netrcPath = NETRC_PATH;
     // Append a machine entry; create the file if it does not exist
-    const entry = `\nmachine qnx.com\n  login ${username}\n  password ${password}\n`;
+    const entry = buildNetrcEntry(username, password);
     fs.appendFileSync(netrcPath, entry);
     // Restrict .netrc permissions – readable only by the owner
     fs.chmodSync(netrcPath, 0o600);

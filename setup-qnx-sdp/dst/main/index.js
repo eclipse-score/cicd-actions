@@ -31025,6 +31025,55 @@ module.exports = {
 
 /***/ }),
 
+/***/ 5128:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+"use strict";
+// *******************************************************************************
+// Copyright (c) 2026 Contributors to the Eclipse Foundation
+//
+// See the NOTICE file(s) distributed with this work for additional
+// information regarding copyright ownership.
+//
+// This program and the accompanying materials are made available under the
+// terms of the Apache License Version 2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
+//
+// SPDX-License-Identifier: Apache-2.0
+// *******************************************************************************
+
+
+
+const os = __nccwpck_require__(857);
+const path = __nccwpck_require__(6928);
+
+/** Absolute path to the current user's .netrc file. */
+const NETRC_PATH = path.join(os.homedir(), '.netrc');
+
+/** Hostname used for the qnx.com netrc entry. */
+const NETRC_MACHINE = 'qnx.com';
+
+/**
+ * Builds the netrc entry block that configures qnx.com credentials.
+ * @param {string} username
+ * @param {string} password
+ * @returns {string}
+ */
+function buildNetrcEntry(username, password) {
+  return `\nmachine ${NETRC_MACHINE}\n  login ${username}\n  password ${password}\n`;
+}
+
+/**
+ * Regex that matches the netrc entry block written by buildNetrcEntry.
+ * Designed to match the leading newline, the machine line, and the two indented sub-fields.
+ */
+const NETRC_ENTRY_REGEX = new RegExp(`\\nmachine ${NETRC_MACHINE}\\n[ \\t]+login [^\\n]*\\n[ \\t]+password [^\\n]*\\n`, 'g');
+
+module.exports = { NETRC_PATH, NETRC_MACHINE, buildNetrcEntry, NETRC_ENTRY_REGEX };
+
+
+/***/ }),
+
 /***/ 2613:
 /***/ ((module) => {
 
@@ -31359,6 +31408,7 @@ const exec = __nccwpck_require__(5236);
 const fs = __nccwpck_require__(9896);
 const path = __nccwpck_require__(6928);
 const os = __nccwpck_require__(857);
+const { NETRC_PATH, buildNetrcEntry } = __nccwpck_require__(5128);
 
 async function prepareCredentialHelper(credHelper) {
   core.startGroup('Check for qnx.com credential helper existence');
@@ -31495,9 +31545,9 @@ async function configureLicenseServer(licenseServer) {
 async function configureNetrc(username, password) {
   core.startGroup('Configure access to qnx.com via .netrc');
   try {
-    const netrcPath = path.join(os.homedir(), '.netrc');
+    const netrcPath = NETRC_PATH;
     // Append a machine entry; create the file if it does not exist
-    const entry = `\nmachine qnx.com\n  login ${username}\n  password ${password}\n`;
+    const entry = buildNetrcEntry(username, password);
     fs.appendFileSync(netrcPath, entry);
     // Restrict .netrc permissions – readable only by the owner
     fs.chmodSync(netrcPath, 0o600);

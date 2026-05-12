@@ -17,23 +17,19 @@ const core = require('@actions/core');
 const exec = require('@actions/exec');
 const fs = require('fs');
 const os = require('os');
+const { NETRC_PATH, NETRC_ENTRY_REGEX } = require('./common');
 
 async function cleanupNetrc() {
   core.startGroup('Cleanup qnx.com entry from .netrc');
   try {
-    const netrcPath = require('path').join(os.homedir(), '.netrc');
+    const netrcPath = NETRC_PATH;
     if (!fs.existsSync(netrcPath)) {
       core.info('.netrc does not exist, nothing to clean up.');
       return;
     }
 
     const original = fs.readFileSync(netrcPath, 'utf8');
-    // Remove the block that main.js appended: a leading newline, the "machine qnx.com"
-    // line, and the two indented sub-fields that follow it.
-    const cleaned = original.replace(
-      /\nmachine qnx\.com\n[ \t]+login [^\n]*\n[ \t]+password [^\n]*\n/g,
-      ''
-    );
+    const cleaned = original.replace(NETRC_ENTRY_REGEX, '');
 
     if (cleaned === original) {
       core.info('No qnx.com entry found in .netrc, nothing to remove.');
