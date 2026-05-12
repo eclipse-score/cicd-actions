@@ -14,7 +14,7 @@
 #
 # Rebuilds the distribution files (dst/main/index.js and dst/post/index.js) from
 # scratch by installing all npm dependencies and bundling the source files with ncc.
-# Run this script whenever src/main.js or src/post.js are modified.
+# Run this script whenever source files are changed.
 
 set -euo pipefail
 

@@ -18,7 +18,7 @@ It performs the following:
 When invoked, the action runs these steps in order:
 
 1. Mask secrets in logs (`qnx-license`, `qnx-user`, `qnx-password`).
-2. Prepare qnx.com credential helper (only when `qnx-credential-helper` input is not empty).
+2. Checks whether qnx.com credential helper exists and computes absolute path of it (only when `qnx-credential-helper` input is not empty).
 3. Prepare QNX license file.
 4. Configure qnx license server (only when `qnx-license-server` input is not empty):
    - If no `.bazelrc` exists in the repository root, the step logs a warning and continues.
@@ -31,14 +31,14 @@ After the job completes (always, even on failure or cancellation), the post-acti
 
 ## Inputs
 
-| Name | Required | Default | Description |
+| Name | Mandatory | Default | Description |
 | --- | --- | --- | --- |
-| `qnx-license` | Yes | - | Base64 encoded QNX client license file content. |
-| `qnx-license-dir` | Yes | `/opt/qnx/license` | Directory where the decoded license file is written. Supports absolute paths and `~/...`. |
-| `qnx-license-server` | No | - | QNX license server address, for example `6287@license-server-hostname`. When set, license server settings are configured for the job and Bazel. |
-| `qnx-credential-helper` | No | `.github/tools/qnx_credential_helper.py` | Path (workspace-relative or absolute) to the QNX credential helper script. Use empty string to skip this step. |
+| `qnx-license` | Yes | - | Base64 encoded QNX client license file content. Will be decoded and written to the file specified by `qnx-license-dir`/licenses. |
+| `qnx-license-dir` | Yes | `/opt/score_qnx/license` | Directory where the `licenses` file is created by decoding the content of `qnx-license`. Supports absolute paths and `~/...`. |
+| `qnx-license-server` | No | - | QNX license server address, for example `6287@license-server-hostname`. If set, license server settings are configured for the job via environment variables and for Bazel by adding entries to the user.bazelrc file. Given client license content `qnx-license` must be compatible with the given license server. For a non-commercial QNX SDP a license server is not required. |
 | `qnx-user` | Yes | - | QNX account username for qnx.com access. |
 | `qnx-password` | Yes | - | QNX account password for qnx.com access. |
+| `qnx-credential-helper` | No | `.github/tools/qnx_credential_helper.py` | Path (workspace-relative or absolute) to the script that Bazel uses to access qnx.com with the provided credentials `qnx-user` and `qnx-password`. |
 
 ## Example
 
@@ -93,7 +93,7 @@ It creates or changes files and environment variables for subsequent workflow st
   - Written to `<qnx-license-dir>/licenses` from decoded `qnx-license` content.
 
 - Bazel user configuration:
-  - Appends license-related entries to `user.bazelrc` when `qnx-license-server` is provided and `.bazelrc` exists.
+  - Appends license-related entries to `user.bazelrc` when `qnx-license-server` is provided and `${HOME}/.bazelrc` exists.
 
 - Netrc:
   - Configures qnx.com credentials in `.netrc` for the duration of the job. Cleans up after the job finishes.

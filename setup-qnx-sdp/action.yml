@@ -21,20 +21,22 @@ inputs:
   qnx-license-dir:
     description: Directory where the QNX client license file will be stored. If the path starts with '/' then potentially sudo permissions are required when decoding and storing the license file. To store it somewhere in the home folder use '~/...' as path. It is advised to remove the folder at the end of the workflow job in case it is stored in a workspace external folder.
     required: true
-    default: /opt/qnx/license
+    default: /opt/score_qnx/license
+
   qnx-license-server:
     description: Address of the QNX license server (e.g. '6287@license-server-hostname'). If not provided, no license server will be configured. When given it will be added to the user.bazelrc with the necessary environment variables for both build and test execution environments. Additionally sets some env vars for more reliable license server communication.
     required: false
-  qnx-credential-helper:
-    description: Workspace root relative or absolute path to the QNX credential helper script that allows Bazel to access qnx.com with the provided credentials (qnx-user and qnx-password). If path is given but file does not exist an error will be raised. If an empty string is given no check will be performed. If file exists it is set to be executable. Finally a GITHUB_ENV var QNX_CREDENTIAL_HELPER is set with the absolute path to the credential helper script.
-    required: false
-    default: .github/tools/qnx_credential_helper.py
+
   qnx-user:
     description: Username of the QNX user account for accessing qnx.com. Value will be masked in all workflow logs!
     required: true
   qnx-password:
     description: Password of the QNX user account for accessing qnx.com. Value will be masked in all workflow logs!
     required: true
+  qnx-credential-helper:
+    description: Workspace root relative or absolute path to the QNX credential helper script that allows Bazel to access qnx.com with the provided credentials (qnx-user and qnx-password). If path is given but file does not exist an error will be raised. If an empty string is given no check will be performed. If file exists it is set to be executable. Finally a GITHUB_ENV var QNX_CREDENTIAL_HELPER is set with the absolute path to the credential helper script.
+    required: false
+    default: .github/tools/qnx_credential_helper.py
 
 runs:
   using: node24

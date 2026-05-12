@@ -31361,7 +31361,7 @@ const path = __nccwpck_require__(6928);
 const os = __nccwpck_require__(857);
 
 async function prepareCredentialHelper(credHelper) {
-  core.startGroup('Prepare qnx.com credential helper');
+  core.startGroup('Check for qnx.com credential helper existence');
   try {
     let helperPath = credHelper;
     if (!path.isAbsolute(helperPath)) {
@@ -31451,15 +31451,21 @@ async function configureLicenseServer(licenseServer) {
   core.startGroup('Configure qnx license server');
   try {
     const workspace = process.env.GITHUB_WORKSPACE;
-    const bazelrcPath = path.join(workspace, '.bazelrc');
+    const tryImportLine = 'try-import %workspace%/user.bazelrc';
 
-    if (!fs.existsSync(bazelrcPath)) {
-      core.warning('No .bazelrc file found in repository root. License server configuration added to user.bazelrc will have no effect!');
-    } else {
-      const bazelrcContent = fs.readFileSync(bazelrcPath, 'utf8');
-      if (!bazelrcContent.includes('try-import %workspace%/user.bazelrc')) {
-        core.warning("The .bazelrc file in repository root does not contain 'try-import %workspace%/user.bazelrc'. License server configuration added to user.bazelrc will have no effect!");
-      }
+    const workspaceBazelrc = path.join(workspace, '.bazelrc');
+    const homeBazelrc = path.join(os.homedir(), '.bazelrc');
+
+    const workspaceHasImport = fs.existsSync(workspaceBazelrc) &&
+      fs.readFileSync(workspaceBazelrc, 'utf8').includes(tryImportLine);
+    const homeHasImport = fs.existsSync(homeBazelrc) &&
+      fs.readFileSync(homeBazelrc, 'utf8').includes(tryImportLine);
+
+    if (!workspaceHasImport && !homeHasImport) {
+      core.warning(
+        `'${tryImportLine}' was not found in '${workspaceBazelrc}' or '${homeBazelrc}'. ` +
+        'The license server configuration added to user.bazelrc will have no effect!'
+      );
     }
 
     core.exportVariable('QNXLM_LICENSE_FILE', licenseServer);
