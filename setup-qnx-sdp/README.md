@@ -34,7 +34,7 @@ After the job completes (always, even on failure or cancellation), the post-acti
 | Name | Mandatory | Default | Description |
 | --- | --- | --- | --- |
 | `qnx-license` | Yes | - | Base64 encoded QNX client license file content. Will be decoded and written to the file specified by `qnx-license-dir`/licenses. |
-| `qnx-license-dir` | Yes | `/opt/score_qnx/license` | Directory where the `licenses` file is created by decoding the content of `qnx-license`. Supports absolute paths and `~/...`. |
+| `qnx-license-dir` | Yes | `/opt/score_qnx/license` | Directory where the `licenses` file is created by decoding the content of `qnx-license`. Supports absolute paths and `~/...`. Absolute paths must be at least two filesystem levels deep (e.g. `/opt/qnx/license`); a path directly under the filesystem root (e.g. `/qnx`) is rejected with an error to prevent accidental operations near the root. |
 | `qnx-license-server` | No | - | QNX license server address, for example `6287@license-server-hostname`. If set, license server settings are configured for the job via environment variables and for Bazel by adding entries to the user.bazelrc file. Given client license content `qnx-license` must be compatible with the given license server. For a non-commercial QNX SDP a license server is not required. |
 | `qnx-user` | Yes | - | QNX account username for qnx.com access. |
 | `qnx-password` | Yes | - | QNX account password for qnx.com access. |

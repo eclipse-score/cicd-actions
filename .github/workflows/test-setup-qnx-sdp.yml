@@ -201,3 +201,65 @@ jobs:
         shell: bash
         run: |
           echo "Action completed successfully despite missing try-import line (warning was expected)."
+
+  # ---- Scenario 4: empty license dir is rejected with an error ----
+  reject-empty-license-dir:
+    name: Reject empty qnx-license-dir
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
+
+      - name: Run setup-qnx-sdp with empty license dir (expected to fail)
+        id: empty-dir
+        continue-on-error: true
+        uses: ./setup-qnx-sdp
+        with:
+          qnx-license: ${{ env.FAKE_LICENSE_B64 }}
+          qnx-license-dir: "   "
+          qnx-user: test-user
+          qnx-password: test-password
+          qnx-credential-helper: ""
+
+      - name: Verify action failed for empty license dir
+        shell: bash
+        env:
+          OUTCOME: ${{ steps.empty-dir.outcome }}
+        run: |
+          set -euo pipefail
+          if [[ "${OUTCOME}" != "failure" ]]; then
+            echo "ERROR: Expected action to fail for empty 'qnx-license-dir', but outcome was '${OUTCOME}'"
+            exit 1
+          fi
+          echo "Correctly rejected empty 'qnx-license-dir' (outcome: ${OUTCOME})"
+
+  # ---- Scenario 5: single-level absolute path is rejected with an error ----
+  reject-shallow-license-dir:
+    name: Reject too-shallow absolute qnx-license-dir
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
+
+      - name: Run setup-qnx-sdp with single-level absolute path (expected to fail)
+        id: shallow-dir
+        continue-on-error: true
+        uses: ./setup-qnx-sdp
+        with:
+          qnx-license: ${{ env.FAKE_LICENSE_B64 }}
+          qnx-license-dir: /qnx
+          qnx-user: test-user
+          qnx-password: test-password
+          qnx-credential-helper: ""
+
+      - name: Verify action failed for too-shallow license dir
+        shell: bash
+        env:
+          OUTCOME: ${{ steps.shallow-dir.outcome }}
+        run: |
+          set -euo pipefail
+          if [[ "${OUTCOME}" != "failure" ]]; then
+            echo "ERROR: Expected action to fail for single-level 'qnx-license-dir' '/qnx', but outcome was '${OUTCOME}'"
+            exit 1
+          fi
+          echo "Correctly rejected single-level absolute 'qnx-license-dir' (outcome: ${OUTCOME})"

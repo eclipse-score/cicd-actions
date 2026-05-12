@@ -31438,6 +31438,25 @@ async function prepareCredentialHelper(credHelper) {
 async function prepareLicenseFile(qnxLicense, licenseDir) {
   core.startGroup('Prepare QNX license file');
   try {
+    // Must not be empty or whitespace-only.
+    if (!licenseDir.trim()) {
+      throw new Error(
+        "'qnx-license-dir' must not be empty. " +
+        "Provide either a home-relative path (e.g. ~/qnx/license) or an absolute path " +
+        "that is at least two levels deep (e.g. /opt/score_qnx/license)."
+      );
+    }
+
+    // Absolute paths must refer to at least a second-level directory (e.g. /opt/qnx, not /qnx)
+    // to prevent accidental operations directly under the filesystem root.
+    if (licenseDir.startsWith('/') && !/^\/[^/]+\/[^/]/.test(licenseDir)) {
+      throw new Error(
+        `'qnx-license-dir' value '${licenseDir}' is too shallow. ` +
+        'Absolute paths must be at least two levels deep (e.g. /opt/score_qnx), ' +
+        'not directly under the filesystem root.'
+      );
+    }
+
     // Replace leading ~ with $HOME (tilde causes problems in GitHub Actions env handling)
     const licenseDirAbsPath = licenseDir.replace(/^~/, os.homedir());
     const licenseFile = path.join(licenseDirAbsPath, 'licenses');
@@ -31481,13 +31500,13 @@ async function prepareLicenseFile(qnxLicense, licenseDir) {
       try {
         fs.writeFileSync(tmpFile, licenseContent, { mode: 0o600 });
         await exec.exec('sudo', ['cp', tmpFile, licenseFile]);
-        await exec.exec('sudo', ['chmod', '644', licenseFile]);
+        await exec.exec('sudo', ['chmod', '600', licenseFile]);
       } finally {
         try { fs.unlinkSync(tmpFile); } catch { /* ignore cleanup failure */ }
       }
     } else {
-      fs.writeFileSync(licenseFile, licenseContent);
-      fs.chmodSync(licenseFile, 0o644);
+      fs.writeFileSync(licenseFile, licenseContent, { mode: 0o600 });
+      fs.chmodSync(licenseFile, 0o600);
     }
 
     core.info('Prepared license file is located here:');

@@ -19,7 +19,7 @@ inputs:
     description: Base64 encoded content of the QNX client license file. Value will be masked in all workflow logs!
     required: true
   qnx-license-dir:
-    description: Directory where the QNX client license file will be stored. If the path starts with '/' then potentially sudo permissions are required when decoding and storing the license file. To store it somewhere in the home folder use '~/...' as path. It is advised to remove the folder at the end of the workflow job in case it is stored in a workspace external folder.
+    description: Directory where the QNX client license file will be stored. If the path starts with '/' then potentially sudo permissions are required when decoding and storing the license file. To store it somewhere in the home folder use '~/...' as path. The folder is removed automatically at the end of the workflow job.
     required: true
     default: /opt/score_qnx/license
 
