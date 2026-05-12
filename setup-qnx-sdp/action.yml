@@ -12,7 +12,7 @@
 # *******************************************************************************
 
 name: Setup QNX SDP
-description: Setup runner environment for using QNX SDP, including licence server configuration.
+description: Setup runner environment for using QNX SDP, including license server configuration.
 
 inputs:
   qnx-license:
