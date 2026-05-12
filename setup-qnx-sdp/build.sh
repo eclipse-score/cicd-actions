@@ -31,9 +31,6 @@ if [[ -s "${NVM_DIR}/nvm.sh" ]]; then
   source "${NVM_DIR}/nvm.sh"
 fi
 
-#echo "==> Cleaning previous distribution files..."
-#rm -rf dst/main dst/post
-
 echo "==> Installing npm dependencies..."
 npm install
 npm ci
