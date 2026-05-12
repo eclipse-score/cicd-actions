@@ -5,10 +5,11 @@ Reusable GitHub Actions for S-CORE CI/CD automation. For reusable workflows, see
 ## Actions
 
 - [`inter-repo-access`](./inter-repo-access/README.md): resolve one auth mode and configure git for consistent cross-repository access.
+- [`setup-qnx-sdp`](./setup-qnx-sdp/README.md): setup QNX SDP environment for CI/CD workflows.
 
 ## Self Testing
 
-This repo includes self-test workflows for the provided actions in the `.github/workflows` directory:
+This repo includes self-test workflows for (some of) the provided actions in the `.github/workflows` directory:
 
 - [`test-inter-repo-access.yml`](./.github/workflows/test-inter-repo-access.yml) tests the [`inter-repo-access`](./inter-repo-access/README.md) action by configuring it with a token and then verifying that the token is correctly injected into git for a subsequent checkout of another repository.
 

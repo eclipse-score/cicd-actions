@@ -1,0 +1,203 @@
+# *******************************************************************************
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+name: Test Setup QNX SDP
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # Fake base64-encoded license content used across all test jobs
+  FAKE_LICENSE_B64: "RkFLRV9RTlhfTElDRU5TRQo=" # echo "FAKE_QNX_LICENSE" | base64
+
+jobs:
+  # ---- Scenario 1: license dir in home folder, no credential helper, no license server ----
+  basic-setup:
+    name: Basic setup – home dir, no credential helper, no license server
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
+
+      - name: Run setup-qnx-sdp action
+        id: setup
+        uses: ./setup-qnx-sdp
+        with:
+          qnx-license: ${{ env.FAKE_LICENSE_B64 }}
+          qnx-license-dir: ~/qnx_test_license
+          qnx-user: test-user
+          qnx-password: test-password
+          qnx-credential-helper: ""
+
+      - name: Verify license file was created
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          LICENSE_FILE="${HOME}/qnx_test_license/licenses"
+          if [[ ! -f "${LICENSE_FILE}" ]]; then
+            echo "ERROR: Expected license file not found at ${LICENSE_FILE}"
+            exit 1
+          fi
+          echo "License file found at ${LICENSE_FILE}"
+          ls -l "${LICENSE_FILE}"
+
+      - name: Verify .netrc entry was added
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ ! -f "${HOME}/.netrc" ]]; then
+            echo "ERROR: .netrc file not found"
+            exit 1
+          fi
+          if ! grep -q "machine qnx.com" "${HOME}/.netrc"; then
+            echo "ERROR: 'machine qnx.com' entry not found in .netrc"
+            exit 1
+          fi
+          NETRC_PERMS=$(stat -c "%a" "${HOME}/.netrc")
+          if [[ "${NETRC_PERMS}" != "600" ]]; then
+            echo "ERROR: .netrc permissions are ${NETRC_PERMS}, expected 600"
+            exit 1
+          fi
+          echo ".netrc entry and permissions verified"
+
+      - name: Verify no user.bazelrc was written (no license server configured)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          USER_BAZELRC="${GITHUB_WORKSPACE}/user.bazelrc"
+          if [[ -f "${USER_BAZELRC}" ]]; then
+            if grep -q "QNXLM_LICENSE_FILE" "${USER_BAZELRC}"; then
+              echo "ERROR: user.bazelrc should not contain QNXLM_LICENSE_FILE when no license server is provided"
+              exit 1
+            fi
+          fi
+          echo "user.bazelrc check passed (no license server entries present)"
+
+  # ---- Scenario 2: with license server, .bazelrc with try-import present ----
+  with-license-server:
+    name: Setup with license server and .bazelrc try-import
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
+
+      - name: Create .bazelrc with try-import line
+        shell: bash
+        run: |
+          echo "try-import %workspace%/user.bazelrc" >> "${GITHUB_WORKSPACE}/.bazelrc"
+
+      - name: Run setup-qnx-sdp action
+        id: setup
+        uses: ./setup-qnx-sdp
+        with:
+          qnx-license: ${{ env.FAKE_LICENSE_B64 }}
+          qnx-license-dir: ~/qnx_test_license
+          qnx-user: test-user
+          qnx-password: test-password
+          qnx-credential-helper: ""
+          qnx-license-server: "6287@fake-license-host"
+
+      - name: Verify license server env vars are exported
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${QNXLM_LICENSE_FILE:-}" ]]; then
+            echo "ERROR: QNXLM_LICENSE_FILE env var not set"
+            exit 1
+          fi
+          if [[ "${QNXLM_LICENSE_FILE}" != "6287@fake-license-host" ]]; then
+            echo "ERROR: QNXLM_LICENSE_FILE='${QNXLM_LICENSE_FILE}', expected '6287@fake-license-host'"
+            exit 1
+          fi
+          if [[ -z "${QNX_LICENSE_EXTSERVER_DELAY:-}" ]]; then
+            echo "ERROR: QNX_LICENSE_EXTSERVER_DELAY env var not set"
+            exit 1
+          fi
+          if [[ -z "${QNX_LICENSE_QUEUE_TIMEOUT:-}" ]]; then
+            echo "ERROR: QNX_LICENSE_QUEUE_TIMEOUT env var not set"
+            exit 1
+          fi
+          echo "License server env vars verified:"
+          echo "  QNXLM_LICENSE_FILE=${QNXLM_LICENSE_FILE}"
+          echo "  QNX_LICENSE_EXTSERVER_DELAY=${QNX_LICENSE_EXTSERVER_DELAY}"
+          echo "  QNX_LICENSE_QUEUE_TIMEOUT=${QNX_LICENSE_QUEUE_TIMEOUT}"
+
+      - name: Verify user.bazelrc was written with license server configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          USER_BAZELRC="${GITHUB_WORKSPACE}/user.bazelrc"
+          if [[ ! -f "${USER_BAZELRC}" ]]; then
+            echo "ERROR: user.bazelrc not found at ${USER_BAZELRC}"
+            exit 1
+          fi
+
+          if ! grep -q "QNXLM_LICENSE_FILE=6287@fake-license-host" "${USER_BAZELRC}"; then
+            echo "ERROR: user.bazelrc does not contain expected --action_env QNXLM_LICENSE_FILE entry"
+            cat "${USER_BAZELRC}"
+            exit 1
+          fi
+          if ! grep -q "QNX_LICENSE_EXTSERVER_DELAY" "${USER_BAZELRC}"; then
+            echo "ERROR: user.bazelrc does not contain QNX_LICENSE_EXTSERVER_DELAY entry"
+            exit 1
+          fi
+          if ! grep -q "QNX_LICENSE_QUEUE_TIMEOUT" "${USER_BAZELRC}"; then
+            echo "ERROR: user.bazelrc does not contain QNX_LICENSE_QUEUE_TIMEOUT entry"
+            exit 1
+          fi
+          if ! grep -q "sandbox_writable_path=/var/tmp" "${USER_BAZELRC}"; then
+            echo "ERROR: user.bazelrc does not contain sandbox_writable_path entry"
+            exit 1
+          fi
+          echo "user.bazelrc content verified:"
+          cat "${USER_BAZELRC}"
+
+  # ---- Scenario 3: missing try-import in .bazelrc produces a warning (no failure) ----
+  license-server-no-try-import:
+    name: Setup with license server – missing try-import (expect warning, no failure)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
+
+      - name: Ensure no .bazelrc try-import line exists
+        shell: bash
+        run: |
+          # Make sure the workspace .bazelrc does NOT contain try-import
+          if [[ -f "${GITHUB_WORKSPACE}/.bazelrc" ]]; then
+            sed -i '/try-import %workspace%\/user.bazelrc/d' "${GITHUB_WORKSPACE}/.bazelrc"
+          fi
+
+      - name: Run setup-qnx-sdp action (should warn, not fail)
+        uses: ./setup-qnx-sdp
+        with:
+          qnx-license: ${{ env.FAKE_LICENSE_B64 }}
+          qnx-license-dir: ~/qnx_test_license
+          qnx-user: test-user
+          qnx-password: test-password
+          qnx-credential-helper: ""
+          qnx-license-server: "6287@fake-license-host"
+
+      - name: Verify action did not fail despite missing try-import
+        shell: bash
+        run: |
+          echo "Action completed successfully despite missing try-import line (warning was expected)."

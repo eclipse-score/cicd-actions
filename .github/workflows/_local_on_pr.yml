@@ -29,3 +29,8 @@ jobs:
     uses: ./.github/workflows/test-inter-repo-access.yml
     permissions:
       contents: read
+
+  setup-qnx-sdp-tests:
+    uses: ./.github/workflows/test-setup-qnx-sdp.yml
+    permissions:
+      contents: read
