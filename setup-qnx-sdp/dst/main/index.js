@@ -31389,18 +31389,18 @@ async function prepareLicenseFile(qnxLicense, licenseDir) {
   core.startGroup('Prepare QNX license file');
   try {
     // Replace leading ~ with $HOME (tilde causes problems in GitHub Actions env handling)
-    const resolvedDir = licenseDir.replace(/^~/, os.homedir());
-    const licenseFile = path.join(resolvedDir, 'licenses');
+    const licenseDirAbsPath = licenseDir.replace(/^~/, os.homedir());
+    const licenseFile = path.join(licenseDirAbsPath, 'licenses');
     // Paths starting with '/' are assumed to be system directories that may need sudo
-    const needsSudo = resolvedDir.startsWith('/');
+    const needsSudo = licenseDirAbsPath.startsWith('/');
     let fileOpSudo = false;
 
     // Try to create the directory, fall back to sudo if needed
     try {
-      fs.mkdirSync(resolvedDir, { recursive: true });
+      fs.mkdirSync(licenseDirAbsPath, { recursive: true });
     } catch (e) {
       if (needsSudo) {
-        await exec.exec('sudo', ['mkdir', '-p', resolvedDir]);
+        await exec.exec('sudo', ['mkdir', '-p', licenseDirAbsPath]);
       } else {
         throw e;
       }
@@ -31416,7 +31416,7 @@ async function prepareLicenseFile(qnxLicense, licenseDir) {
       }
     } else {
       try {
-        fs.accessSync(resolvedDir, fs.constants.W_OK);
+        fs.accessSync(licenseDirAbsPath, fs.constants.W_OK);
       } catch {
         fileOpSudo = needsSudo;
       }
@@ -31425,7 +31425,8 @@ async function prepareLicenseFile(qnxLicense, licenseDir) {
     const licenseContent = Buffer.from(qnxLicense, 'base64').toString();
 
     if (fileOpSudo) {
-      // Write to a temp file outside the sudo-protected path, then copy with sudo
+      // Write to a temp file outside the sudo-protected path, then copy to the target.
+      // Use sudo for the copy operation to ensure correct permissions even if the target directory is root-owned.
       const tmpFile = path.join(os.tmpdir(), `qnx_license_${process.pid}`);
       try {
         fs.writeFileSync(tmpFile, licenseContent, { mode: 0o600 });
@@ -31440,11 +31441,7 @@ async function prepareLicenseFile(qnxLicense, licenseDir) {
     }
 
     core.info('Prepared license file is located here:');
-    if (fileOpSudo) {
-      await exec.exec('sudo', ['ls', '-l', licenseFile]);
-    } else {
-      await exec.exec('ls', ['-l', licenseFile]);
-    }
+    await exec.exec('ls', ['-l', licenseFile]);
   } finally {
     core.endGroup();
   }
