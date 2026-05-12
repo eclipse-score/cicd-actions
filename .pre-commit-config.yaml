@@ -13,6 +13,7 @@
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
+    exclude: ".*/dst/.*\\.js$|package-lock\\.json$"
     hooks:
       - id: check-yaml
       - id: check-toml
@@ -25,7 +26,6 @@ repos:
       - id: detect-private-key
       - id: check-added-large-files
         args: ["--maxkb=10"]
-        exclude: ".*/dst/.*\\.js$|package-lock\\.json$"
 
   - repo: https://github.com/rhysd/actionlint
     rev: v1.7.11
