@@ -11,7 +11,7 @@ It performs the following:
 - Decodes and writes a QNX client license file.
 - Optionally configures QNX license server settings for the current job and Bazel.
 - Configures access to qnx.com via `.netrc`.
-- Automatically removes the QNX license file when the job finishes (post-action).
+- Automatically removes the QNX license file and the `.netrc` entry when the job finishes (post-action).
 
 ## How it works
 
@@ -27,7 +27,7 @@ When invoked, the action runs these steps in order:
    - Appends Bazel flags to `user.bazelrc` for build and test environments.
 5. Configure access to qnx.com via `.netrc`.
 
-After the job completes (always, even on failure), the post-action automatically removes the QNX license directory created in step 3.
+After the job completes (always, even on failure), the post-action automatically removes the QNX license directory and the `.netrc` entry created in steps 3 and 5.
 
 ## Inputs
 
@@ -67,7 +67,7 @@ jobs:
 
 This action does not define formal action outputs in metadata.
 
-It produces side effects and environment exports for subsequent workflow steps:
+It creates or changes files and environment variables for subsequent workflow steps:
 
 ### Environment variables written to GITHUB_ENV
 
@@ -96,14 +96,4 @@ It produces side effects and environment exports for subsequent workflow steps:
   - Appends license-related entries to `user.bazelrc` when `qnx-license-server` is provided and `.bazelrc` exists.
 
 - Netrc:
-  - Configures qnx.com credentials in `.netrc` via `extractions/netrc`.
-
-## Notes
-
-To cleanup the license file after the workflow, consider adding a final step that removes the license file created by this action. For example:
-
-```yaml
-    - name: Cleanup QNX license
-      if: always()
-      run: rm -rf /opt/score_qnx/license || sudo rm -rf /opt/score_qnx/license || true
-```
+  - Configures qnx.com credentials in `.netrc` for the duration of the job. Cleans up after the job finishes.

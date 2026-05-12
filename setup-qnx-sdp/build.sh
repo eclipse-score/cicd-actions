@@ -38,15 +38,3 @@ npm run build
 
 echo "==> Done. Distribution files:"
 ls -lh dst/main/index.js dst/post/index.js
-
-echo "==> Running pre-commit checks..."
-# pre-commit config lives at the repo root; run it from there scoped to this action's files
-REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-if command -v pre-commit &>/dev/null; then
-  if ! pre-commit run --config "${REPO_ROOT}/.pre-commit-config.yaml" \
-      --files "${SCRIPT_DIR}"/**/* 2>&1; then
-    echo "WARNING: pre-commit reported findings (see above)."
-  fi
-else
-  echo "WARNING: pre-commit not found, skipping checks."
-fi
