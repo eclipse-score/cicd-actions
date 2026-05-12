@@ -27,7 +27,7 @@ When invoked, the action runs these steps in order:
    - Appends Bazel flags to `user.bazelrc` for build and test environments.
 5. Configure access to qnx.com via `.netrc`.
 
-After the job completes (always, even on failure), the post-action automatically removes the QNX license directory and the `.netrc` entry created in steps 3 and 5.
+After the job completes (always, even on failure or cancellation), the post-action automatically removes the QNX license directory and the `.netrc` entry created in steps 3 and 5.
 
 ## Inputs
 

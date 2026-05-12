@@ -21,8 +21,18 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
 
-echo "==> Cleaning previous distribution files..."
-rm -rf dst/main dst/post
+# Load nvm so the correct Linux Node.js is used even when the script is invoked
+# non-interactively (e.g. from a pre-commit hook) where .bashrc is not sourced.
+if [[ -z "${NVM_DIR:-}" ]] && [[ -d "${HOME}/.nvm" ]]; then
+  export NVM_DIR="${HOME}/.nvm"
+fi
+if [[ -s "${NVM_DIR}/nvm.sh" ]]; then
+  # shellcheck source=/dev/null
+  source "${NVM_DIR}/nvm.sh"
+fi
+
+#echo "==> Cleaning previous distribution files..."
+#rm -rf dst/main dst/post
 
 echo "==> Installing npm dependencies..."
 npm install

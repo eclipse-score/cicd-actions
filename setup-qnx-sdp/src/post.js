@@ -53,21 +53,26 @@ async function cleanupQnxLicense() {
   try {
     const licenseDir = core.getInput('qnx-license-dir', { required: true });
     // Replace leading ~ with $HOME to match how the main action resolves the path
-    const resolvedDir = licenseDir.replace(/^~/, os.homedir());
+    const licenseDirAbsPath = licenseDir.replace(/^~/, os.homedir());
 
-    core.info(`Removing QNX license directory: ${resolvedDir}`);
+    core.info(`Removing QNX license directory: ${licenseDirAbsPath}`);
+
+    if (!fs.existsSync(licenseDirAbsPath)) {
+      core.info(`QNX license directory does not exist, nothing to remove: ${licenseDirAbsPath}`);
+      return;
+    }
 
     try {
-      fs.rmSync(resolvedDir, { recursive: true, force: true });
-      core.info(`Successfully removed: ${resolvedDir}`);
+      fs.rmSync(licenseDirAbsPath, { recursive: true, force: true });
+      core.info(`Successfully removed: ${licenseDirAbsPath}`);
     } catch (e) {
       // If direct removal fails (e.g. root-owned files), retry with sudo
       core.info(`Direct removal failed (${e.message}), retrying with sudo...`);
       try {
-        await exec.exec('sudo', ['rm', '-rf', resolvedDir]);
-        core.info(`Successfully removed with sudo: ${resolvedDir}`);
+        await exec.exec('sudo', ['rm', '-rf', licenseDirAbsPath]);
+        core.info(`Successfully removed with sudo: ${licenseDirAbsPath}`);
       } catch (sudoError) {
-        core.warning(`Failed to remove QNX license directory ${resolvedDir}: ${sudoError.message}`);
+        core.warning(`Failed to remove QNX license directory ${licenseDirAbsPath}: ${sudoError.message}`);
       }
     }
   } catch (error) {

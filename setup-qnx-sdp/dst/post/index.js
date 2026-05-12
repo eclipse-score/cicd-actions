@@ -572,8 +572,8 @@ class OidcClient {
             const res = yield httpclient
                 .getJson(id_token_url)
                 .catch(error => {
-                throw new Error(`Failed to get ID Token. \n
-        Error Code : ${error.statusCode}\n
+                throw new Error(`Failed to get ID Token. \n 
+        Error Code : ${error.statusCode}\n 
         Error Message: ${error.message}`);
             });
             const id_token = (_a = res.result) === null || _a === void 0 ? void 0 : _a.value;
@@ -31301,7 +31301,7 @@ module.exports = require("util");
 /************************************************************************/
 /******/ 	// The module cache
 /******/ 	var __webpack_module_cache__ = {};
-/******/
+/******/ 	
 /******/ 	// The require function
 /******/ 	function __nccwpck_require__(moduleId) {
 /******/ 		// Check if module is in cache
@@ -31315,7 +31315,7 @@ module.exports = require("util");
 /******/ 			// no module.loaded needed
 /******/ 			exports: {}
 /******/ 		};
-/******/
+/******/ 	
 /******/ 		// Execute the module function
 /******/ 		var threw = true;
 /******/ 		try {
@@ -31324,16 +31324,16 @@ module.exports = require("util");
 /******/ 		} finally {
 /******/ 			if(threw) delete __webpack_module_cache__[moduleId];
 /******/ 		}
-/******/
+/******/ 	
 /******/ 		// Return the exports of the module
 /******/ 		return module.exports;
 /******/ 	}
-/******/
+/******/ 	
 /************************************************************************/
 /******/ 	/* webpack/runtime/compat */
-/******/
+/******/ 	
 /******/ 	if (typeof __nccwpck_require__ !== 'undefined') __nccwpck_require__.ab = __dirname + "/";
-/******/
+/******/ 	
 /************************************************************************/
 var __webpack_exports__ = {};
 // This entry need to be wrapped in an IIFE because it need to be in strict mode.
@@ -31394,21 +31394,26 @@ async function cleanupQnxLicense() {
   try {
     const licenseDir = core.getInput('qnx-license-dir', { required: true });
     // Replace leading ~ with $HOME to match how the main action resolves the path
-    const resolvedDir = licenseDir.replace(/^~/, os.homedir());
+    const licenseDirAbsPath = licenseDir.replace(/^~/, os.homedir());
 
-    core.info(`Removing QNX license directory: ${resolvedDir}`);
+    core.info(`Removing QNX license directory: ${licenseDirAbsPath}`);
+
+    if (!fs.existsSync(licenseDirAbsPath)) {
+      core.info(`QNX license directory does not exist, nothing to remove: ${licenseDirAbsPath}`);
+      return;
+    }
 
     try {
-      fs.rmSync(resolvedDir, { recursive: true, force: true });
-      core.info(`Successfully removed: ${resolvedDir}`);
+      fs.rmSync(licenseDirAbsPath, { recursive: true, force: true });
+      core.info(`Successfully removed: ${licenseDirAbsPath}`);
     } catch (e) {
       // If direct removal fails (e.g. root-owned files), retry with sudo
       core.info(`Direct removal failed (${e.message}), retrying with sudo...`);
       try {
-        await exec.exec('sudo', ['rm', '-rf', resolvedDir]);
-        core.info(`Successfully removed with sudo: ${resolvedDir}`);
+        await exec.exec('sudo', ['rm', '-rf', licenseDirAbsPath]);
+        core.info(`Successfully removed with sudo: ${licenseDirAbsPath}`);
       } catch (sudoError) {
-        core.warning(`Failed to remove QNX license directory ${resolvedDir}: ${sudoError.message}`);
+        core.warning(`Failed to remove QNX license directory ${licenseDirAbsPath}: ${sudoError.message}`);
       }
     }
   } catch (error) {

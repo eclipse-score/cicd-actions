@@ -10,10 +10,11 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 # *******************************************************************************
+# Exclude generated/vendored files from all hooks that would otherwise modify them.
+exclude: "(^|.*/)(dst/.*\\.js|package-lock\\.json)$"
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
-    exclude: ".*/dst/.*\\.js$|package-lock\\.json$"
     hooks:
       - id: check-yaml
       - id: check-toml
