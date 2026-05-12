@@ -125,6 +125,10 @@ async function configureLicenseServer(licenseServer) {
     core.exportVariable('QNX_LICENSE_EXTSERVER_DELAY', '59');
     core.exportVariable('QNX_LICENSE_QUEUE_TIMEOUT', '180');
 
+    core.info(`Set env var QNXLM_LICENSE_FILE=${licenseServer}`);
+    core.info('Set env var QNX_LICENSE_EXTSERVER_DELAY=59');
+    core.info('Set env var QNX_LICENSE_QUEUE_TIMEOUT=180');
+
     const userBazelrc = path.join(workspace, 'user.bazelrc');
     const entries = [
       `common --action_env=QNXLM_LICENSE_FILE=${licenseServer} --action_env=QNX_LICENSE_EXTSERVER_DELAY --action_env=QNX_LICENSE_QUEUE_TIMEOUT`,
@@ -135,6 +139,7 @@ async function configureLicenseServer(licenseServer) {
     ].join('\n') + '\n';
 
     fs.appendFileSync(userBazelrc, entries);
+    core.info('Added related Bazel configuration to user.bazelrc');
   } finally {
     core.endGroup();
   }
