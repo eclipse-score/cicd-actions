@@ -70,8 +70,8 @@ async function prepareLicenseFile(qnxLicense, licenseDir) {
     // Replace leading ~ with $HOME (tilde causes problems in GitHub Actions env handling)
     const licenseDirAbsPath = licenseDir.replace(/^~/, os.homedir());
     const licenseFile = path.join(licenseDirAbsPath, 'licenses');
-    // Paths starting with '/' are assumed to be system directories that may need sudo
-    const needsSudo = licenseDirAbsPath.startsWith('/');
+    // Paths outside the home directory are assumed to be system directories that may need sudo
+    const needsSudo = !licenseDirAbsPath.startsWith(os.homedir());
     let fileOpSudo = false;
 
     // Try to create the directory, fall back to sudo if needed

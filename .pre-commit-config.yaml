@@ -18,7 +18,10 @@ repos:
       - id: check-toml
       - id: check-json
       - id: end-of-file-fixer
+        exclude: "(^|.*/)(dst/.*\\.js|package-lock\\.json)$"
       - id: trailing-whitespace
+        # Generated files can have some trailing whitespaces
+        exclude: "(^|.*/)(dst/.*\\.js|package-lock\\.json)$"
       - id: check-merge-conflict
       - id: check-case-conflict
       - id: mixed-line-ending
