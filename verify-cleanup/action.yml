@@ -1,0 +1,45 @@
+# *******************************************************************************
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+name: Verify Cleanup
+description: >
+  Post-action verifier. Register this action before the action under test so
+  that, due to the reverse post-step order in GitHub Actions, its post step
+  runs after the other action's post step has finished cleaning up.
+
+inputs:
+  files-absent:
+    description: |
+      Newline-separated list of file or directory paths that must NOT exist
+      when the post step runs. Supports leading ~ expansion.
+    required: false
+    default: ''
+  env-vars-unset:
+    description: |
+      Newline-separated list of environment variable names that must be empty
+      or unset when the post step runs.
+    required: false
+    default: ''
+  file-not-contains:
+    description: |
+      Newline-separated list of checks in the form '<path>|<substring>'.
+      Each check asserts that the file at <path> does not contain <substring>.
+      If the file does not exist the check passes automatically.
+    required: false
+    default: ''
+
+runs:
+  using: node24
+  main: dst/main/index.js
+  post: dst/post/index.js
+  post-if: always()

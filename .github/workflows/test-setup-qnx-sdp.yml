@@ -33,6 +33,13 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
 
+      - name: Register cleanup verifier (post step runs after setup-qnx-sdp post)
+        uses: ./verify-cleanup
+        with:
+          files-absent: ~/qnx_test_license
+          env-vars-unset: QNX_CREDENTIAL_HELPER
+          file-not-contains: ~/.netrc|machine qnx.com
+
       - name: Run setup-qnx-sdp action
         id: setup
         uses: ./setup-qnx-sdp
@@ -97,6 +104,16 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
+
+      - name: Register cleanup verifier (post step runs after setup-qnx-sdp post)
+        uses: ./verify-cleanup
+        with:
+          files-absent: ~/qnx_test_license
+          env-vars-unset: |-
+            QNXLM_LICENSE_FILE
+            QNX_LICENSE_EXTSERVER_DELAY
+            QNX_LICENSE_QUEUE_TIMEOUT
+          file-not-contains: ~/.netrc|machine qnx.com
 
       - name: Create .bazelrc with try-import line
         shell: bash
@@ -178,6 +195,16 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
+
+      - name: Register cleanup verifier (post step runs after setup-qnx-sdp post)
+        uses: ./verify-cleanup
+        with:
+          files-absent: ~/qnx_test_license
+          env-vars-unset: |-
+            QNXLM_LICENSE_FILE
+            QNX_LICENSE_EXTSERVER_DELAY
+            QNX_LICENSE_QUEUE_TIMEOUT
+          file-not-contains: ~/.netrc|machine qnx.com
 
       - name: Ensure no .bazelrc try-import line exists
         shell: bash
@@ -271,6 +298,13 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
+
+      - name: Register cleanup verifier (post step runs after setup-qnx-sdp post)
+        uses: ./verify-cleanup
+        with:
+          files-absent: ~/qnx_test_license
+          env-vars-unset: QNX_CREDENTIAL_HELPER
+          file-not-contains: ~/.netrc|machine qnx.com
 
       - name: Create a fake credential helper script
         shell: bash

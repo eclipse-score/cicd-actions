@@ -1,0 +1,23 @@
+{
+  "name": "verify-cleanup",
+  "version": "1.0.0",
+  "description": "Post-action cleanup verifier for GitHub Actions tests",
+  "private": true,
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "ncc build src/main.js -o dst/main && ncc build src/post.js -o dst/post",
+    "lint": "eslint src/"
+  },
+  "dependencies": {
+    "@actions/core": "^1.11.1"
+  },
+  "overrides": {
+    "undici": "^6.25.0"
+  },
+  "devDependencies": {
+    "@vercel/ncc": "^0.38.3",
+    "eslint": "^9.0.0"
+  }
+}
