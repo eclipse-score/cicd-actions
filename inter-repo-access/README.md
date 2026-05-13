@@ -72,7 +72,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Configure cross-repo access
-        uses: etas-contrib/score_cicd-actions/inter-repo-access@main
+        uses: eclipse-score/cicd-actions/inter-repo-access@<sha1>
         with:
           github-app-client-id: ${{ vars.INTER_REPO_APP_CLIENT_ID }}
           github-app-private-key: ${{ secrets.INTER_REPO_APP_PRIVATE_KEY }}
