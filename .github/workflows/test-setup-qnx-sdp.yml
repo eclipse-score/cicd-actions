@@ -34,7 +34,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
 
       - name: Register cleanup verifier (post step runs after setup-qnx-sdp post)
-        uses: ./verify-cleanup
+        uses: ./.github/_internal_actions/verify-cleanup
         with:
           files-absent: ~/qnx_test_license
           env-vars-unset: QNX_CREDENTIAL_HELPER
@@ -106,7 +106,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
 
       - name: Register cleanup verifier (post step runs after setup-qnx-sdp post)
-        uses: ./verify-cleanup
+        uses: ./.github/_internal_actions/verify-cleanup
         with:
           files-absent: ~/qnx_test_license
           env-vars-unset: |-
@@ -197,7 +197,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
 
       - name: Register cleanup verifier (post step runs after setup-qnx-sdp post)
-        uses: ./verify-cleanup
+        uses: ./.github/_internal_actions/verify-cleanup
         with:
           files-absent: ~/qnx_test_license
           env-vars-unset: |-
@@ -300,7 +300,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
 
       - name: Register cleanup verifier (post step runs after setup-qnx-sdp post)
-        uses: ./verify-cleanup
+        uses: ./.github/_internal_actions/verify-cleanup
         with:
           files-absent: ~/qnx_test_license
           env-vars-unset: QNX_CREDENTIAL_HELPER
