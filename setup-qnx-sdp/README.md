@@ -20,13 +20,17 @@ When invoked, the action runs these steps in order:
 1. Mask secrets in logs (`qnx-license`, `qnx-user`, `qnx-password`).
 2. Checks whether qnx.com credential helper exists and computes absolute path of it (only when `qnx-credential-helper` input is not empty).
 3. Prepare QNX license file.
-4. Configure qnx license server (only when `qnx-license-server` input is not empty):
+4. Configures qnx license server (only when `qnx-license-server` input is not empty):
+   - Appends Bazel flags to `user.bazelrc` for build and test environments.
    - Checks both `$GITHUB_WORKSPACE/.bazelrc` and `$HOME/.bazelrc` for the line `try-import %workspace%/user.bazelrc`. If neither file contains it, a warning is logged (the action continues regardless).
    - Exports license-related environment variables to `GITHUB_ENV`.
-   - Appends Bazel flags to `user.bazelrc` for build and test environments.
 5. Configure access to qnx.com via `.netrc`.
 
 After the job completes (always, even on failure or cancellation), the post-action automatically removes the QNX license directory and the `.netrc` entry created in steps 3 and 5.
+
+## Technical constraints
+
+This action is designed to run on Linux/Posix runners. Also depending on the path provided in `qnx-license-dir`, it may require password less sudo access to create the license file and directory. The action will attempt to use `sudo` only when necessary, but the runner environment must allow it.
 
 ## Inputs
 
