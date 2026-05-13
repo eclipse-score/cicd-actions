@@ -10,8 +10,6 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 # *******************************************************************************
-# Exclude generated/vendored files from all hooks that would otherwise modify them.
-#exclude: "(^|.*/)(dst/.*\\.js|package-lock\\.json)$"
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -27,6 +25,7 @@ repos:
       - id: detect-private-key
       - id: check-added-large-files
         args: ["--maxkb=10"]
+        # Generated files can get quite big so exclude them from this check.
         exclude: "(^|.*/)(dst/.*\\.js|package-lock\\.json)$"
 
   - repo: https://github.com/rhysd/actionlint
