@@ -31469,7 +31469,30 @@ async function cleanupQnxLicense() {
   }
 }
 
+async function cleanupEnvVars() {
+  core.startGroup('Unset environment variables set by setup-qnx-sdp');
+  try {
+    const vars = [
+      'QNX_CREDENTIAL_HELPER',
+      'QNXLM_LICENSE_FILE',
+      'QNX_LICENSE_EXTSERVER_DELAY',
+      'QNX_LICENSE_QUEUE_TIMEOUT',
+    ];
+    for (const name of vars) {
+      // Remove from the current process so this post-action no longer sees them
+      delete process.env[name];
+      // Write an empty value to GITHUB_ENV so subsequent post-actions of other
+      // actions in the workflow also no longer see them
+      core.exportVariable(name, '');
+      core.info(`Unset env var: ${name}`);
+    }
+  } finally {
+    core.endGroup();
+  }
+}
+
 async function run() {
+  await cleanupEnvVars();
   await cleanupQnxLicense();
   await cleanupNetrc();
 }
