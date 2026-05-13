@@ -32,7 +32,8 @@ if [[ -s "${NVM_DIR}/nvm.sh" ]]; then
 fi
 
 echo "==> Installing npm dependencies..."
-npm install
+# Only create package-lock.json since the npm ci call will install the exact versions from it.
+npm i --package-lock-only
 npm ci
 
 echo "==> Linting source files..."

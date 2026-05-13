@@ -21,8 +21,7 @@ When invoked, the action runs these steps in order:
 2. Checks whether qnx.com credential helper exists and computes absolute path of it (only when `qnx-credential-helper` input is not empty).
 3. Prepare QNX license file.
 4. Configure qnx license server (only when `qnx-license-server` input is not empty):
-   - If no `.bazelrc` exists in the repository root, the step logs a warning and continues.
-   - If `.bazelrc` exists but does not contain `try-import %workspace%/user.bazelrc`, the step logs a warning and continues.
+   - Checks both `$GITHUB_WORKSPACE/.bazelrc` and `$HOME/.bazelrc` for the line `try-import %workspace%/user.bazelrc`. If neither file contains it, a warning is logged (the action continues regardless).
    - Exports license-related environment variables to `GITHUB_ENV`.
    - Appends Bazel flags to `user.bazelrc` for build and test environments.
 5. Configure access to qnx.com via `.netrc`.
@@ -93,7 +92,7 @@ It creates or changes files and environment variables for subsequent workflow st
   - Written to `<qnx-license-dir>/licenses` from decoded `qnx-license` content.
 
 - Bazel user configuration:
-  - Appends license-related entries to `user.bazelrc` when `qnx-license-server` is provided and `${HOME}/.bazelrc` exists.
+  - Appends license-related entries to `user.bazelrc` when `qnx-license-server` is provided.
 
 - Netrc:
   - Configures qnx.com credentials in `.netrc` for the duration of the job. Cleans up after the job finishes.
