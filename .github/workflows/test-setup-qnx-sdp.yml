@@ -263,3 +263,73 @@ jobs:
             exit 1
           fi
           echo "Correctly rejected single-level absolute 'qnx-license-dir' (outcome: ${OUTCOME})"
+
+  # ---- Scenario 6: credential helper points to an existing file ----
+  credential-helper-existing-file:
+    name: Credential helper – existing file
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
+
+      - name: Create a fake credential helper script
+        shell: bash
+        run: |
+          mkdir -p "${GITHUB_WORKSPACE}/.github/tools"
+          echo '#!/usr/bin/env python3' > "${GITHUB_WORKSPACE}/.github/tools/qnx_credential_helper.py"
+          chmod +x "${GITHUB_WORKSPACE}/.github/tools/qnx_credential_helper.py"
+
+      - name: Run setup-qnx-sdp with existing credential helper
+        id: setup
+        uses: ./setup-qnx-sdp
+        with:
+          qnx-license: ${{ env.FAKE_LICENSE_B64 }}
+          qnx-license-dir: ~/qnx_test_license
+          qnx-user: test-user
+          qnx-password: test-password
+          # Do not set qnx-credential-helper in order to test that default value ".github/tools/qnx_credential_helper.py" is properly used
+
+      - name: Verify QNX_CREDENTIAL_HELPER env var is set
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${QNX_CREDENTIAL_HELPER:-}" ]]; then
+            echo "ERROR: QNX_CREDENTIAL_HELPER env var not set"
+            exit 1
+          fi
+          if [[ ! -f "${QNX_CREDENTIAL_HELPER}" ]]; then
+            echo "ERROR: QNX_CREDENTIAL_HELPER='${QNX_CREDENTIAL_HELPER}' does not point to an existing file"
+            exit 1
+          fi
+          echo "QNX_CREDENTIAL_HELPER set and points to an existing file: ${QNX_CREDENTIAL_HELPER}"
+
+  # ---- Scenario 7: credential helper points to a non-existent file ----
+  credential-helper-missing-file:
+    name: Credential helper – non-existent file (expect failure)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
+
+      - name: Run setup-qnx-sdp with non-existent credential helper (expected to fail)
+        id: missing-helper
+        continue-on-error: true
+        uses: ./setup-qnx-sdp
+        with:
+          qnx-license: ${{ env.FAKE_LICENSE_B64 }}
+          qnx-license-dir: ~/qnx_test_license
+          qnx-user: test-user
+          qnx-password: test-password
+          qnx-credential-helper: ".github/tools/does_not_exist.py"
+
+      - name: Verify action failed for missing credential helper
+        shell: bash
+        env:
+          OUTCOME: ${{ steps.missing-helper.outcome }}
+        run: |
+          set -euo pipefail
+          if [[ "${OUTCOME}" != "failure" ]]; then
+            echo "ERROR: Expected action to fail for non-existent credential helper, but outcome was '${OUTCOME}'"
+            exit 1
+          fi
+          echo "Correctly rejected non-existent credential helper (outcome: ${OUTCOME})"
