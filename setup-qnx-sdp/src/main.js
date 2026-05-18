@@ -178,6 +178,8 @@ async function configureNetrc(username, password) {
     // Append a machine entry; create the file if it does not exist
     const entry = buildNetrcEntry(username, password);
     fs.appendFileSync(netrcPath, entry);
+    // Restrict .netrc permissions – readable only by the owner
+    fs.chmodSync(netrcPath, 0o600);
     core.info('Configured qnx.com credentials in .netrc');
   } finally {
     core.endGroup();
