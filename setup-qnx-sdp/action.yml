@@ -19,7 +19,7 @@ inputs:
     description: Base64 encoded content of the QNX client license file. Value will be masked in all workflow logs!
     required: true
   qnx-license-dir:
-    description: Directory where the QNX client license file will be stored. If the path starts with '/' then potentially sudo permissions are required when decoding and storing the license file. To store it somewhere in the home folder use '~/...' as path. The folder is removed automatically at the end of the workflow job.
+    description: Directory where the QNX client license file will be stored. If the path starts with '/' then potentially sudo permissions are required when decoding and storing the license file. Absolute paths must be at least two levels deep (e.g. /opt/qnx); paths directly under the filesystem root are rejected. To store it somewhere in the home folder use '~/...' as path. The folder is removed automatically at the end of the workflow job.
     required: true
     default: /opt/score_qnx/license
 
@@ -34,7 +34,7 @@ inputs:
     description: Password of the QNX user account for accessing qnx.com. Value will be masked in all workflow logs!
     required: true
   qnx-credential-helper:
-    description: Workspace root relative or absolute path to the QNX credential helper script that allows Bazel to access qnx.com with the provided credentials (qnx-user and qnx-password). If path is given but file does not exist an error will be raised. If an empty string is given no check will be performed. If file exists it is set to be executable. Finally a GITHUB_ENV var QNX_CREDENTIAL_HELPER is set with the absolute path to the credential helper script.
+    description: Workspace root relative or absolute path to the QNX credential helper script that allows Bazel to access qnx.com with the provided credentials (qnx-user and qnx-password). If path is given but file does not exist an error will be raised. If an empty string is given no check will be performed. If file exists it is set to be executable. Finally a GITHUB_ENV var QNX_CREDENTIAL_HELPER is set with the absolute path to the credential helper script. The default value requires '.github/tools/qnx_credential_helper.py' to exist in the repository; pass an empty string to opt out.
     required: false
     default: .github/tools/qnx_credential_helper.py
 

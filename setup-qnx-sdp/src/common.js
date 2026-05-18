@@ -38,4 +38,12 @@ function buildNetrcEntry(username, password) {
  */
 const NETRC_ENTRY_REGEX = new RegExp(`\\nmachine ${NETRC_MACHINE}\\n[ \\t]+login [^\\n]*\\n[ \\t]+password [^\\n]*\\n`, 'g');
 
-module.exports = { NETRC_PATH, NETRC_MACHINE, buildNetrcEntry, NETRC_ENTRY_REGEX };
+/** Environment variables exported by the main action that the post-action cleans up. */
+const EXPORTED_ENV_VARS = [
+  'QNX_CREDENTIAL_HELPER',
+  'QNXLM_LICENSE_FILE',
+  'QNX_LICENSE_EXTSERVER_DELAY',
+  'QNX_LICENSE_QUEUE_TIMEOUT',
+];
+
+module.exports = { NETRC_PATH, NETRC_MACHINE, buildNetrcEntry, NETRC_ENTRY_REGEX, EXPORTED_ENV_VARS };

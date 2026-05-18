@@ -57,5 +57,11 @@ repos:
         name: Build setup-qnx-sdp distribution files
         language: script
         entry: setup-qnx-sdp/build.sh
-        files: ^setup-qnx-sdp/src/.*\.js|setup-qnx-sdp/package\.json$
+        files: ^(setup-qnx-sdp/src/.*\.js|setup-qnx-sdp/package\.json)$
+        pass_filenames: false
+      - id: build-verify-cleanup
+        name: Build verify-cleanup distribution files
+        language: script
+        entry: .github/_internal_actions/verify-cleanup/build.sh
+        files: ^(\.github/_internal_actions/verify-cleanup/src/.*\.js|\.github/_internal_actions/verify-cleanup/package\.json)$
         pass_filenames: false

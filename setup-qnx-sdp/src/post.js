@@ -17,7 +17,7 @@ const core = require('@actions/core');
 const exec = require('@actions/exec');
 const fs = require('fs');
 const os = require('os');
-const { NETRC_PATH, NETRC_ENTRY_REGEX } = require('./common');
+const { NETRC_PATH, NETRC_ENTRY_REGEX, EXPORTED_ENV_VARS } = require('./common');
 
 async function cleanupNetrc() {
   core.startGroup('Cleanup qnx.com entry from .netrc');
@@ -47,7 +47,7 @@ async function cleanupNetrc() {
 async function cleanupQnxLicense() {
   core.startGroup('Cleanup QNX license');
   try {
-    const licenseDir = core.getInput('qnx-license-dir', { required: true });
+    const licenseDir = core.getInput('qnx-license-dir', { required: true }).trim();
     // Replace leading ~ with $HOME to match how the main action resolves the path
     const licenseDirAbsPath = licenseDir.replace(/^~/, os.homedir());
 
@@ -82,17 +82,14 @@ async function cleanupQnxLicense() {
 async function cleanupEnvVars() {
   core.startGroup('Unset environment variables set by setup-qnx-sdp');
   try {
-    const vars = [
-      'QNX_CREDENTIAL_HELPER',
-      'QNXLM_LICENSE_FILE',
-      'QNX_LICENSE_EXTSERVER_DELAY',
-      'QNX_LICENSE_QUEUE_TIMEOUT',
-    ];
+    const vars = EXPORTED_ENV_VARS;
     for (const name of vars) {
       // Remove from the current process so this post-action no longer sees them
       delete process.env[name];
       // Write an empty value to GITHUB_ENV so subsequent post-actions of other
       // actions in the workflow also no longer see them
+      // GitHub Actions has no mechanism to truly delete an env var from GITHUB_ENV;
+      // setting to empty string is the best available approximation.
       core.exportVariable(name, '');
       core.info(`Unset env var: ${name}`);
     }

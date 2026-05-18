@@ -21,12 +21,12 @@ When invoked, the action runs these steps in order:
 2. Checks whether qnx.com credential helper exists and computes absolute path of it (only when `qnx-credential-helper` input is not empty).
 3. Prepare QNX license file.
 4. Configures qnx license server (only when `qnx-license-server` input is not empty):
-   - Appends Bazel flags to `user.bazelrc` for build and test environments.
    - Checks both `$GITHUB_WORKSPACE/.bazelrc` and `$HOME/.bazelrc` for the line `try-import %workspace%/user.bazelrc`. If neither file contains it, a warning is logged (the action continues regardless).
    - Exports license-related environment variables to `GITHUB_ENV`.
+   - Appends Bazel flags to `user.bazelrc` for build and test environments.
 5. Configure access to qnx.com via `.netrc`.
 
-After the job completes (always, even on failure or cancellation), the post-action automatically removes the QNX license directory and the `.netrc` entry created in steps 3 and 5.
+After the job completes (always, even on failure or cancellation), the post-action automatically removes the QNX license directory and the `.netrc` entry created in steps 3 and 5, and clears the environment variables exported in steps 2 and 4 (`QNX_CREDENTIAL_HELPER`, `QNXLM_LICENSE_FILE`, `QNX_LICENSE_EXTSERVER_DELAY`, `QNX_LICENSE_QUEUE_TIMEOUT`).
 
 ## Technical constraints
 
@@ -61,6 +61,9 @@ jobs:
           qnx-license-server: ${{ vars.QNX_LICENSE_SERVER }}
           qnx-user: ${{ secrets.QNX_USER }}
           qnx-password: ${{ secrets.QNX_PASSWORD }}
+          # qnx-credential-helper defaults to .github/tools/qnx_credential_helper.py
+          # Set to "" to opt out if that file does not exist in your repository.
+          # qnx-credential-helper: ""
 
       - name: Build with Bazel
         run: bazel build //...

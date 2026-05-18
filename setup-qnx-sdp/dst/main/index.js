@@ -31069,7 +31069,15 @@ function buildNetrcEntry(username, password) {
  */
 const NETRC_ENTRY_REGEX = new RegExp(`\\nmachine ${NETRC_MACHINE}\\n[ \\t]+login [^\\n]*\\n[ \\t]+password [^\\n]*\\n`, 'g');
 
-module.exports = { NETRC_PATH, NETRC_MACHINE, buildNetrcEntry, NETRC_ENTRY_REGEX };
+/** Environment variables exported by the main action that the post-action cleans up. */
+const EXPORTED_ENV_VARS = [
+  'QNX_CREDENTIAL_HELPER',
+  'QNXLM_LICENSE_FILE',
+  'QNX_LICENSE_EXTSERVER_DELAY',
+  'QNX_LICENSE_QUEUE_TIMEOUT',
+];
+
+module.exports = { NETRC_PATH, NETRC_MACHINE, buildNetrcEntry, NETRC_ENTRY_REGEX, EXPORTED_ENV_VARS };
 
 
 /***/ }),
@@ -31438,8 +31446,9 @@ async function prepareCredentialHelper(credHelper) {
 async function prepareLicenseFile(qnxLicense, licenseDir) {
   core.startGroup('Prepare QNX license file');
   try {
+    const dir = licenseDir.trim();
     // Must not be empty or whitespace-only.
-    if (!licenseDir.trim()) {
+    if (!dir) {
       throw new Error(
         "'qnx-license-dir' must not be empty. " +
         "Provide either a home-relative path (e.g. ~/qnx/license) or an absolute path " +
@@ -31449,16 +31458,16 @@ async function prepareLicenseFile(qnxLicense, licenseDir) {
 
     // Absolute paths must refer to at least a second-level directory (e.g. /opt/qnx, not /qnx)
     // to prevent accidental operations directly under the filesystem root.
-    if (licenseDir.startsWith('/') && !/^\/[^/]+\/[^/]/.test(licenseDir)) {
+    if (dir.startsWith('/') && !/^\/[^/]+\/[^/]/.test(dir)) {
       throw new Error(
-        `'qnx-license-dir' value '${licenseDir}' is too shallow. ` +
+        `'qnx-license-dir' value '${dir}' is too shallow. ` +
         'Absolute paths must be at least two levels deep (e.g. /opt/score_qnx), ' +
         'not directly under the filesystem root.'
       );
     }
 
     // Replace leading ~ with $HOME (tilde causes problems in GitHub Actions env handling)
-    const licenseDirAbsPath = licenseDir.replace(/^~/, os.homedir());
+    const licenseDirAbsPath = dir.replace(/^~/, os.homedir());
     const licenseFile = path.join(licenseDirAbsPath, 'licenses');
     // Paths outside the home directory are assumed to be system directories that may need sudo
     const needsSudo = !licenseDirAbsPath.startsWith(os.homedir());
@@ -31480,14 +31489,22 @@ async function prepareLicenseFile(qnxLicense, licenseDir) {
       core.info(`License file already exists and will be overwritten: ${licenseFile}`);
       try {
         fs.accessSync(licenseFile, fs.constants.W_OK);
-      } catch {
-        fileOpSudo = needsSudo;
+      } catch (e) {
+        if (needsSudo) {
+          fileOpSudo = true;
+        } else {
+          throw e;
+        }
       }
     } else {
       try {
         fs.accessSync(licenseDirAbsPath, fs.constants.W_OK);
-      } catch {
-        fileOpSudo = needsSudo;
+      } catch (e) {
+        if (needsSudo) {
+          fileOpSudo = true;
+        } else {
+          throw e;
+        }
       }
     }
 
@@ -31507,7 +31524,7 @@ async function prepareLicenseFile(qnxLicense, licenseDir) {
         try { fs.unlinkSync(tmpFile); } catch { /* ignore cleanup failure */ }
       }
     } else {
-      fs.writeFileSync(licenseFile, licenseContent, { mode: 0o664 });
+      fs.writeFileSync(licenseFile, licenseContent);
       fs.chmodSync(licenseFile, 0o664);
     }
 
@@ -31522,6 +31539,9 @@ async function configureLicenseServer(licenseServer) {
   core.startGroup('Configure qnx license server');
   try {
     const workspace = process.env.GITHUB_WORKSPACE;
+    if (!workspace) {
+      throw new Error('GITHUB_WORKSPACE environment variable is not set.');
+    }
     const tryImportLine = 'try-import %workspace%/user.bazelrc';
 
     const workspaceBazelrc = path.join(workspace, '.bazelrc');
@@ -31566,12 +31586,11 @@ async function configureLicenseServer(licenseServer) {
 async function configureNetrc(username, password) {
   core.startGroup('Configure access to qnx.com via .netrc');
   try {
-    const netrcPath = NETRC_PATH;
     // Append a machine entry; create the file if it does not exist
     const entry = buildNetrcEntry(username, password);
-    fs.appendFileSync(netrcPath, entry);
+    fs.appendFileSync(NETRC_PATH, entry);
     // Restrict .netrc permissions – readable only by the owner
-    fs.chmodSync(netrcPath, 0o600);
+    fs.chmodSync(NETRC_PATH, 0o600);
     core.info('Configured qnx.com credentials in .netrc');
   } finally {
     core.endGroup();
@@ -31596,7 +31615,7 @@ async function run() {
     core.setSecret(qnxPassword);
     core.endGroup();
 
-    if (credHelper !== '') {
+    if (credHelper.trim() !== '') {
       await prepareCredentialHelper(credHelper);
     }
 
@@ -31608,7 +31627,7 @@ async function run() {
 
     await configureNetrc(qnxUser, qnxPassword);
   } catch (error) {
-    core.setFailed(error.message);
+    core.setFailed(error);
   }
 }
 

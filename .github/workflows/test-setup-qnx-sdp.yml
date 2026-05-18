@@ -37,7 +37,6 @@ jobs:
         uses: ./.github/_internal_actions/verify-cleanup
         with:
           files-absent: ~/qnx_test_license
-          env-vars-unset: QNX_CREDENTIAL_HELPER
           file-not-contains: ~/.netrc|machine qnx.com
 
       - name: Run setup-qnx-sdp action
@@ -230,11 +229,6 @@ jobs:
           qnx-credential-helper: ""
           qnx-license-server: "6287@fake-license-host"
 
-      - name: Verify action did not fail despite missing try-import
-        shell: bash
-        run: |
-          echo "Action completed successfully despite missing try-import line (warning was expected)."
-
   # ---- Scenario 4: empty license dir is rejected with an error ----
   reject-empty-license-dir:
     name: Reject empty qnx-license-dir
@@ -351,6 +345,13 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
 
+      - name: Register cleanup verifier (post step runs after setup-qnx-sdp post)
+        uses: ./.github/_internal_actions/verify-cleanup
+        with:
+          files-absent: ~/qnx_test_license
+          env-vars-unset: QNX_CREDENTIAL_HELPER
+          file-not-contains: ~/.netrc|machine qnx.com
+
       - name: Run setup-qnx-sdp with non-existent credential helper (expected to fail)
         id: missing-helper
         continue-on-error: true
@@ -373,3 +374,46 @@ jobs:
             exit 1
           fi
           echo "Correctly rejected non-existent credential helper (outcome: ${OUTCOME})"
+
+  # ---- Scenario 8: license dir as absolute path (non-tilde), exercises non-~ branch in prepareLicenseFile ----
+  absolute-license-dir:
+    name: Setup – non-tilde absolute license dir (/tmp)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
+
+      - name: Register cleanup verifier (post step runs after setup-qnx-sdp post)
+        uses: ./.github/_internal_actions/verify-cleanup
+        with:
+          files-absent: /tmp/qnx_test_license
+          file-not-contains: ~/.netrc|machine qnx.com
+
+      - name: Run setup-qnx-sdp action with absolute path
+        id: setup
+        uses: ./setup-qnx-sdp
+        with:
+          qnx-license: ${{ env.FAKE_LICENSE_B64 }}
+          qnx-license-dir: /tmp/qnx_test_license
+          qnx-user: test-user
+          qnx-password: test-password
+          qnx-credential-helper: ""
+
+      - name: Verify license file was created at absolute path
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          LICENSE_FILE="/tmp/qnx_test_license/licenses"
+          if [[ ! -f "${LICENSE_FILE}" ]]; then
+            echo "ERROR: Expected license file not found at ${LICENSE_FILE}"
+            exit 1
+          fi
+          echo "License file found at ${LICENSE_FILE}"
+          ls -l "${LICENSE_FILE}"
+          LICENSE_PERMS=$(stat -c "%a" "${LICENSE_FILE}")
+          if [[ "${LICENSE_PERMS}" != "664" ]]; then
+            echo "ERROR: License file permissions are ${LICENSE_PERMS}, expected 664"
+            exit 1
+          fi
+          echo "License file permissions verified: ${LICENSE_PERMS}"
