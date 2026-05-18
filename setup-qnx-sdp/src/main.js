@@ -107,6 +107,8 @@ async function prepareLicenseFile(qnxLicense, licenseDir) {
       // Write to a temp file outside the sudo-protected path, then copy to the target.
       // Use sudo for the copy operation to ensure correct permissions even if the target directory is root-owned.
       const tmpFile = path.join(os.tmpdir(), `qnx_license_${process.pid}`);
+      // Hint: Using 600 permissions is not enough since then the Bazel sandbox cannot access the license file and the build aborts with an error message:
+      // "You don't have a valid license for this product. QNX functionality will be disabled."
       try {
         fs.writeFileSync(tmpFile, licenseContent, { mode: 0o664 });
         await exec.exec('sudo', ['cp', tmpFile, licenseFile]);

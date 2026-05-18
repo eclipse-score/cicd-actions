@@ -62,6 +62,12 @@ jobs:
           fi
           echo "License file found at ${LICENSE_FILE}"
           ls -l "${LICENSE_FILE}"
+          LICENSE_PERMS=$(stat -c "%a" "${LICENSE_FILE}")
+          if [[ "${LICENSE_PERMS}" != "664" ]]; then
+            echo "ERROR: License file permissions are ${LICENSE_PERMS}, expected 664"
+            exit 1
+          fi
+          echo "License file permissions verified: ${LICENSE_PERMS}"
 
       - name: Verify .netrc entry was added
         shell: bash
