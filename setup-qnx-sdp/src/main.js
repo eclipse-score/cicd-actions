@@ -18,7 +18,7 @@ const exec = require('@actions/exec');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { NETRC_PATH, buildNetrcEntry } = require('./common');
+const { NETRC_PATH, buildNetrcEntry, exportVar } = require('./common');
 
 async function prepareCredentialHelper(credHelper) {
   core.startGroup('Check for qnx.com credential helper existence');
@@ -37,7 +37,7 @@ async function prepareCredentialHelper(credHelper) {
       fs.chmodSync(helperPath, stat.mode | 0o111);
     }
 
-    core.exportVariable('QNX_CREDENTIAL_HELPER', helperPath);
+    exportVar('QNX_CREDENTIAL_HELPER', helperPath);
     core.info(`Using helper at: ${helperPath}`);
     await exec.exec('ls', ['-l', helperPath]);
   } finally {
@@ -161,13 +161,9 @@ async function configureLicenseServer(licenseServer) {
       );
     }
 
-    core.exportVariable('QNXLM_LICENSE_FILE', licenseServer);
-    core.exportVariable('QNX_LICENSE_EXTSERVER_DELAY', '59');
-    core.exportVariable('QNX_LICENSE_QUEUE_TIMEOUT', '180');
-
-    core.info(`Set env var QNXLM_LICENSE_FILE=${licenseServer}`);
-    core.info('Set env var QNX_LICENSE_EXTSERVER_DELAY=59');
-    core.info('Set env var QNX_LICENSE_QUEUE_TIMEOUT=180');
+    exportVar('QNXLM_LICENSE_FILE', licenseServer);
+    exportVar('QNX_LICENSE_EXTSERVER_DELAY', '59');
+    exportVar('QNX_LICENSE_QUEUE_TIMEOUT', '180');
 
     const userBazelrc = path.join(workspace, 'user.bazelrc');
     const entries = [

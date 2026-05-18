@@ -92,7 +92,6 @@ async function cleanupEnvVars() {
       // GitHub Actions has no mechanism to truly delete an env var from GITHUB_ENV;
       // setting to empty string is the best available approximation.
       core.exportVariable(name, '');
-      core.info(`Unset env var: ${name}`);
     }
   } finally {
     core.endGroup();

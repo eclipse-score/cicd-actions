@@ -31044,6 +31044,7 @@ module.exports = {
 
 
 
+const core = __nccwpck_require__(7484);
 const os = __nccwpck_require__(857);
 const path = __nccwpck_require__(6928);
 
@@ -31077,7 +31078,26 @@ const EXPORTED_ENV_VARS = [
   'QNX_LICENSE_QUEUE_TIMEOUT',
 ];
 
-module.exports = { NETRC_PATH, NETRC_MACHINE, buildNetrcEntry, NETRC_ENTRY_REGEX, EXPORTED_ENV_VARS };
+/**
+ * Export a GitHub Actions environment variable, asserting the name is
+ * declared in EXPORTED_ENV_VARS so that common.js remains the single
+ * source of truth for the set of variables managed by this action.
+ * @param {string} name
+ * @param {string} value
+ */
+function exportVar(name, value) {
+  if (!EXPORTED_ENV_VARS.includes(name)) {
+    throw new Error(`Attempted to export undeclared variable '${name}'. Add it to EXPORTED_ENV_VARS in common.js first.`);
+  }
+  core.exportVariable(name, value);
+  if (value === '') {
+    core.info(`Set env var ${name} to an empty value`);
+  } else {
+    core.info(`Set env var ${name}=${value}`);
+  }
+}
+
+module.exports = { NETRC_PATH, NETRC_MACHINE, buildNetrcEntry, NETRC_ENTRY_REGEX, EXPORTED_ENV_VARS, exportVar };
 
 
 /***/ }),
@@ -31416,7 +31436,7 @@ const exec = __nccwpck_require__(5236);
 const fs = __nccwpck_require__(9896);
 const path = __nccwpck_require__(6928);
 const os = __nccwpck_require__(857);
-const { NETRC_PATH, buildNetrcEntry } = __nccwpck_require__(5128);
+const { NETRC_PATH, buildNetrcEntry, exportVar } = __nccwpck_require__(5128);
 
 async function prepareCredentialHelper(credHelper) {
   core.startGroup('Check for qnx.com credential helper existence');
@@ -31435,7 +31455,7 @@ async function prepareCredentialHelper(credHelper) {
       fs.chmodSync(helperPath, stat.mode | 0o111);
     }
 
-    core.exportVariable('QNX_CREDENTIAL_HELPER', helperPath);
+    exportVar('QNX_CREDENTIAL_HELPER', helperPath);
     core.info(`Using helper at: ${helperPath}`);
     await exec.exec('ls', ['-l', helperPath]);
   } finally {
@@ -31559,13 +31579,9 @@ async function configureLicenseServer(licenseServer) {
       );
     }
 
-    core.exportVariable('QNXLM_LICENSE_FILE', licenseServer);
-    core.exportVariable('QNX_LICENSE_EXTSERVER_DELAY', '59');
-    core.exportVariable('QNX_LICENSE_QUEUE_TIMEOUT', '180');
-
-    core.info(`Set env var QNXLM_LICENSE_FILE=${licenseServer}`);
-    core.info('Set env var QNX_LICENSE_EXTSERVER_DELAY=59');
-    core.info('Set env var QNX_LICENSE_QUEUE_TIMEOUT=180');
+    exportVar('QNXLM_LICENSE_FILE', licenseServer);
+    exportVar('QNX_LICENSE_EXTSERVER_DELAY', '59');
+    exportVar('QNX_LICENSE_QUEUE_TIMEOUT', '180');
 
     const userBazelrc = path.join(workspace, 'user.bazelrc');
     const entries = [

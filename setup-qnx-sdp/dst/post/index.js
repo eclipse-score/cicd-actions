@@ -31044,6 +31044,7 @@ module.exports = {
 
 
 
+const core = __nccwpck_require__(7484);
 const os = __nccwpck_require__(857);
 const path = __nccwpck_require__(6928);
 
@@ -31077,7 +31078,26 @@ const EXPORTED_ENV_VARS = [
   'QNX_LICENSE_QUEUE_TIMEOUT',
 ];
 
-module.exports = { NETRC_PATH, NETRC_MACHINE, buildNetrcEntry, NETRC_ENTRY_REGEX, EXPORTED_ENV_VARS };
+/**
+ * Export a GitHub Actions environment variable, asserting the name is
+ * declared in EXPORTED_ENV_VARS so that common.js remains the single
+ * source of truth for the set of variables managed by this action.
+ * @param {string} name
+ * @param {string} value
+ */
+function exportVar(name, value) {
+  if (!EXPORTED_ENV_VARS.includes(name)) {
+    throw new Error(`Attempted to export undeclared variable '${name}'. Add it to EXPORTED_ENV_VARS in common.js first.`);
+  }
+  core.exportVariable(name, value);
+  if (value === '') {
+    core.info(`Set env var ${name} to an empty value`);
+  } else {
+    core.info(`Set env var ${name}=${value}`);
+  }
+}
+
+module.exports = { NETRC_PATH, NETRC_MACHINE, buildNetrcEntry, NETRC_ENTRY_REGEX, EXPORTED_ENV_VARS, exportVar };
 
 
 /***/ }),
@@ -31490,7 +31510,6 @@ async function cleanupEnvVars() {
       // GitHub Actions has no mechanism to truly delete an env var from GITHUB_ENV;
       // setting to empty string is the best available approximation.
       core.exportVariable(name, '');
-      core.info(`Unset env var: ${name}`);
     }
   } finally {
     core.endGroup();
