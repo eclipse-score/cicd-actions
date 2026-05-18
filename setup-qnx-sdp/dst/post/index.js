@@ -31432,8 +31432,9 @@ async function cleanupNetrc() {
     if (cleaned === original) {
       core.info('No qnx.com entry found in .netrc, nothing to remove.');
     } else {
-      fs.writeFileSync(netrcPath, cleaned, { mode: 0o600 });
+      fs.writeFileSync(netrcPath, cleaned);
       core.info('Removed qnx.com entry from .netrc.');
+      await exec.exec('ls', ['-l', NETRC_PATH]);
     }
   } catch (error) {
     core.warning(`Failed to clean up .netrc: ${error.message}`);
