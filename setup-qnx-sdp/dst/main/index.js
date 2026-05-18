@@ -31498,15 +31498,15 @@ async function prepareLicenseFile(qnxLicense, licenseDir) {
       // Use sudo for the copy operation to ensure correct permissions even if the target directory is root-owned.
       const tmpFile = path.join(os.tmpdir(), `qnx_license_${process.pid}`);
       try {
-        fs.writeFileSync(tmpFile, licenseContent, { mode: 0o600 });
+        fs.writeFileSync(tmpFile, licenseContent, { mode: 0o664 });
         await exec.exec('sudo', ['cp', tmpFile, licenseFile]);
-        await exec.exec('sudo', ['chmod', '600', licenseFile]);
+        await exec.exec('sudo', ['chmod', '664', licenseFile]);
       } finally {
         try { fs.unlinkSync(tmpFile); } catch { /* ignore cleanup failure */ }
       }
     } else {
-      fs.writeFileSync(licenseFile, licenseContent, { mode: 0o600 });
-      fs.chmodSync(licenseFile, 0o600);
+      fs.writeFileSync(licenseFile, licenseContent, { mode: 0o664 });
+      fs.chmodSync(licenseFile, 0o664);
     }
 
     core.info('Prepared license file is located here:');
@@ -31568,8 +31568,6 @@ async function configureNetrc(username, password) {
     // Append a machine entry; create the file if it does not exist
     const entry = buildNetrcEntry(username, password);
     fs.appendFileSync(netrcPath, entry);
-    // Restrict .netrc permissions – readable only by the owner
-    fs.chmodSync(netrcPath, 0o600);
     core.info('Configured qnx.com credentials in .netrc');
   } finally {
     core.endGroup();
