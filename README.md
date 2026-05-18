@@ -13,6 +13,8 @@ This repo includes self-test workflows for (some of) the provided actions in the
 
 - [`test-inter-repo-access.yml`](./.github/workflows/test-inter-repo-access.yml) tests the [`inter-repo-access`](./inter-repo-access/README.md) action by configuring it with a token and then verifying that the token is correctly injected into git for a subsequent checkout of another repository.
 
+- [`test-setup-qnx-sdp.yml`](./.github/workflows/test-setup-qnx-sdp.yml) tests the [`setup-qnx-sdp`](./setup-qnx-sdp/README.md) action by configuring it with a fake license and then verifying that the license file and environment variables are correctly set up.
+
 These workflows are reusable (`workflow_call`) and are executed from the [`PR workflow`](./.github/workflows/_local_on_pr.yml)
 
 ## Why are the actions in a separate repository?
