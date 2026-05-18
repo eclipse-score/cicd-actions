@@ -126,7 +126,7 @@ async function prepareLicenseFile(qnxLicense, licenseDir) {
         try { fs.unlinkSync(tmpFile); } catch { /* ignore cleanup failure */ }
       }
     } else {
-      fs.writeFileSync(licenseFile, licenseContent);
+      fs.writeFileSync(licenseFile, licenseContent, { mode: 0o664 });
       fs.chmodSync(licenseFile, 0o664);
     }
 
