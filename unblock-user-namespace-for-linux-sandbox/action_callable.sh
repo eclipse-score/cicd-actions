@@ -11,7 +11,12 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 # *******************************************************************************
+set -euo pipefail
 INSTALL_BASE=$(bazel info install_base)
+if [[ -z "${INSTALL_BASE}" ]]; then
+  echo "ERROR: 'bazel info install_base' returned an empty path."
+  exit 1
+fi
 sudo bash -c "cat >/etc/apparmor.d/score-linux-sandbox" <<-EOF
 abi <abi/4.0>,
 include <tunables/global>
@@ -25,7 +30,7 @@ profile linux-sandbox ${INSTALL_BASE}/linux-sandbox flags=(unconfined) {
 EOF
 sudo apparmor_parser -r /etc/apparmor.d/score-linux-sandbox
 
-${INSTALL_BASE}/linux-sandbox "/bin/true"
+"${INSTALL_BASE}/linux-sandbox" "/bin/true"
 EXIT_CODE=$?
 if [ $EXIT_CODE -ne 0 ]; then
   echo "Warning: '${INSTALL_BASE}/linux-sandbox \"/bin/true\"' failed."
