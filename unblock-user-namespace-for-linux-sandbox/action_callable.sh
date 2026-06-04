@@ -13,10 +13,10 @@
 # *******************************************************************************
 set -euo pipefail
 
- if ! command -v bazel >/dev/null 2>&1; then
-   echo "ERROR: bazel is required for this action"
-   exit 1
- fi
+if ! command -v bazel >/dev/null 2>&1; then
+  echo "ERROR: bazel is required for this action"
+  exit 1
+fi
 
 INSTALL_BASE=$(bazel info install_base)
 sudo bash -c "cat >/etc/apparmor.d/score-linux-sandbox" <<-EOF
@@ -32,11 +32,13 @@ profile linux-sandbox ${INSTALL_BASE}/linux-sandbox flags=(unconfined) {
 EOF
 sudo apparmor_parser -r /etc/apparmor.d/score-linux-sandbox
 
+set +e
 "${INSTALL_BASE}/linux-sandbox" "/bin/true"
 EXIT_CODE=$?
+set -e
 if [ $EXIT_CODE -ne 0 ]; then
-  echo "Warning: '${INSTALL_BASE}/linux-sandbox \"/bin/true\"' failed."
+  echo "Error: '${INSTALL_BASE}/linux-sandbox /bin/true' failed."
 else
-  echo "Success: '${INSTALL_BASE}/linux-sandbox \"/bin/true\"' succeeded."
+  echo "Success: '${INSTALL_BASE}/linux-sandbox /bin/true' succeeded."
 fi
 exit $EXIT_CODE
