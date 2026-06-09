@@ -59,12 +59,12 @@ jobs:
             exit 1
           fi
 
-          if ! grep -q "--disk_cache=" "${HOME}/.bazelrc"; then
+          if ! grep -Fq -- "--disk_cache=" "${HOME}/.bazelrc"; then
             echo "ERROR: ~/.bazelrc does not contain disk_cache configuration"
             exit 1
           fi
 
-          if ! grep -q "--repository_cache=" "${HOME}/.bazelrc"; then
+          if ! grep -Fq -- "--repository_cache=" "${HOME}/.bazelrc"; then
             echo "ERROR: ~/.bazelrc does not contain repository_cache configuration"
             exit 1
           fi
