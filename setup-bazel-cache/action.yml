@@ -1,0 +1,62 @@
+# *******************************************************************************
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+name: Setup Bazel Cache
+description: Configures Bazel caching with opinionated defaults. Cache saves are restricted to the main branch.
+
+inputs:
+  unique-cache-name:
+    description: A unique identifier for the cache, used to prevent collisions between different workflows or different caches within the same workflow (bazel disk-cache).
+    required: true
+
+  main-branch:
+    description: Branch name that is allowed to save the cache. Override only when the default branch is not named 'main'.
+    required: false
+    default: "main"
+
+  # Non stable API, subject to change without deprecation. Not intended for public use.
+  _bazelisk_cache:
+    description: For debugging purposes only.
+    required: false
+    default: "true"
+
+  _repository_cache:
+    # Repository cache does barely improve performance.
+    # It does cost us valuable disk and cache space.
+    # But downloading everything all the time is just too unstable.
+    description: For debugging purposes only.
+    required: false
+    default: "true"
+
+  _cache_optimized:
+    description: For debugging purposes only.
+    required: false
+    default: "true"
+
+  _external_cache:
+    description: For debugging purposes only.
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - uses: castler/setup-bazel@68beb23a00fcbd742821ab5e8e730866fec63eaf # cache-optimized branch 2026-06-09
+      with:
+        disk-cache: ${{ inputs.unique-cache-name }}
+        cache-save: ${{ github.ref == format('refs/heads/{0}', inputs._main-branch) }}
+
+        bazelisk-cache: ${{ inputs._bazelisk_cache }} # true
+        repository-cache: ${{ inputs._repository_cache }} # true
+        cache-optimized: ${{ inputs._cache_optimized }} # true
+        external-cache: ${{ inputs._external_cache }} # false

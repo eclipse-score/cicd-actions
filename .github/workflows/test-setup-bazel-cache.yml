@@ -1,0 +1,69 @@
+# *******************************************************************************
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+name: Test Setup Bazel Cache
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  setup-bazel-cache:
+    name: Action runs without error
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
+
+      - name: Create minimal Bazel workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'module(name = "cache_test")' > "${GITHUB_WORKSPACE}/MODULE.bazel"
+          echo '8.6.0' > "${GITHUB_WORKSPACE}/.bazelversion"
+
+      - name: Verify ~/.bazelrc does not exist before action
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f "${HOME}/.bazelrc" ]]; then
+            echo "ERROR: ~/.bazelrc already exists before setup-bazel-cache ran"
+            exit 1
+          fi
+
+      - name: Run setup-bazel-cache action
+        uses: ./setup-bazel-cache
+        with:
+          unique-cache-name: ${{ github.workflow }}-${{ github.job }}
+
+      - name: Verify ~/.bazelrc was written by action with cache configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -f "${HOME}/.bazelrc" ]]; then
+            echo "ERROR: ~/.bazelrc was not created by setup-bazel-cache"
+            exit 1
+          fi
+          if ! grep -q "disk_cache" "${HOME}/.bazelrc"; then
+            echo "ERROR: ~/.bazelrc does not contain disk_cache configuration"
+            exit 1
+          fi
+          echo "~/.bazelrc contents:"
+          cat "${HOME}/.bazelrc"
+
+      - name: Run bazel info to verify workspace and cache configuration are valid
+        shell: bash
+        run: bazel info

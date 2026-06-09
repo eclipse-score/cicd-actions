@@ -6,6 +6,7 @@ Reusable GitHub Actions for S-CORE CI/CD automation. For reusable workflows, see
 
 - [`inter-repo-access`](./inter-repo-access/README.md): resolve one auth mode and configure git for consistent cross-repository access.
 - [`setup-qnx-sdp`](./setup-qnx-sdp/README.md): setup QNX SDP environment for CI/CD workflows.
+- [`setup-bazel-cache`](./setup-bazel-cache/README.md): configure Bazel caching with opinionated defaults.
 - [`unblock-user-namespace-for-linux-sandbox`](./unblock-user-namespace-for-linux-sandbox/README.md): allow Bazel's `linux-sandbox` to create user namespaces on Ubuntu runners.
 
 ## Self Testing
