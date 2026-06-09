@@ -54,7 +54,7 @@ runs:
     - uses: castler/setup-bazel@68beb23a00fcbd742821ab5e8e730866fec63eaf # cache-optimized branch 2026-06-09
       with:
         disk-cache: ${{ inputs.unique-cache-name }}
-        cache-save: ${{ github.ref == format('refs/heads/{0}', inputs._main-branch) }}
+        cache-save: ${{ github.ref == format('refs/heads/{0}', inputs.main-branch) }}
 
         bazelisk-cache: ${{ inputs._bazelisk_cache }} # true
         repository-cache: ${{ inputs._repository_cache }} # true
