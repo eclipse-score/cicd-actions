@@ -13,6 +13,10 @@ It performs the following:
 - Configures access to qnx.com via `.netrc`.
 - Automatically removes the QNX license file and the `.netrc` entry when the job finishes (post-action).
 
+## Required permissions
+
+This action performs only local filesystem operations and does not call the GitHub API. No `GITHUB_TOKEN` permissions are required beyond whatever the rest of the job needs.
+
 ## How it works
 
 When invoked, the action runs these steps in order:

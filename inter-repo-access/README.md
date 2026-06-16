@@ -45,6 +45,10 @@ The rewrite host is derived from `github.server_url`, so the same behavior appli
 
 The action also exposes the selected token as `outputs.token` for cases where a token must be passed explicitly (for example, to a GitHub API call).
 
+## Required permissions
+
+This action configures git URL rewrites and optionally calls `actions/create-github-app-token` (which uses a JWT, not `GITHUB_TOKEN`). It does not call the GitHub API with `GITHUB_TOKEN` and requires no permissions of its own.
+
 ## Inputs
 
 - `github-app-client-id`: GitHub App client ID. When set, `github-app-private-key` is also required.

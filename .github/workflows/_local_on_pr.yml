@@ -38,6 +38,7 @@ jobs:
   setup-bazel-cache-tests:
     uses: ./.github/workflows/test-setup-bazel-cache.yml
     permissions:
+      actions: write
       contents: read
 
   unblock-user-namespace-for-linux-sandbox-tests:

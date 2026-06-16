@@ -13,6 +13,17 @@ steps:
 
 Using `github.workflow` and `github.job` together gives each job its own cache automatically. Append a matrix identifier if the same job runs with different configurations that produce different build outputs.
 
+## Required permissions
+
+The job using this action needs:
+
+```yaml
+permissions:
+  actions: write
+```
+
+`actions: write` is required because deleting caches — which this action does to prune stale entries — is only available through the GitHub REST API. The internal runner token used for cache save and restore does not cover deletion; `GITHUB_TOKEN` with `actions: write` is the only supported mechanism for it.
+
 ## The cache only gets written from `main`
 
 PR and branch builds read from the cache but never write to it. Only builds on `main` populate it.
