@@ -7,3 +7,10 @@ This action allows `linux-sandbox` to use Linux user namespaces via configuring 
 ## Local `linux-sandbox` enabling
 
 To enable `linux-sandbox` locally, when using the devcontainer read the [devcontainer documentation](https://github.com/eclipse-score/devcontainer#bazels-linux-sandbox) for instructions.
+
+## Usage
+
+```yaml
+steps:
+  - uses: eclipse-score/cicd-actions/unblock-user-namespace-for-linux-sandbox@<sha>
+```
