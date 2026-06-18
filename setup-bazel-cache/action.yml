@@ -24,6 +24,11 @@ inputs:
     required: false
     default: "main"
 
+  disk_cache_gc_max_size:
+    description: Maximum size of the Bazel disk cache. Set to 0 for unlimited. Default is 5GB, which is big enough for a standard build of communication (uses 3.6GB).
+    required: false
+    default: "5GB"
+
   # Non stable API, subject to change without deprecation. Not intended for public use.
   _bazelisk_cache:
     description: For debugging purposes only.
@@ -51,6 +56,14 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Setup Bazel Cache
+      shell: bash
+      run: |
+        echo "Bazel Cache: Configuring Bazel disk cache retention time (60 days)..."
+        echo "common --experimental_disk_cache_gc_max_age=60d" >> ~/.bazelrc
+        echo "Bazel Cache: Configuring Bazel disk cache max size (${inputs.disk_cache_gc_max_size})..."
+        echo "common --experimental_disk_cache_gc_max_size=${inputs.disk_cache_gc_max_size}" >> ~/.bazelrc
+        echo "common --experimental_disk_cache_gc_idle_delay=0m" >> ~/.bazelrc"
     - uses: castler/setup-bazel@68beb23a00fcbd742821ab5e8e730866fec63eaf # cache-optimized branch 2026-06-09
       with:
         disk-cache: ${{ inputs.unique-cache-name }}

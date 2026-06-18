@@ -9,9 +9,17 @@ steps:
   - uses: eclipse-score/cicd-actions/setup-bazel-cache@<sha>
     with:
       unique-cache-name: ${{ github.workflow }}-${{ github.job }} [-matrix-uid]
+      # Optional parameters with default values:
+      main-branch: main
+      disk_cache_gc_max_size: 5GB
 ```
 
-Using `github.workflow` and `github.job` together gives each job its own cache automatically. Append a matrix identifier if the same job runs with different configurations that produce different build outputs.
+Parameters:
+
+- unique-cache-name: A unique name for the cache. This is required to avoid conflicts between different jobs and workflows.
+  Using `github.workflow` and `github.job` together gives each job its own cache automatically. Append a matrix identifier if the same job runs with different configurations that produce different build outputs.
+- main-branch: The branch that is allowed to save the cache. Override if your default branch has a different name.
+- disk_cache_gc_max_size: Maximum size of the Bazel disk cache. Set to 0 for unlimited.
 
 ## Required permissions
 
