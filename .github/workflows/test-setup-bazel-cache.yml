@@ -50,6 +50,13 @@ jobs:
         with:
           unique-cache-name: ${{ github.workflow }}-${{ github.job }}
 
+      - name: Print ~/.bazelrc
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "~/.bazelrc contents:"
+          cat "${HOME}/.bazelrc"
+
       - name: Verify ~/.bazelrc was written by action with cache configuration
         shell: bash
         run: |
@@ -84,9 +91,6 @@ jobs:
             echo "ERROR: ~/.bazelrc does not contain experimental_disk_cache_gc_idle_delay configuration"
             exit 1
           fi
-
-          echo "~/.bazelrc contents:"
-          cat "${HOME}/.bazelrc"
 
       - name: Run bazel info to verify workspace and cache configuration are valid
         shell: bash
