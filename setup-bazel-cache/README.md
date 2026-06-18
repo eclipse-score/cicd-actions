@@ -11,7 +11,7 @@ steps:
       unique-cache-name: ${{ github.workflow }}-${{ github.job }} [-matrix-uid]
       # Optional parameters with default values:
       main-branch: main
-      disk_cache_gc_max_size: 5GB
+      disk_cache_gc_max_size: 5G
 ```
 
 Parameters:

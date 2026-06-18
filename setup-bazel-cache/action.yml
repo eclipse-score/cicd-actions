@@ -25,9 +25,9 @@ inputs:
     default: "main"
 
   disk_cache_gc_max_size:
-    description: Maximum size of the Bazel disk cache. Set to 0 for unlimited. Default is 5GB, which is big enough for a standard build of communication (uses 3.6GB).
+    description: Maximum size of the Bazel disk cache. Set to 0 for unlimited. Default is 5G, which is big enough for a standard build of communication (uses 3.6GB).
     required: false
-    default: "5GB"
+    default: "5G"
 
   # Non stable API, subject to change without deprecation. Not intended for public use.
   _bazelisk_cache:
