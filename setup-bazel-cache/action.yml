@@ -56,14 +56,6 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Setup Bazel Cache
-      shell: bash
-      run: |
-        echo "Bazel Cache: Configuring Bazel disk cache retention time (60 days)..."
-        echo "common --experimental_disk_cache_gc_max_age=60d" >> ~/.bazelrc
-        echo "Bazel Cache: Configuring Bazel disk cache max size (${{ inputs.disk_cache_gc_max_size }})..."
-        echo "common --experimental_disk_cache_gc_max_size=${{ inputs.disk_cache_gc_max_size }}" >> ~/.bazelrc
-        echo "common --experimental_disk_cache_gc_idle_delay=0m" >> ~/.bazelrc
     - uses: castler/setup-bazel@68beb23a00fcbd742821ab5e8e730866fec63eaf # cache-optimized branch 2026-06-09
       with:
         disk-cache: ${{ inputs.unique-cache-name }}
@@ -73,3 +65,12 @@ runs:
         repository-cache: ${{ inputs._repository_cache }} # true
         cache-optimized: ${{ inputs._cache_optimized }} # true
         external-cache: ${{ inputs._external_cache }} # false
+
+    - name: Setup Bazel Cache
+      shell: bash
+      run: |
+        echo "Bazel Cache: Configuring Bazel disk cache retention time (60 days)..."
+        echo "common --experimental_disk_cache_gc_max_age=60d" >> ~/.bazelrc
+        echo "Bazel Cache: Configuring Bazel disk cache max size (${{ inputs.disk_cache_gc_max_size }})..."
+        echo "common --experimental_disk_cache_gc_max_size=${{ inputs.disk_cache_gc_max_size }}" >> ~/.bazelrc
+        echo "common --experimental_disk_cache_gc_idle_delay=0m" >> ~/.bazelrc
