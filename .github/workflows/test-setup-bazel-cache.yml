@@ -70,6 +70,21 @@ jobs:
             exit 1
           fi
 
+          if ! grep -Fq -- "--experimental_disk_cache_gc_max_age=" "${HOME}/.bazelrc"; then
+            echo "ERROR: ~/.bazelrc does not contain experimental_disk_cache_gc_max_age configuration"
+            exit 1
+          fi
+
+          if ! grep -Fq -- "--experimental_disk_cache_gc_max_size=" "${HOME}/.bazelrc"; then
+            echo "ERROR: ~/.bazelrc does not contain experimental_disk_cache_gc_max_size configuration"
+            exit 1
+          fi
+
+          if ! grep -Fq -- "--experimental_disk_cache_gc_idle_delay=" "${HOME}/.bazelrc"; then
+            echo "ERROR: ~/.bazelrc does not contain experimental_disk_cache_gc_idle_delay configuration"
+            exit 1
+          fi
+
           echo "~/.bazelrc contents:"
           cat "${HOME}/.bazelrc"
 
