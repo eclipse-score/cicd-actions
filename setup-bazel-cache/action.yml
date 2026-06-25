@@ -24,6 +24,11 @@ inputs:
     required: false
     default: "main"
 
+  skip-cache-restore:
+    description: Skip restoring the cache. Used for rebuilding a clean cache.
+    required: false
+    default: "false"
+
   # Non stable API, subject to change without deprecation. Not intended for public use.
   _bazelisk_cache:
     description: For debugging purposes only.
@@ -60,3 +65,4 @@ runs:
         repository-cache: ${{ inputs._repository_cache }} # true
         cache-optimized: ${{ inputs._cache_optimized }} # true
         external-cache: ${{ inputs._external_cache }} # false
+        skip-cache-restore: ${{ inputs.skip-cache-restore }} # false
