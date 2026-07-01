@@ -24,6 +24,10 @@ inputs:
     description: JSON string containing old cache IDs (from repository-cache-check output).
     required: true
     default: '[]'
+  _skip_cache_delete:
+    description: For debugging purposes only.
+    required: false
+    default: 'false'
 
 runs:
   using: composite
@@ -79,6 +83,7 @@ runs:
         fi
 
     - name: Delete old caches
+      if: ${{ inputs._skip_cache_delete != 'true' }}
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}

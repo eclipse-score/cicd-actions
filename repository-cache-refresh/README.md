@@ -11,6 +11,7 @@ After successful fetches, it deletes previously captured old caches.
 | --- | --- | --- | --- |
 | `variants` | Yes | - | Newline-separated list of `<config>|<targets>` entries used for `bazel fetch --config=<config> <targets>`. |
 | `old-caches-json` | Yes | `[]` | JSON string containing old cache IDs, as produced by `repository-cache-check`. |
+| `_skip_cache_delete` | No | `false` | Internal/debug input to skip deletion of the old caches after warming. Not part of the stable public API. |
 
 ## Required permissions
 

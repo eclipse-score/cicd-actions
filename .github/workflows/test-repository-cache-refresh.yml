@@ -1,0 +1,101 @@
+# *******************************************************************************
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+name: Test Repository Cache Refresh
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  repository-cache-refresh:
+    name: Repository cache is warmed and cache deletion can be skipped
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
+
+      - name: Create minimal Bazel workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cat <<'EOF' > "${GITHUB_WORKSPACE}/MODULE.bazel"
+          module(name = "repository_cache_refresh_test")
+
+          bazel_dep(name = "bazel_skylib", version = "1.7.1")
+          EOF
+
+          cat <<'EOF' > "${GITHUB_WORKSPACE}/BUILD.bazel"
+          load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
+
+          bool_flag(
+              name = "enabled",
+              build_setting_default = False,
+          )
+          EOF
+
+          cat <<'EOF' > "${GITHUB_WORKSPACE}/.bazelversion"
+          8.6.0
+          EOF
+
+          cat <<'EOF' > "${GITHUB_WORKSPACE}/.bazelrc"
+          common:ci --color=no
+          EOF
+
+      - name: Configure Bazel with repository cache enabled
+        uses: ./setup-bazel-cache
+        with:
+          unique-cache-name: ${{ github.workflow }}-${{ github.job }}-refresh
+
+      - name: Clear repository cache before action
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          repository_cache_dir="$(bazel info repository_cache)"
+          if [[ ! -d "${repository_cache_dir}" ]]; then
+            echo "ERROR: repository cache directory does not exist: ${repository_cache_dir}"
+            exit 1
+          fi
+
+          find "${repository_cache_dir}" -mindepth 1 -delete
+          if find "${repository_cache_dir}" -mindepth 1 -print -quit | grep -q .; then
+            echo "ERROR: repository cache directory was not cleared"
+            exit 1
+          fi
+
+      - name: Run repository-cache-refresh action with cache deletion disabled
+        uses: ./repository-cache-refresh
+        with:
+          variants: |
+            ci|//:enabled
+          old-caches-json: not-json
+          _skip_cache_delete: 'true'
+
+      - name: Verify repository cache was warmed
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          repository_cache_dir="$(bazel info repository_cache)"
+          if ! find "${repository_cache_dir}" -type f -print -quit | grep -q .; then
+            echo "ERROR: repository cache is still empty after repository-cache-refresh ran"
+            exit 1
+          fi
+
+          echo "Repository cache warmed at ${repository_cache_dir}"

@@ -46,6 +46,12 @@ jobs:
     permissions:
       contents: read
 
+  repository-cache-refresh-tests:
+    uses: ./.github/workflows/test-repository-cache-refresh.yml
+    permissions:
+      actions: read
+      contents: read
+
   unblock-user-namespace-for-linux-sandbox-tests:
     uses: ./.github/workflows/test-unblock-user-namespace-for-linux-sandbox.yml
     permissions:
