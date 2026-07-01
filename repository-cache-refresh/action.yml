@@ -21,9 +21,9 @@ inputs:
       Example: x86_64-linux|//...
     required: true
   old-caches-json:
-    description: Path to JSON file containing old cache IDs.
-    required: false
-    default: ${{ github.workspace }}/.llm_tmp/old_caches.json
+    description: JSON string containing old cache IDs (from repository-cache-check output).
+    required: true
+    default: '[]'
 
 runs:
   using: composite
@@ -85,9 +85,10 @@ runs:
         OLD_CACHES_JSON: ${{ inputs.old-caches-json }}
       run: |
         set -euo pipefail
-        if [ -s "$OLD_CACHES_JSON" ]; then
-          echo "Deleting $(jq 'length' "$OLD_CACHES_JSON") old caches..."
-          jq -r '.[].id' "$OLD_CACHES_JSON" | while read -r cache_id; do
+        if [ -n "$OLD_CACHES_JSON" ] && [ "$OLD_CACHES_JSON" != "[]" ]; then
+          num_caches=$(echo "$OLD_CACHES_JSON" | jq 'length')
+          echo "Deleting $num_caches old caches..."
+          echo "$OLD_CACHES_JSON" | jq -r '.[].id' | while read -r cache_id; do
             echo "Deleting old cache: $cache_id"
             gh cache delete "$cache_id" --repo ${{ github.repository }} || true
           done

@@ -14,15 +14,15 @@
 name: Repository cache check
 description: Check if Bazel repository cache inputs changed and save existing cache IDs.
 
-inputs:
-  old-caches-json:
-    description: Path to the file where the list of existing cache IDs will be saved.
-    required: true
+inputs: {}
 
 outputs:
   should_refresh_cache:
     description: Whether the repository cache should be refreshed.
     value: ${{ steps.check.outputs.should_refresh_cache }}
+  old-caches-json:
+    description: JSON string containing the list of existing cache IDs.
+    value: ${{ steps.list-caches.outputs.old-caches-json }}
 
 runs:
   using: composite
@@ -65,13 +65,18 @@ runs:
         fi
 
     - name: List and save current caches
-      if: ${{ steps.check.outputs.should_refresh_cache == 'true' }}
+      id: list-caches
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
-        OLD_CACHES_JSON: ${{ inputs.old-caches-json }}
+        SHOULD_REFRESH: ${{ steps.check.outputs.should_refresh_cache }}
       run: |
         set -euo pipefail
-        mkdir -p "$(dirname "$OLD_CACHES_JSON")"
-        gh cache list --repo ${{ github.repository }} --json id > "$OLD_CACHES_JSON"
-        echo "Found $(jq 'length' "$OLD_CACHES_JSON") existing caches"
+        if [ "$SHOULD_REFRESH" = "true" ]; then
+          caches_json=$(gh cache list --repo ${{ github.repository }} --json id)
+          echo "old-caches-json=${caches_json}" >> "$GITHUB_OUTPUT"
+          echo "Found $(echo "$caches_json" | jq 'length') existing caches"
+        else
+          echo "old-caches-json=[]" >> "$GITHUB_OUTPUT"
+          echo "Cache refresh not needed, returning empty cache list"
+        fi
