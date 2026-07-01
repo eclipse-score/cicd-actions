@@ -32,24 +32,31 @@ runs:
       shell: bash
       env:
         EVENT_NAME: ${{ github.event_name }}
-        BEFORE_SHA: ${{ github.event.before }}
-        CURRENT_SHA: ${{ github.sha }}
       run: |
         set -euo pipefail
 
-        if [ "$EVENT_NAME" = "push" ] && [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]; then
-          base_sha="$BEFORE_SHA"
-        elif git rev-parse "${CURRENT_SHA}^" >/dev/null 2>&1; then
-          base_sha="$(git rev-parse "${CURRENT_SHA}^")"
+        if [ "$EVENT_NAME" = "push" ]; then
+          base_sha="${{ github.event.before }}"
+          current_sha="${{ github.sha }}"
+        elif [ "$EVENT_NAME" = "pull_request" ]; then
+          base_sha="${{ github.event.pull_request.base.sha }}"
+          current_sha="${{ github.event.pull_request.head.sha }}"
+        elif [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+          current_sha="${{ github.sha }}"
+          base_sha="$(git rev-parse "${current_sha}^")"
+        elif [ "$EVENT_NAME" = "merge_group" ]; then
+          echo "No cache refreshes will be done via merge groups."
+          echo "should_refresh_cache=false" >> "$GITHUB_OUTPUT"
+          exit 0
         else
-          echo "No base commit available. Refreshing cache conservatively."
+          echo "Unsupported event: $EVENT_NAME. Refreshing cache conservatively."
           echo "should_refresh_cache=true" >> "$GITHUB_OUTPUT"
           exit 0
         fi
 
-        changed_files="$(git diff --name-only "$base_sha" "$CURRENT_SHA")"
+        changed_files="$(git diff --name-only "$base_sha" "$current_sha")"
 
-        echo "Changed files between $base_sha and $CURRENT_SHA:"
+        echo "Changed files between $base_sha and $current_sha:"
         if [ -n "$changed_files" ]; then
           printf '%s\n' "$changed_files"
         else
