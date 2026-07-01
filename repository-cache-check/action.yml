@@ -27,6 +27,10 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Check out repository
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
+      with:
+        fetch-depth: 0 # Fetch full history to ensure we can compare commits
     - name: Check if Bazel repository cache inputs changed
       id: check
       shell: bash
@@ -35,42 +39,15 @@ runs:
       run: |
         set -euo pipefail
 
-        ensure_commit_available() {
-          local sha="$1"
-          local fetch_ref="$2"
-
-          if git cat-file -e "${sha}^{commit}" 2>/dev/null; then
-            return 0
-          fi
-
-          echo "Fetching missing commit $sha from $fetch_ref"
-          git fetch --no-tags --depth=1 origin "$fetch_ref" >/dev/null
-          git cat-file -e "${sha}^{commit}" 2>/dev/null
-        }
-
         if [ "$EVENT_NAME" = "push" ]; then
           base_sha="${{ github.event.before }}"
           current_sha="${{ github.sha }}"
-          base_fetch_ref="$base_sha"
-          current_fetch_ref="${{ github.ref }}"
         elif [ "$EVENT_NAME" = "pull_request" ]; then
           base_sha="${{ github.event.pull_request.base.sha }}"
-          current_sha="${{ github.sha }}"
-          base_fetch_ref="${{ github.event.pull_request.base.ref }}"
-          current_fetch_ref="${{ github.ref }}"
+          current_sha="${{ github.event.pull_request.head.sha }}"
         elif [ "$EVENT_NAME" = "workflow_dispatch" ]; then
           current_sha="${{ github.sha }}"
-          current_fetch_ref="${{ github.ref }}"
-          if ! base_sha="$(git rev-parse "${current_sha}^" 2>/dev/null)"; then
-            echo "Fetching additional history for $current_fetch_ref to resolve the base commit"
-            git fetch --no-tags --deepen=1 origin "$current_fetch_ref" >/dev/null || true
-            if ! base_sha="$(git rev-parse "${current_sha}^" 2>/dev/null)"; then
-              echo "No base commit available. Refreshing cache conservatively."
-              echo "should_refresh_cache=true" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-          fi
-          base_fetch_ref="$base_sha"
+          base_sha="$(git rev-parse "${current_sha}^")"
         elif [ "$EVENT_NAME" = "merge_group" ]; then
           echo "No cache refreshes will be done via merge groups."
           echo "should_refresh_cache=false" >> "$GITHUB_OUTPUT"
@@ -81,25 +58,7 @@ runs:
           exit 0
         fi
 
-        if [ "$base_sha" = "0000000000000000000000000000000000000000" ]; then
-          echo "No base commit available. Refreshing cache conservatively."
-          echo "should_refresh_cache=true" >> "$GITHUB_OUTPUT"
-          exit 0
-        fi
-
-        if ! ensure_commit_available "$base_sha" "$base_fetch_ref"; then
-          echo "Unable to fetch base commit $base_sha. Refreshing cache conservatively."
-          echo "should_refresh_cache=true" >> "$GITHUB_OUTPUT"
-          exit 0
-        fi
-
-        if ! ensure_commit_available "$current_sha" "$current_fetch_ref"; then
-          echo "Unable to fetch current commit $current_sha. Refreshing cache conservatively."
-          echo "should_refresh_cache=true" >> "$GITHUB_OUTPUT"
-          exit 0
-        fi
-
-        changed_files="$(git diff --name-only "$base_sha..$current_sha")"
+        changed_files="$(git diff --name-only "$base_sha" "$current_sha")"
 
         echo "Changed files between $base_sha and $current_sha:"
         if [ -n "$changed_files" ]; then
