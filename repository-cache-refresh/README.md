@@ -10,7 +10,7 @@ After successful fetches, it deletes previously captured old caches.
 | Name | Mandatory | Default | Description |
 | --- | --- | --- | --- |
 | `variants` | Yes | - | Newline-separated list of `<config>|<targets>` entries used for `bazel fetch --config=<config> <targets>`. |
-| `old-caches-json` | No | `${{ github.workspace }}/.llm_tmp/old_caches.json` | Path to JSON file containing old cache IDs, as produced by `repository-cache-check`. |
+| `old-caches-json` | Yes | `[]` | JSON string containing old cache IDs, as produced by `repository-cache-check`. |
 
 ## Required permissions
 
@@ -30,5 +30,5 @@ This action calls GitHub cache APIs via `gh cache delete` and needs:
       aarch64-linux|//...
       x86_64-qnx|//src/... //tests/...
       aarch64-qnx|//src/... //tests/...
-    old-caches-json: ${{ github.workspace }}/.tmp/old_caches.json
+    old-caches-json: ${{ steps.check.outputs['old-caches-json'] }}
 ```
