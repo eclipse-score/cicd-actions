@@ -8,10 +8,20 @@ Bazel builds can be slow. Caching helps — but only if the cache is set up corr
 steps:
   - uses: eclipse-score/cicd-actions/setup-bazel-cache@<sha>
     with:
-      unique-cache-name: ${{ github.workflow }}-${{ github.job }} [-matrix-uid]
+      unique-cache-name: [${{ github.workflow }}-]${{ github.job }}[-<matrix-uid>]
+      # Optional parameters with default values:
+      main-branch: main
+      skip-cache-restore: false
 ```
 
-Using `github.workflow` and `github.job` together gives each job its own cache automatically. Append a matrix identifier if the same job runs with different configurations that produce different build outputs.
+Parameters:
+
+- unique-cache-name: A unique name for the cache. This is required to avoid conflicts between different jobs and workflows.
+  Using `github.workflow` and `github.job` together gives each job its own cache automatically.
+  Append a matrix identifier if the same job runs with different configurations that produce different build outputs.
+  Omit `github.workflow` if you use `workflow_call` triggers and want to avoid nesting caches under the caller's workflow name.
+- main-branch: The branch that is allowed to save the cache. Override if your default branch has a different name.
+- skip-cache-restore: Whether to skip restoring the cache. Useful for rebuilding a fresh cache.
 
 ## Required permissions
 
