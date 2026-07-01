@@ -1,0 +1,53 @@
+# *******************************************************************************
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+name: Test Repository Cache Check
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  repository-cache-check:
+    name: Verify outputs when cache refresh is not needed
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
+
+      - name: Run repository-cache-check action
+        id: check
+        uses: ./repository-cache-check
+
+      - name: Assert outputs
+        shell: bash
+        env:
+          SHOULD_REFRESH_CACHE: ${{ steps.check.outputs.should_refresh_cache }}
+          OLD_CACHES_JSON: ${{ steps.check.outputs['old-caches-json'] }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$SHOULD_REFRESH_CACHE" != "false" ]]; then
+            echo "ERROR: expected should_refresh_cache=false but got '$SHOULD_REFRESH_CACHE'"
+            exit 1
+          fi
+
+          if [[ "$OLD_CACHES_JSON" != "[]" ]]; then
+            echo "ERROR: expected old-caches-json=[] but got '$OLD_CACHES_JSON'"
+            exit 1
+          fi
+
+          echo "Outputs are as expected: should_refresh_cache=false and old-caches-json=[]"
