@@ -84,6 +84,7 @@ jobs:
         with:
           variants: |
             ci|//:enabled
+            |//:enabled
           old-caches-json: not-json
           _skip_cache_delete: 'true'
 

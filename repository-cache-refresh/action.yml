@@ -18,6 +18,7 @@ inputs:
   variants:
     description: |
       Newline-separated list of fetch variants in the format <config>|<targets>.
+      Use an empty config (|<targets>) to run fetch without --config.
       Example: x86_64-linux|//...
     required: true
   old-caches-json:
@@ -51,12 +52,19 @@ runs:
         for variant in "${variants[@]}"; do
           config="${variant%%|*}"
           targets="${variant#*|}"
+          config_display="${config:-<default>}"
           success=false
 
           for attempt in $(seq 1 "$max_attempts"); do
-            echo "Running bazel fetch for --config=${config} and targets '${targets}' (attempt ${attempt}/${max_attempts})"
-            if bazel fetch --config="${config}" ${targets}; then
-              echo "Successfully fetched dependencies for --config=${config} and targets '${targets}'"
+            echo "Running bazel fetch for config '${config_display}' and targets '${targets}' (attempt ${attempt}/${max_attempts})"
+            if [ -n "${config}" ]; then
+              bazel_fetch_cmd=(bazel fetch "--config=${config}")
+            else
+              bazel_fetch_cmd=(bazel fetch)
+            fi
+
+            if "${bazel_fetch_cmd[@]}" ${targets}; then
+              echo "Successfully fetched dependencies for config '${config_display}' and targets '${targets}'"
               success=true
               break
             fi
@@ -69,7 +77,7 @@ runs:
           done
 
           if [ "$success" != "true" ]; then
-            echo "bazel fetch failed for --config=${config} and targets '${targets}' after ${max_attempts} attempts"
+            echo "bazel fetch failed for config '${config_display}' and targets '${targets}' after ${max_attempts} attempts"
             failed_variants+=("${config}|${targets}")
           fi
         done
