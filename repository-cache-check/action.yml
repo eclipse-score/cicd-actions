@@ -44,7 +44,7 @@ runs:
           fi
 
           echo "Fetching missing commit $sha from $fetch_ref"
-          git fetch --no-tags --depth=1 origin "$fetch_ref" >/dev/null 2>&1
+          git fetch --no-tags --depth=1 origin "$fetch_ref" >/dev/null
           git cat-file -e "${sha}^{commit}" 2>/dev/null
         }
 
@@ -63,7 +63,7 @@ runs:
           current_fetch_ref="${{ github.ref }}"
           if ! base_sha="$(git rev-parse "${current_sha}^" 2>/dev/null)"; then
             echo "Fetching additional history for $current_fetch_ref to resolve the base commit"
-            git fetch --no-tags --deepen=1 origin "$current_fetch_ref" >/dev/null 2>&1 || true
+            git fetch --no-tags --deepen=1 origin "$current_fetch_ref" >/dev/null || true
             if ! base_sha="$(git rev-parse "${current_sha}^" 2>/dev/null)"; then
               echo "No base commit available. Refreshing cache conservatively."
               echo "should_refresh_cache=true" >> "$GITHUB_OUTPUT"
@@ -99,7 +99,7 @@ runs:
           exit 0
         fi
 
-        changed_files="$(git diff --name-only "$base_sha" "$current_sha")"
+        changed_files="$(git diff --name-only "$base_sha..$current_sha")"
 
         echo "Changed files between $base_sha and $current_sha:"
         if [ -n "$changed_files" ]; then
