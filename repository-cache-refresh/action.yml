@@ -1,0 +1,96 @@
+# *******************************************************************************
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+name: Repository cache refresh
+description: Warm Bazel repository cache for all variants and delete old caches.
+
+inputs:
+  variants:
+    description: |
+      Newline-separated list of fetch variants in the format <config>|<targets>.
+      Example: x86_64-linux|//...
+    required: true
+  old-caches-json:
+    description: Path to JSON file containing old cache IDs.
+    required: false
+    default: ${{ github.workspace }}/.llm_tmp/old_caches.json
+
+runs:
+  using: composite
+  steps:
+    - name: Warm Bazel repository cache for all variants (with retries)
+      shell: bash
+      env:
+        VARIANTS_INPUT: ${{ inputs.variants }}
+      run: |
+        set -euo pipefail
+
+        mapfile -t variants < <(printf '%s\n' "$VARIANTS_INPUT" | sed '/^\s*$/d')
+        if [ "${#variants[@]}" -eq 0 ]; then
+          echo "No variants were provided."
+          exit 1
+        fi
+
+        max_attempts=3
+        failed_variants=()
+
+        for variant in "${variants[@]}"; do
+          config="${variant%%|*}"
+          targets="${variant#*|}"
+          success=false
+
+          for attempt in $(seq 1 "$max_attempts"); do
+            echo "Running bazel fetch for --config=${config} and targets '${targets}' (attempt ${attempt}/${max_attempts})"
+            if bazel fetch --config="${config}" ${targets}; then
+              echo "Successfully fetched dependencies for --config=${config} and targets '${targets}'"
+              success=true
+              break
+            fi
+
+            if [ "$attempt" -lt "$max_attempts" ]; then
+              backoff_seconds=$((attempt * 20))
+              echo "bazel fetch failed (likely transient). Retrying in ${backoff_seconds}s..."
+              sleep "$backoff_seconds"
+            fi
+          done
+
+          if [ "$success" != "true" ]; then
+            echo "bazel fetch failed for --config=${config} and targets '${targets}' after ${max_attempts} attempts"
+            failed_variants+=("${config}|${targets}")
+          fi
+        done
+
+        if [ "${#failed_variants[@]}" -ne 0 ]; then
+          echo "Bazel fetch failed for the following variants:"
+          for variant in "${failed_variants[@]}"; do
+            echo "  - ${variant}"
+          done
+          exit 1
+        fi
+
+    - name: Delete old caches
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        OLD_CACHES_JSON: ${{ inputs.old-caches-json }}
+      run: |
+        set -euo pipefail
+        if [ -s "$OLD_CACHES_JSON" ]; then
+          echo "Deleting $(jq 'length' "$OLD_CACHES_JSON") old caches..."
+          jq -r '.[].id' "$OLD_CACHES_JSON" | while read -r cache_id; do
+            echo "Deleting old cache: $cache_id"
+            gh cache delete "$cache_id" --repo ${{ github.repository }} || true
+          done
+        else
+          echo "No old caches to delete"
+        fi

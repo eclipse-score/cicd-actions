@@ -1,0 +1,77 @@
+# *******************************************************************************
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+name: Repository cache check
+description: Check if Bazel repository cache inputs changed and save existing cache IDs.
+
+inputs:
+  old-caches-json:
+    description: Path to the file where the list of existing cache IDs will be saved.
+    required: true
+
+outputs:
+  should_refresh_cache:
+    description: Whether the repository cache should be refreshed.
+    value: ${{ steps.check.outputs.should_refresh_cache }}
+
+runs:
+  using: composite
+  steps:
+    - name: Check if Bazel repository cache inputs changed
+      id: check
+      shell: bash
+      env:
+        EVENT_NAME: ${{ github.event_name }}
+        BEFORE_SHA: ${{ github.event.before }}
+        CURRENT_SHA: ${{ github.sha }}
+      run: |
+        set -euo pipefail
+
+        if [ "$EVENT_NAME" = "push" ] && [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]; then
+          base_sha="$BEFORE_SHA"
+        elif git rev-parse "${CURRENT_SHA}^" >/dev/null 2>&1; then
+          base_sha="$(git rev-parse "${CURRENT_SHA}^")"
+        else
+          echo "No base commit available. Refreshing cache conservatively."
+          echo "should_refresh_cache=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        changed_files="$(git diff --name-only "$base_sha" "$CURRENT_SHA")"
+
+        echo "Changed files between $base_sha and $CURRENT_SHA:"
+        if [ -n "$changed_files" ]; then
+          printf '%s\n' "$changed_files"
+        else
+          echo "  (none)"
+        fi
+
+        if printf '%s\n' "$changed_files" | grep -Eq '^MODULE\.bazel'; then
+          echo "Bazel repository cache inputs changed. Proceeding with cache refresh."
+          echo "should_refresh_cache=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "No Bazel repository cache inputs changed. Skipping cache deletion and recreation."
+          echo "should_refresh_cache=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: List and save current caches
+      if: ${{ steps.check.outputs.should_refresh_cache == 'true' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        OLD_CACHES_JSON: ${{ inputs.old-caches-json }}
+      run: |
+        set -euo pipefail
+        mkdir -p "$(dirname "$OLD_CACHES_JSON")"
+        gh cache list --repo ${{ github.repository }} --json id > "$OLD_CACHES_JSON"
+        echo "Found $(jq 'length' "$OLD_CACHES_JSON") existing caches"
