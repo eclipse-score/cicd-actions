@@ -308,13 +308,17 @@ async function deleteCache({
     apiUrl,
   );
 
+  // A 404 means the cache is already gone, which is the desired end state. This
+  // happens when a concurrent prune run deleted the same obsolete cache first,
+  // so treat it as success rather than turning it into a spurious failure.
   await githubRequest(url, {
     token,
     method: 'DELETE',
+    ignoreStatuses: [404],
   });
 }
 
-async function githubRequest(url, { token, method }) {
+async function githubRequest(url, { token, method, ignoreStatuses = [] }) {
   const response = await fetch(url, {
     method,
     headers: {
@@ -325,7 +329,7 @@ async function githubRequest(url, { token, method }) {
     },
   });
 
-  if (!response.ok) {
+  if (!response.ok && !ignoreStatuses.includes(response.status)) {
     const responseBody = await response.text();
 
     throw new Error(

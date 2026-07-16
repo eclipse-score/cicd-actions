@@ -18,6 +18,13 @@ on:
   merge_group:
     types: [checks_requested]
 
+# Cancel superseded runs of the same ref. The cache self-tests prune Actions
+# caches repo-wide but scoped to the run's ref, so two concurrent runs on the
+# same ref (e.g. rapid pushes to a PR) would prune each other's caches and flake.
+concurrency:
+  group: pr-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   common:
     uses: eclipse-score/cicd-workflows/.github/workflows/on-pr.yml@v0.0.1
