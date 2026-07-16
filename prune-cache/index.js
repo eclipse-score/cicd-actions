@@ -232,10 +232,11 @@ function groupCaches(caches) {
     }
 
     /*
-     * The cache `version` is a hash of the cached paths and compression tool.
-     * Two caches that share a ref and family but differ in version are
-     * genuinely different caches, so version is part of the group key to keep
-     * one generation of each.
+     * `version` identifies the concrete content a cache holds (GitHub derives
+     * it from the cached paths and compression method). We treat it as an
+     * opaque token: two caches that share a ref and family but differ in
+     * version point at different content, so they belong to different groups
+     * and each keeps its own newest generation.
      *
      * The NUL character separates the fields unambiguously. A normal separator
      * such as ":" or "/" could theoretically occur in a value and cause two
