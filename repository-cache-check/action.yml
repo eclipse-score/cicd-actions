@@ -62,7 +62,7 @@ runs:
       run: |
         set -euo pipefail
         if [ "$SHOULD_REFRESH" = "true" ]; then
-          caches_json=$(gh cache list --repo ${{ github.repository }} --json id)
+          caches_json="$(gh cache list --repo ${{ github.repository }} --json id | jq -c '.')"
           echo "old-caches-json=${caches_json}" >> "$GITHUB_OUTPUT"
           echo "Found $(echo "$caches_json" | jq 'length') existing caches"
         else
