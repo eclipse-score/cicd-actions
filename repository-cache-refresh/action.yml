@@ -39,7 +39,7 @@ runs:
       run: |
         set -euo pipefail
 
-        mapfile -t variants < <(printf '%s\n' "$VARIANTS_INPUT" | sed '/^\s*$/d')
+        mapfile -t variants < <(printf '%s\n' "$VARIANTS_INPUT" | sed '/^[[:space:]]*$/d')
         if [ "${#variants[@]}" -eq 0 ]; then
           echo "No variants were provided."
           exit 1
