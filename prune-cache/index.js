@@ -45,7 +45,9 @@ async function main() {
 
   const repository = requireEnvironmentVariable('GITHUB_REPOSITORY');
   const apiUrl = process.env.GITHUB_API_URL || 'https://api.github.com';
-  const dryRun = parseBoolean(process.env.INPUT_DRY_RUN ?? 'false');
+  // GitHub maps the `dry-run` input to INPUT_DRY-RUN: it uppercases the name and
+  // turns spaces into underscores, but keeps hyphens.
+  const dryRun = parseBoolean(process.env['INPUT_DRY-RUN'] ?? 'false');
 
   const [owner, repo, ...unexpectedParts] = repository.split('/');
 
