@@ -24,7 +24,6 @@ inputs:
   old-caches-json:
     description: JSON string containing old cache IDs (from repository-cache-check output).
     required: true
-    default: '[]'
   _skip_cache_delete:
     description: For debugging purposes only.
     required: false
