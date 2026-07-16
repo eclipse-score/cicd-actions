@@ -29,45 +29,23 @@ runs:
   steps:
     - name: Check out repository
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
+      with: # configuration needed for tj-actions/changed-files
+        fetch-depth: 2 # needed for push events
+        persist-credentials: true
+    - uses: tj-actions/changed-files@9426d40962ed5378910ee2e21d5f8c6fcbf2dd96 # v47.0.6
+      id: changed-files
       with:
-        fetch-depth: 0 # Fetch full history to ensure we can compare commits, if too expensive more sophisticated logic can be added to fetch only the necessary commits
+        files: |
+          MODULE.bazel.lock
     - name: Check if Bazel repository cache inputs changed
       id: check
       shell: bash
-      env:
-        EVENT_NAME: ${{ github.event_name }}
       run: |
         set -euo pipefail
 
-        if [ "$EVENT_NAME" = "push" ]; then
-          base_sha="${{ github.event.before }}"
-          current_sha="${{ github.sha }}"
-        elif [ "$EVENT_NAME" = "pull_request" ]; then
-          base_sha="${{ github.event.pull_request.base.sha }}"
-          current_sha="${{ github.event.pull_request.head.sha }}"
-        elif [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-          current_sha="${{ github.sha }}"
-          base_sha="$(git rev-parse "${current_sha}^")"
-        elif [ "$EVENT_NAME" = "merge_group" ]; then
-          echo "No cache refreshes will be done via merge groups."
-          echo "should_refresh_cache=false" >> "$GITHUB_OUTPUT"
-          exit 0
-        else
-          echo "Unsupported event: $EVENT_NAME. Refreshing cache conservatively."
-          echo "should_refresh_cache=true" >> "$GITHUB_OUTPUT"
-          exit 0
-        fi
+        changed_files="${{ steps.changed-files.outputs.all_changed_files }}"
 
-        changed_files="$(git diff --name-only "$base_sha" "$current_sha")"
-
-        echo "Changed files between $base_sha and $current_sha:"
         if [ -n "$changed_files" ]; then
-          printf '%s\n' "$changed_files"
-        else
-          echo "  (none)"
-        fi
-
-        if printf '%s\n' "$changed_files" | grep -Eq '^MODULE\.bazel'; then
           echo "Bazel repository cache inputs changed. Proceeding with cache refresh."
           echo "should_refresh_cache=true" >> "$GITHUB_OUTPUT"
         else
