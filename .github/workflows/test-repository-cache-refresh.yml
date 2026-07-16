@@ -69,8 +69,8 @@ jobs:
 
           repository_cache_dir="$(bazel info repository_cache)"
           if [[ ! -d "${repository_cache_dir}" ]]; then
-            echo "ERROR: repository cache directory does not exist: ${repository_cache_dir}"
-            exit 1
+            echo "INFO: repository cache directory does not exist: ${repository_cache_dir}"
+            exit 0
           fi
 
           find "${repository_cache_dir}" -mindepth 1 -delete
