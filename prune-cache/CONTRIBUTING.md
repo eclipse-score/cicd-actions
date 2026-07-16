@@ -23,7 +23,10 @@ gh auth login
 ```bash
 export GITHUB_TOKEN="$(gh auth token)"
 export GITHUB_REPOSITORY="eclipse-score/test-repository"
-export INPUT_DRY_RUN="true"
+# GitHub keeps hyphens in input env-var names, so the `dry-run` input is read
+# from INPUT_DRY-RUN (not INPUT_DRY_RUN). The name needs quoting because of the
+# hyphen.
+export 'INPUT_DRY-RUN=true'
 
 node index.js
 ```
@@ -31,7 +34,7 @@ node index.js
 To actually delete caches:
 
 ```bash
-export INPUT_DRY_RUN="false"
+export 'INPUT_DRY-RUN=false'
 
 node index.js
 ```

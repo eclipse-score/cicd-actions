@@ -19,7 +19,8 @@ Grouping by Git ref ensures a cache from one branch or pull request never causes
 
 This action calls the GitHub Actions cache APIs and needs:
 
-- `actions: write`
+- `actions: write` to delete obsolete caches
+- `actions: read` is sufficient when running with `dry-run: "true"` (reporting only)
 
 ## Example
 
