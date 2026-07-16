@@ -59,7 +59,7 @@ runs:
     - uses: lurtz/setup-bazel@cache-optimized
       with:
         disk-cache: ${{ inputs.unique-cache-name }}
-        cache-save: ${{ github.event_name == 'push' && github.ref == format('refs/heads/{0}', inputs.main-branch) }}
+        cache-save: ${{ github.ref == format('refs/heads/{0}', inputs.main-branch) }}
 
         bazelisk-cache: ${{ inputs._bazelisk_cache }} # true
         repository-cache: ${{ inputs._repository_cache }} # true
