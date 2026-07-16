@@ -81,6 +81,7 @@ jobs:
   ci-success:
     name: CI success
     if: always()
+    permissions: {}
     needs:
       - common
       - inter-repo-access-tests
