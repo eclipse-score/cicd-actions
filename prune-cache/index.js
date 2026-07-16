@@ -23,15 +23,13 @@
  *   bazel-linux-a1b2c3d4  -> family: bazel-linux
  *   bazel_linux_a1b2c3d4  -> family: bazel_linux
  *
- * Caches are grouped by their Git ref, cache version, and derived family:
+ * Caches are grouped by both their Git ref and derived family:
  *
  *   refs/heads/main + bazel-linux
  *   refs/heads/release/1.0 + bazel-linux
  *
  * This prevents a cache from one branch or pull request from causing a cache
- * belonging to another ref to be deleted. The cache version (a hash of the
- * cached paths and compression tool) keeps otherwise identical keys that point
- * at different content in separate groups.
+ * belonging to another ref to be deleted.
  *
  * Keys without a matching hash suffix are ignored.
  */
@@ -232,17 +230,11 @@ function groupCaches(caches) {
     }
 
     /*
-     * `version` identifies the concrete content a cache holds (GitHub derives
-     * it from the cached paths and compression method). We treat it as an
-     * opaque token: two caches that share a ref and family but differ in
-     * version point at different content, so they belong to different groups
-     * and each keeps its own newest generation.
-     *
-     * The NUL character separates the fields unambiguously. A normal separator
-     * such as ":" or "/" could theoretically occur in a value and cause two
-     * unrelated groups to produce the same key.
+     * The NUL character separates the ref and family unambiguously. A normal
+     * separator such as ":" or "/" could theoretically occur in either value
+     * and cause two unrelated groups to produce the same key.
      */
-    const groupKey = `${cache.ref}\0${cache.version ?? ''}\0${family}`;
+    const groupKey = `${cache.ref}\0${family}`;
     const groupCaches = groups.get(groupKey) || [];
 
     groupCaches.push({

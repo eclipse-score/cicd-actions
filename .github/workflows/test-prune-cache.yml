@@ -42,13 +42,10 @@ jobs:
         shell: bash
         run: echo "prune-cache self-test payload" > cache-payload.txt
 
-      # prune-cache groups caches by (ref, version, family) and keeps the newest
-      # per group. Both saves must therefore land in the SAME group, differing
-      # only by the key's hash suffix (the "generation"). The GitHub cache
-      # `version` is derived by actions/cache from the cached paths + compression
-      # method, so using an identical `path` here guarantees an identical version
-      # and thus a shared group. (This derivation is an actions/cache
-      # implementation detail, not a documented GitHub API contract.)
+      # prune-cache groups caches by (ref, family) and keeps the newest per
+      # group. Both saves share the family "prune-cache-selftest-<run>" and
+      # differ only in the key's hash suffix (the "generation"), so they form
+      # one group from which only the newest must survive.
       - name: Save older cache generation
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 #v4.3.0
         with:

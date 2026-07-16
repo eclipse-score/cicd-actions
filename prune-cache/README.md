@@ -4,7 +4,7 @@
 
 Keeps only the newest GitHub Actions cache generation per cache family, per Git ref, deleting older generations to free cache storage.
 
-Cache keys are expected to end in a hexadecimal hash preceded by `-` or `_` (for example `bazel-linux-a1b2c3d4`). Everything before that suffix is the cache *family*. Within each Git ref, cache version, and family, the newest cache is retained and older generations are deleted. Keys without a matching hash suffix are ignored.
+Cache keys are expected to end in a hexadecimal hash preceded by `-` or `_` (for example `bazel-linux-a1b2c3d4`). Everything before that suffix is the cache *family*. Within each Git ref and family, the newest cache is retained and older generations are deleted. Keys without a matching hash suffix are ignored.
 
 Grouping by Git ref ensures a cache from one branch or pull request never causes a cache belonging to another ref to be deleted.
 
