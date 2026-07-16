@@ -11,6 +11,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # *******************************************************************************
 
+# Self-test for the setup-bazel-cache action, which declares `actions: write`.
+# The job below guards itself to write-capable contexts (same-repository pull
+# requests, the merge queue, and manual workflow_dispatch); fork pull requests
+# get a read-only token and are covered by the merge queue before merge.
+
 name: Test Setup Bazel Cache
 
 on:
@@ -24,8 +29,15 @@ permissions:
 jobs:
   setup-bazel-cache:
     name: Action runs without error
+    # Needs a write-capable token, which forks do not get. See the file header.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'merge_group' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
+      # Plain checkout resolves the code under test for both same-repo
+      # `pull_request` and `merge_group`. See the note in test-prune-cache.yml.
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
 

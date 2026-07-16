@@ -11,6 +11,15 @@
 # SPDX-License-Identifier: Apache-2.0
 # *******************************************************************************
 
+# Full, destructive self-test for the prune-cache action: it creates cache
+# generations, prunes for real, and asserts only the newest per family survives.
+# Deleting caches needs `actions: write`, which GitHub grants to same-repository
+# pull requests and merge_group runs but denies to fork pull requests (forced
+# read-only -> the delete would 403). The job below guards itself accordingly: it
+# runs for same-repo PRs, the merge queue, and manual workflow_dispatch, and skips
+# fork PRs - which are covered by the merge queue before merge and get an early
+# read-only smoke test via test-prune-cache-dry-run.yml.
+
 name: Test Prune Cache
 
 on:
@@ -37,8 +46,17 @@ env:
 jobs:
   prune-cache:
     name: Keeps the newest generation of each family
+    # Needs a write-capable token, which forks do not get. See the file header.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'merge_group' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
+      # Default checkout resolves the PR merge ref (same-repo `pull_request`) or
+      # the queued merge commit (`merge_group`), both of which contain the code
+      # under test. No PR-head override is needed because this workflow never runs
+      # under `pull_request_target` - fork PRs are covered by the merge queue.
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
 

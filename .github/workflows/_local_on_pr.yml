@@ -58,3 +58,41 @@ jobs:
     permissions:
       actions: write
       contents: read
+
+  # The write-capable cache self-tests can't run on fork PRs (GitHub forces a
+  # read-only token), so forks get this read-only dry-run and the full suite runs
+  # in the merge queue before merge, not via `pull_request_target`. The only
+  # window `pull_request_target` would add is running the write tests after a
+  # maintainer reviews the fork's code but before the PR is approved (the run is
+  # environment-gated, so fork code never gets a write token pre-review); the
+  # merge queue runs them right after approval anyway, so it buys nothing beyond a
+  # per-run environment approval and an untrusted-code-with-write-token surface.
+  prune-cache-dry-run-tests:
+    uses: ./.github/workflows/test-prune-cache-dry-run.yml
+    permissions:
+      actions: read
+      contents: read
+
+  # Single aggregate gate used as a required status check for branch
+  # protection and the merge queue. Requiring one stable check is more robust
+  # than listing every job: individual job names change, and any required check
+  # that is *skipped* (several `common` jobs are) would block the merge queue
+  # forever. This job always runs and fails if any dependency failed.
+  ci-success:
+    name: CI success
+    if: always()
+    needs:
+      - common
+      - inter-repo-access-tests
+      - setup-qnx-sdp-tests
+      - unblock-user-namespace-for-linux-sandbox-tests
+      - setup-bazel-cache-tests
+      - prune-cache-tests
+      - prune-cache-dry-run-tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any required job did not succeed
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: |
+          echo "One or more required jobs failed or were cancelled."
+          exit 1

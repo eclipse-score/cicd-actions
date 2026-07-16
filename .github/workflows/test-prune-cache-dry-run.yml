@@ -1,0 +1,63 @@
+# *******************************************************************************
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+# Read-only smoke test for prune-cache. Dry-run only lists caches (never
+# deletes), so it needs just `actions: read` and runs on fork pull requests,
+# where GitHub forces a read-only token. It confirms the action loads and its
+# read/group path executes against real repository caches without crashing. The
+# job below guards itself to fork PRs (and manual workflow_dispatch); same-repo
+# PRs and the merge queue exercise dry-run inside the full test-prune-cache.yml,
+# which also verifies the destructive delete semantics hermetically.
+
+name: Test Prune Cache (dry-run)
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  prune-cache-dry-run:
+    name: Dry-run executes without error
+    # Fork fallback for the write-gated full test. See the file header.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name != github.repository)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
+
+      - name: Prune in dry-run mode
+        uses: ./prune-cache
+        with:
+          dry-run: "true"
+
+      - name: Explain dry-run scope in the job summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### prune-cache — dry-run only"
+            echo ""
+            echo "This run executed prune-cache in **dry-run** mode: it lists obsolete"
+            echo "caches but deletes nothing. Fork pull requests only receive a read-only"
+            echo "token, so the destructive path cannot run here."
+            echo ""
+            echo "The **full test** (create → prune → verify deletions) runs automatically"
+            echo "in the **merge queue** before this pull request is merged."
+          } >> "${GITHUB_STEP_SUMMARY}"
