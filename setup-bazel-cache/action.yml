@@ -56,7 +56,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: lurtz/setup-bazel@cache-optimized
+    - uses: lurtz/setup-bazel@cache-optimized-part-2
       with:
         disk-cache: ${{ inputs.unique-cache-name }}
         cache-save: ${{ github.ref == format('refs/heads/{0}', inputs.main-branch) }}
