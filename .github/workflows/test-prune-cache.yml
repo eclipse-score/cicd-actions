@@ -23,16 +23,20 @@ permissions:
 
 env:
   GH_TOKEN: ${{ github.token }}
-  # A run-unique family keeps the test hermetic: the assertions below only ever
+  # A run-unique prefix keeps the test hermetic: the assertions below only ever
   # look at caches created by this run. Note that `prune-cache` itself operates
   # repository-wide, so the real deletion step also removes any genuinely
   # obsolete generations of *other* families on this ref (its documented
   # contract) - the run-unique keys just make our assertions independent of that.
-  CACHE_FAMILY: prune-cache-selftest-${{ github.run_id }}-${{ github.run_attempt }}
+  #
+  # Two families ("-one" and "-two"), each with two generations ("-aaaaaaaa" =
+  # older, "-bbbbbbbb" = newer), prove that pruning is per-family: each family
+  # keeps its own newest generation and does not affect the other.
+  CACHE_PREFIX: prune-cache-selftest-${{ github.run_id }}-${{ github.run_attempt }}
 
 jobs:
   prune-cache:
-    name: Keeps only the newest cache generation
+    name: Keeps the newest generation of each family
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -42,30 +46,41 @@ jobs:
         shell: bash
         run: echo "prune-cache self-test payload" > cache-payload.txt
 
-      # prune-cache groups caches by (ref, family) and keeps the newest per
-      # group. Both saves share the family "prune-cache-selftest-<run>" and
-      # differ only in the key's hash suffix (the "generation"), so they form
-      # one group from which only the newest must survive.
-      - name: Save older cache generation
+      # Save older-then-newer per family. The suffix is only a label; recency is
+      # decided by creation order (newest survives), so "-aaaaaaaa" is saved
+      # before "-bbbbbbbb" within each family.
+      - name: Save family one, older generation
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 #v4.3.0
         with:
           path: cache-payload.txt
-          key: ${{ env.CACHE_FAMILY }}-aaaaaaaa
+          key: ${{ env.CACHE_PREFIX }}-one-aaaaaaaa
 
-      - name: Save newer cache generation
+      - name: Save family one, newer generation
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 #v4.3.0
         with:
           path: cache-payload.txt
-          key: ${{ env.CACHE_FAMILY }}-bbbbbbbb
+          key: ${{ env.CACHE_PREFIX }}-one-bbbbbbbb
 
-      - name: Verify both generations exist
+      - name: Save family two, older generation
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 #v4.3.0
+        with:
+          path: cache-payload.txt
+          key: ${{ env.CACHE_PREFIX }}-two-aaaaaaaa
+
+      - name: Save family two, newer generation
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 #v4.3.0
+        with:
+          path: cache-payload.txt
+          key: ${{ env.CACHE_PREFIX }}-two-bbbbbbbb
+
+      - name: Verify all four generations exist
         shell: bash
         run: |
           set -euo pipefail
-          count=$(gh api "/repos/${GITHUB_REPOSITORY}/actions/caches?key=${CACHE_FAMILY}" -q '.total_count')
-          if [[ "${count}" != "2" ]]; then
-            echo "ERROR: expected 2 test caches before pruning, found ${count}"
-            gh api "/repos/${GITHUB_REPOSITORY}/actions/caches?key=${CACHE_FAMILY}" -q '.actions_caches[].key'
+          count=$(gh api "/repos/${GITHUB_REPOSITORY}/actions/caches?key=${CACHE_PREFIX}" -q '.total_count')
+          if [[ "${count}" != "4" ]]; then
+            echo "ERROR: expected 4 test caches before pruning, found ${count}"
+            gh api "/repos/${GITHUB_REPOSITORY}/actions/caches?key=${CACHE_PREFIX}" -q '.actions_caches[].key'
             exit 1
           fi
 
@@ -78,9 +93,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          count=$(gh api "/repos/${GITHUB_REPOSITORY}/actions/caches?key=${CACHE_FAMILY}" -q '.total_count')
-          if [[ "${count}" != "2" ]]; then
-            echo "ERROR: dry-run must not delete caches, expected 2, found ${count}"
+          count=$(gh api "/repos/${GITHUB_REPOSITORY}/actions/caches?key=${CACHE_PREFIX}" -q '.total_count')
+          if [[ "${count}" != "4" ]]; then
+            echo "ERROR: dry-run must not delete caches, expected 4, found ${count}"
             exit 1
           fi
 
@@ -89,20 +104,17 @@ jobs:
         with:
           dry-run: "false"
 
-      - name: Verify only the newest generation remains
+      - name: Verify only the newest generation of each family remains
         shell: bash
         run: |
           set -euo pipefail
-          count=$(gh api "/repos/${GITHUB_REPOSITORY}/actions/caches?key=${CACHE_FAMILY}" -q '.total_count')
-          if [[ "${count}" != "1" ]]; then
-            echo "ERROR: expected 1 surviving cache after pruning, found ${count}"
-            gh api "/repos/${GITHUB_REPOSITORY}/actions/caches?key=${CACHE_FAMILY}" -q '.actions_caches[].key'
-            exit 1
-          fi
-
-          survivor=$(gh api "/repos/${GITHUB_REPOSITORY}/actions/caches?key=${CACHE_FAMILY}" -q '.actions_caches[0].key')
-          if [[ "${survivor}" != "${CACHE_FAMILY}-bbbbbbbb" ]]; then
-            echo "ERROR: expected the newest generation to survive, but survivor is ${survivor}"
+          survivors=$(gh api "/repos/${GITHUB_REPOSITORY}/actions/caches?key=${CACHE_PREFIX}" \
+            -q '.actions_caches | map(.key) | sort | join(" ")')
+          expected="${CACHE_PREFIX}-one-bbbbbbbb ${CACHE_PREFIX}-two-bbbbbbbb"
+          if [[ "${survivors}" != "${expected}" ]]; then
+            echo "ERROR: expected the newest generation of each family to survive."
+            echo "  expected: ${expected}"
+            echo "  actual:   ${survivors}"
             exit 1
           fi
 
@@ -111,7 +123,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for suffix in aaaaaaaa bbbbbbbb; do
-            gh api --method DELETE \
-              "/repos/${GITHUB_REPOSITORY}/actions/caches?key=${CACHE_FAMILY}-${suffix}" || true
+          for family in one two; do
+            for suffix in aaaaaaaa bbbbbbbb; do
+              gh api --method DELETE \
+                "/repos/${GITHUB_REPOSITORY}/actions/caches?key=${CACHE_PREFIX}-${family}-${suffix}" || true
+            done
           done
