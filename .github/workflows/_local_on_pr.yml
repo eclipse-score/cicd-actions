@@ -45,3 +45,9 @@ jobs:
     uses: ./.github/workflows/test-unblock-user-namespace-for-linux-sandbox.yml
     permissions:
       contents: read
+
+  prune-cache-tests:
+    uses: ./.github/workflows/test-prune-cache.yml
+    permissions:
+      actions: write
+      contents: read

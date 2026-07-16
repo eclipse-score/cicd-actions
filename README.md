@@ -12,17 +12,7 @@ Reusable GitHub Actions for S-CORE CI/CD automation. For reusable workflows, see
 
 ## Self Testing
 
-This repo includes self-test workflows for (some of) the provided actions in the `.github/workflows` directory:
-
-- [`test-inter-repo-access.yml`](./.github/workflows/test-inter-repo-access.yml) tests the [`inter-repo-access`](./inter-repo-access/README.md) action by configuring it with a token and then verifying that the token is correctly injected into git for a subsequent checkout of another repository.
-
-- [`test-setup-qnx-sdp.yml`](./.github/workflows/test-setup-qnx-sdp.yml) tests the [`setup-qnx-sdp`](./setup-qnx-sdp/README.md) action by configuring it with a fake license and then verifying that the license file and environment variables are correctly set up.
-
-- [`test-setup-bazel-cache.yml`](./.github/workflows/test-setup-bazel-cache.yml) tests the [`setup-bazel-cache`](./setup-bazel-cache/README.md) action by running it against a minimal Bazel workspace and verifying that `~/.bazelrc` is written with disk-cache configuration.
-
-- [`test-unblock-user-namespace-for-linux-sandbox.yml`](./.github/workflows/test-unblock-user-namespace-for-linux-sandbox.yml) tests the [`unblock-user-namespace-for-linux-sandbox`](./unblock-user-namespace-for-linux-sandbox/README.md) action by verifying that `linux-sandbox /bin/true` fails before running the action and succeeds after.
-
-These workflows are reusable (`workflow_call`) and are executed from the [`PR workflow`](./.github/workflows/_local_on_pr.yml)
+Most actions have a self-test workflow in the `.github/workflows` directory (`test-*.yml`) that exercises the action in a real runner environment. These workflows are reusable (`workflow_call`) and are executed from the [`PR workflow`](./.github/workflows/_local_on_pr.yml).
 
 ## Why are the actions in a separate repository?
 

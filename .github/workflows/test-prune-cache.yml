@@ -1,0 +1,115 @@
+# *******************************************************************************
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+name: Test Prune Cache
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+env:
+  GH_TOKEN: ${{ github.token }}
+  # A run-unique family keeps the test hermetic: the assertions below only ever
+  # look at caches created by this run. Note that `prune-cache` itself operates
+  # repository-wide, so the real deletion step also removes any genuinely
+  # obsolete generations of *other* families on this ref (its documented
+  # contract) - the run-unique keys just make our assertions independent of that.
+  CACHE_FAMILY: prune-cache-selftest-${{ github.run_id }}-${{ github.run_attempt }}
+
+jobs:
+  prune-cache:
+    name: Keeps only the newest cache generation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
+
+      - name: Create cache payload
+        shell: bash
+        run: echo "prune-cache self-test payload" > cache-payload.txt
+
+      # Same path for both saves so the caches share a `version` and thus land in
+      # the same prune group. Only the keys (hash suffix) differ.
+      - name: Save older cache generation
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 #v4.3.0
+        with:
+          path: cache-payload.txt
+          key: ${{ env.CACHE_FAMILY }}-aaaaaaaa
+
+      - name: Save newer cache generation
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 #v4.3.0
+        with:
+          path: cache-payload.txt
+          key: ${{ env.CACHE_FAMILY }}-bbbbbbbb
+
+      - name: Verify both generations exist
+        shell: bash
+        run: |
+          set -euo pipefail
+          count=$(gh api "/repos/${GITHUB_REPOSITORY}/actions/caches?key=${CACHE_FAMILY}" -q '.total_count')
+          if [[ "${count}" != "2" ]]; then
+            echo "ERROR: expected 2 test caches before pruning, found ${count}"
+            gh api "/repos/${GITHUB_REPOSITORY}/actions/caches?key=${CACHE_FAMILY}" -q '.actions_caches[].key'
+            exit 1
+          fi
+
+      - name: Prune in dry-run mode
+        uses: ./prune-cache
+        with:
+          dry-run: "true"
+
+      - name: Verify dry-run deleted nothing
+        shell: bash
+        run: |
+          set -euo pipefail
+          count=$(gh api "/repos/${GITHUB_REPOSITORY}/actions/caches?key=${CACHE_FAMILY}" -q '.total_count')
+          if [[ "${count}" != "2" ]]; then
+            echo "ERROR: dry-run must not delete caches, expected 2, found ${count}"
+            exit 1
+          fi
+
+      - name: Prune for real
+        uses: ./prune-cache
+        with:
+          dry-run: "false"
+
+      - name: Verify only the newest generation remains
+        shell: bash
+        run: |
+          set -euo pipefail
+          count=$(gh api "/repos/${GITHUB_REPOSITORY}/actions/caches?key=${CACHE_FAMILY}" -q '.total_count')
+          if [[ "${count}" != "1" ]]; then
+            echo "ERROR: expected 1 surviving cache after pruning, found ${count}"
+            gh api "/repos/${GITHUB_REPOSITORY}/actions/caches?key=${CACHE_FAMILY}" -q '.actions_caches[].key'
+            exit 1
+          fi
+
+          survivor=$(gh api "/repos/${GITHUB_REPOSITORY}/actions/caches?key=${CACHE_FAMILY}" -q '.actions_caches[0].key')
+          if [[ "${survivor}" != "${CACHE_FAMILY}-bbbbbbbb" ]]; then
+            echo "ERROR: expected the newest generation to survive, but survivor is ${survivor}"
+            exit 1
+          fi
+
+      - name: Clean up test caches
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          for suffix in aaaaaaaa bbbbbbbb; do
+            gh api --method DELETE \
+              "/repos/${GITHUB_REPOSITORY}/actions/caches?key=${CACHE_FAMILY}-${suffix}" || true
+          done
