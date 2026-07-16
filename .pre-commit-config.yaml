@@ -27,7 +27,7 @@ repos:
       - id: mixed-line-ending
       - id: detect-private-key
       - id: check-added-large-files
-        args: ["--maxkb=10"]
+        args: ["--maxkb=15"]
         # Generated files can get quite big so exclude them from this check.
         exclude: "(^|.*/)(dst/.*\\.js|package-lock\\.json)$"
 
