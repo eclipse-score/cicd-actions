@@ -12,7 +12,7 @@
 # *******************************************************************************
 
 name: Repository cache refresh
-description: Warm Bazel repository cache for all variants.
+description: Warm Bazel repository cache for all variants and delete old caches.
 
 inputs:
   variants:
@@ -21,6 +21,13 @@ inputs:
       Use an empty config (|<targets>) to run fetch without --config.
       Example: x86_64-linux|//...
     required: true
+  old-caches-json:
+    description: JSON string containing old cache IDs (from repository-cache-check output).
+    required: true
+  _skip_cache_delete:
+    description: For debugging purposes only.
+    required: false
+    default: 'false'
 
 runs:
   using: composite
@@ -38,7 +45,7 @@ runs:
           exit 1
         fi
 
-        max_attempts=10
+        max_attempts=3
         failed_variants=()
 
         for variant in "${variants[@]}"; do
@@ -80,4 +87,23 @@ runs:
             echo "  - ${variant}"
           done
           exit 1
+        fi
+
+    - name: Delete old caches
+      if: ${{ inputs._skip_cache_delete != 'true' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        OLD_CACHES_JSON: ${{ inputs.old-caches-json }}
+      run: |
+        set -euo pipefail
+        if [ -n "$OLD_CACHES_JSON" ] && [ "$OLD_CACHES_JSON" != "[]" ]; then
+          num_caches=$(echo "$OLD_CACHES_JSON" | jq 'length')
+          echo "Deleting $num_caches old caches..."
+          echo "$OLD_CACHES_JSON" | jq -r '.[].id' | while read -r cache_id; do
+            echo "Deleting old cache: $cache_id"
+            gh cache delete "$cache_id" --repo ${{ github.repository }} || true
+          done
+        else
+          echo "No old caches to delete"
         fi
