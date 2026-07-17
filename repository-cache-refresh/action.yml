@@ -17,9 +17,9 @@ description: Warm Bazel repository cache for all variants and delete old caches.
 inputs:
   variants:
     description: |
-      Newline-separated list of fetch variants in the format <config>|<targets>.
-      Use an empty config (|<targets>) to run fetch without --config.
-      Example: x86_64-linux|//...
+      Newline-separated list of arguments to append to `bazel fetch`.
+      Each line is split on whitespace and passed as one fetch invocation.
+      Examples: `--config=x86_64-linux //...`, `//...`, `//test //quality`.
     required: true
   old-caches-json:
     description: JSON string containing old cache IDs (from repository-cache-check output).
@@ -49,21 +49,20 @@ runs:
         failed_variants=()
 
         for variant in "${variants[@]}"; do
-          config="${variant%%|*}"
-          targets="${variant#*|}"
-          config_display="${config:-<default>}"
+          read -r -a fetch_args <<< "$variant"
+          if [[ "${#fetch_args[@]}" -eq 0 ]]; then
+            echo "Skipping empty bazel fetch arguments entry"
+            continue
+          fi
+
           success=false
 
           for attempt in $(seq 1 "$max_attempts"); do
-            echo "Running bazel fetch for config '${config_display}' and targets '${targets}' (attempt ${attempt}/${max_attempts})"
-            if [ -n "${config}" ]; then
-              bazel_fetch_cmd=(bazel fetch "--config=${config}")
-            else
-              bazel_fetch_cmd=(bazel fetch)
-            fi
+            echo "Running bazel fetch ${variant} (attempt ${attempt}/${max_attempts})"
+            bazel_fetch_cmd=(bazel fetch)
 
-            if "${bazel_fetch_cmd[@]}" ${targets}; then
-              echo "Successfully fetched dependencies for config '${config_display}' and targets '${targets}'"
+            if "${bazel_fetch_cmd[@]}" "${fetch_args[@]}"; then
+              echo "Successfully fetched dependencies for arguments '${variant}'"
               success=true
               break
             fi
@@ -76,8 +75,8 @@ runs:
           done
 
           if [ "$success" != "true" ]; then
-            echo "bazel fetch failed for config '${config_display}' and targets '${targets}' after ${max_attempts} attempts"
-            failed_variants+=("${config}|${targets}")
+            echo "bazel fetch failed for arguments '${variant}' after ${max_attempts} attempts"
+            failed_variants+=("${variant}")
           fi
         done
 

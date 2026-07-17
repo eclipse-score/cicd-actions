@@ -83,8 +83,8 @@ jobs:
         uses: ./repository-cache-refresh
         with:
           variants: |
-            ci|//:enabled
-            |//:enabled
+            --config=ci //:enabled
+            //:enabled
           old-caches-json: not-json
           _skip_cache_delete: 'true'
 
