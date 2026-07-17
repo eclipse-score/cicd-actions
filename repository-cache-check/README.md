@@ -20,7 +20,6 @@ This action does not define any inputs.
 
 This action calls GitHub cache APIs via `gh cache list` and needs:
 
-- `actions: write`
 - `contents: read`
 
 ## Example
