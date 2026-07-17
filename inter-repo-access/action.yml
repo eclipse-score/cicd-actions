@@ -48,6 +48,18 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Print action directory
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "Action directory: $GITHUB_ACTION_PATH"
+
+        echo "Action directory contents:"
+        tree -L 1 "$GITHUB_ACTION_PATH"
+
+        echo "Action directory tree:"
+        tree "$GITHUB_ACTION_PATH"
+
     - name: Validate auth inputs
       shell: bash
       env:

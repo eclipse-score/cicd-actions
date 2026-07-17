@@ -16,6 +16,7 @@ name: Test Inter-Repo Access
 on:
   workflow_call:
   workflow_dispatch:
+  push:
 
 permissions:
   contents: read
