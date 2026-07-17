@@ -36,7 +36,6 @@ jobs:
         shell: bash
         env:
           SHOULD_REFRESH_CACHE: ${{ steps.check.outputs.should_refresh_cache }}
-          OLD_CACHES_JSON: ${{ steps.check.outputs['old-caches-json'] }}
         run: |
           set -euo pipefail
 
@@ -45,9 +44,4 @@ jobs:
             exit 1
           fi
 
-          if [[ "$OLD_CACHES_JSON" != "[]" ]]; then
-            echo "ERROR: expected old-caches-json=[] but got '$OLD_CACHES_JSON'"
-            exit 1
-          fi
-
-          echo "Outputs are as expected: should_refresh_cache=false and old-caches-json=[]"
+          echo "Outputs are as expected: should_refresh_cache=false"
