@@ -12,7 +12,7 @@ Fetches Bazel dependencies for one or more configured variants to warm repositor
 
 ## Required permissions
 
-This action calls GitHub cache APIs via `gh cache delete` and needs:
+This action needs:
 
 - `actions: read`
 - `contents: read`
