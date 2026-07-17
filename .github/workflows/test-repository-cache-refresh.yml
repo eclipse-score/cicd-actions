@@ -85,8 +85,6 @@ jobs:
           variants: |
             --config=ci //:enabled
             //:enabled
-          old-caches-json: not-json
-          _skip_cache_delete: 'true'
 
       - name: Verify repository cache was warmed
         shell: bash

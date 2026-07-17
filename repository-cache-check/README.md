@@ -14,7 +14,6 @@ This action does not define any inputs.
 | Name | Description |
 | --- | --- |
 | `should_refresh_cache` | `true` when repository cache should be refreshed, otherwise `false`. |
-| `old-caches-json` | JSON string containing the list of existing cache IDs, or `[]` when no refresh is needed. |
 
 ## Required permissions
 

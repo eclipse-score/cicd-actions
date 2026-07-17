@@ -20,9 +20,6 @@ outputs:
   should_refresh_cache:
     description: Whether the repository cache should be refreshed.
     value: ${{ steps.check.outputs.should_refresh_cache }}
-  old-caches-json:
-    description: JSON string containing the list of existing cache IDs.
-    value: ${{ steps.list-caches.outputs.old-caches-json }}
 
 runs:
   using: composite
@@ -51,21 +48,4 @@ runs:
         else
           echo "No Bazel repository cache inputs changed. Skipping cache deletion and recreation."
           echo "should_refresh_cache=false" >> "$GITHUB_OUTPUT"
-        fi
-
-    - name: List and save current caches
-      id: list-caches
-      shell: bash
-      env:
-        GH_TOKEN: ${{ github.token }}
-        SHOULD_REFRESH: ${{ steps.check.outputs.should_refresh_cache }}
-      run: |
-        set -euo pipefail
-        if [ "$SHOULD_REFRESH" = "true" ]; then
-          caches_json="$(gh cache list --repo ${{ github.repository }} --json id | jq -c '.')"
-          echo "old-caches-json=${caches_json}" >> "$GITHUB_OUTPUT"
-          echo "Found $(echo "$caches_json" | jq 'length') existing caches"
-        else
-          echo "old-caches-json=[]" >> "$GITHUB_OUTPUT"
-          echo "Cache refresh not needed, returning empty cache list"
         fi
