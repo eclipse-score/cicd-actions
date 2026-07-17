@@ -3,7 +3,6 @@
 ## Description
 
 Checks whether Bazel repository cache inputs changed in the current revision range.
-If a refresh is needed, it captures the current cache IDs so they can be deleted later.
 
 ## Inputs
 
@@ -17,7 +16,7 @@ This action does not define any inputs.
 
 ## Required permissions
 
-This action calls GitHub cache APIs via `gh cache list` and needs:
+This action needs:
 
 - `contents: read`
 
