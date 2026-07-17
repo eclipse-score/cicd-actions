@@ -1,0 +1,149 @@
+# *******************************************************************************
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+# Full, destructive self-test for the prune-cache action: it creates cache
+# generations, prunes for real, and asserts only the newest per family survives.
+# Deleting caches needs `actions: write`, which GitHub grants to same-repository
+# pull requests and merge_group runs but denies to fork pull requests (forced
+# read-only -> the delete would 403). The job below guards itself accordingly: it
+# runs for same-repo PRs, the merge queue, and manual workflow_dispatch, and skips
+# fork PRs - which are covered by the merge queue before merge and get an early
+# read-only smoke test via test-prune-cache-dry-run.yml.
+
+name: Test Prune Cache
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+env:
+  GH_TOKEN: ${{ github.token }}
+  # A run-unique prefix keeps the test hermetic: the assertions below only ever
+  # look at caches created by this run. Note that `prune-cache` itself operates
+  # repository-wide, so the real deletion step also removes any genuinely
+  # obsolete generations of *other* families on this ref (its documented
+  # contract) - the run-unique keys just make our assertions independent of that.
+  #
+  # Two families ("-one" and "-two"), each with two generations ("-aaaaaaaa" =
+  # older, "-bbbbbbbb" = newer), prove that pruning is per-family: each family
+  # keeps its own newest generation and does not affect the other.
+  CACHE_PREFIX: prune-cache-selftest-${{ github.run_id }}-${{ github.run_attempt }}
+
+jobs:
+  prune-cache:
+    name: Keeps the newest generation of each family
+    # Needs a write-capable token, which forks do not get. See the file header.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'merge_group' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      # Default checkout resolves the PR merge ref (same-repo `pull_request`) or
+      # the queued merge commit (`merge_group`), both of which contain the code
+      # under test. No PR-head override is needed because this workflow never runs
+      # under `pull_request_target` - fork PRs are covered by the merge queue.
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
+
+      - name: Create cache payload
+        shell: bash
+        run: echo "prune-cache self-test payload" > cache-payload.txt
+
+      # Save older-then-newer per family. The suffix is only a label; recency is
+      # decided by creation order (newest survives), so "-aaaaaaaa" is saved
+      # before "-bbbbbbbb" within each family.
+      - name: Save family one, older generation
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 #v4.3.0
+        with:
+          path: cache-payload.txt
+          key: ${{ env.CACHE_PREFIX }}-one-aaaaaaaa
+
+      - name: Save family one, newer generation
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 #v4.3.0
+        with:
+          path: cache-payload.txt
+          key: ${{ env.CACHE_PREFIX }}-one-bbbbbbbb
+
+      - name: Save family two, older generation
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 #v4.3.0
+        with:
+          path: cache-payload.txt
+          key: ${{ env.CACHE_PREFIX }}-two-aaaaaaaa
+
+      - name: Save family two, newer generation
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 #v4.3.0
+        with:
+          path: cache-payload.txt
+          key: ${{ env.CACHE_PREFIX }}-two-bbbbbbbb
+
+      - name: Verify all four generations exist
+        shell: bash
+        run: |
+          set -euo pipefail
+          count=$(gh api "/repos/${GITHUB_REPOSITORY}/actions/caches?key=${CACHE_PREFIX}" -q '.total_count')
+          if [[ "${count}" != "4" ]]; then
+            echo "ERROR: expected 4 test caches before pruning, found ${count}"
+            gh api "/repos/${GITHUB_REPOSITORY}/actions/caches?key=${CACHE_PREFIX}" -q '.actions_caches[].key'
+            exit 1
+          fi
+
+      - name: Prune in dry-run mode
+        uses: ./prune-cache
+        with:
+          dry-run: "true"
+
+      - name: Verify dry-run deleted nothing
+        shell: bash
+        run: |
+          set -euo pipefail
+          count=$(gh api "/repos/${GITHUB_REPOSITORY}/actions/caches?key=${CACHE_PREFIX}" -q '.total_count')
+          if [[ "${count}" != "4" ]]; then
+            echo "ERROR: dry-run must not delete caches, expected 4, found ${count}"
+            exit 1
+          fi
+
+      - name: Prune for real
+        uses: ./prune-cache
+        with:
+          dry-run: "false"
+
+      - name: Verify only the newest generation of each family remains
+        shell: bash
+        run: |
+          set -euo pipefail
+          survivors=$(gh api "/repos/${GITHUB_REPOSITORY}/actions/caches?key=${CACHE_PREFIX}" \
+            -q '.actions_caches | map(.key) | sort | join(" ")')
+          expected="${CACHE_PREFIX}-one-bbbbbbbb ${CACHE_PREFIX}-two-bbbbbbbb"
+          if [[ "${survivors}" != "${expected}" ]]; then
+            echo "ERROR: expected the newest generation of each family to survive."
+            echo "  expected: ${expected}"
+            echo "  actual:   ${survivors}"
+            exit 1
+          fi
+
+      - name: Clean up test caches
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          for family in one two; do
+            for suffix in aaaaaaaa bbbbbbbb; do
+              gh api --method DELETE \
+                "/repos/${GITHUB_REPOSITORY}/actions/caches?key=${CACHE_PREFIX}-${family}-${suffix}" || true
+            done
+          done
