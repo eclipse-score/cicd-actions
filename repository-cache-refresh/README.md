@@ -14,8 +14,7 @@ Fetches Bazel dependencies for one or more configured variants to warm repositor
 
 This action needs:
 
-- `actions: read`
-- `contents: read`
+- none
 
 ## Example
 
