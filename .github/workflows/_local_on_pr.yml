@@ -94,6 +94,7 @@ jobs:
       - setup-qnx-sdp-tests
       - unblock-user-namespace-for-linux-sandbox-tests
       - setup-bazel-cache-tests
+      - warm-bazel-repository-cache-tests
       - prune-cache-tests
       - prune-cache-dry-run-tests
     runs-on: ubuntu-latest

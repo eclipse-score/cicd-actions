@@ -22,7 +22,7 @@ permissions:
 
 jobs:
   warm-bazel-repository-cache:
-    name: Repository cache is warmed and cache deletion can be skipped
+    name: Repository cache is warmed
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
