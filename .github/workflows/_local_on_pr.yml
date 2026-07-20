@@ -48,11 +48,6 @@ jobs:
       actions: write
       contents: read
 
-  repository-cache-check-tests:
-    uses: ./.github/workflows/test-repository-cache-check.yml
-    permissions:
-      contents: read
-
   repository-cache-refresh-tests:
     uses: ./.github/workflows/test-repository-cache-refresh.yml
     permissions:
