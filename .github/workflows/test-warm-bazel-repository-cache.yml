@@ -21,7 +21,7 @@ permissions:
   contents: read
 
 jobs:
-  repository-cache-refresh:
+  warm-bazel-repository-cache:
     name: Repository cache is warmed and cache deletion can be skipped
     runs-on: ubuntu-latest
     steps:
@@ -78,8 +78,8 @@ jobs:
             exit 1
           fi
 
-      - name: Run repository-cache-refresh action with cache deletion disabled
-        uses: ./repository-cache-refresh
+      - name: Run warm-bazel-repository-cache action with cache deletion disabled
+        uses: ./warm-bazel-repository-cache
         with:
           variants: |
             --config=ci //:enabled
@@ -92,7 +92,7 @@ jobs:
 
           repository_cache_dir="$(bazel info repository_cache)"
           if ! find "${repository_cache_dir}" -type f -print -quit | grep -q .; then
-            echo "ERROR: repository cache is still empty after repository-cache-refresh ran"
+            echo "ERROR: repository cache is still empty after warm-bazel-repository-cache ran"
             exit 1
           fi
 

@@ -48,8 +48,8 @@ jobs:
       actions: write
       contents: read
 
-  repository-cache-refresh-tests:
-    uses: ./.github/workflows/test-repository-cache-refresh.yml
+  warm-bazel-repository-cache-tests:
+    uses: ./.github/workflows/test-warm-bazel-repository-cache.yml
     permissions:
       actions: read
       contents: read

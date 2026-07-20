@@ -1,4 +1,4 @@
-# Repository cache refresh
+# Warm Bazel repository cache
 
 ## Description
 
@@ -19,8 +19,8 @@ This action needs:
 ## Example
 
 ```yaml
-- name: Refresh Bazel repository cache artifacts
-  uses: eclipse-score/cicd-actions/repository-cache-refresh@main
+- name: Warm Bazel repository cache artifacts
+  uses: eclipse-score/cicd-actions/warm-bazel-repository-cache@main
   with:
     variants: |
       //src/tools/...

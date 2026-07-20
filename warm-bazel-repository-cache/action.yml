@@ -11,7 +11,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # *******************************************************************************
 
-name: Repository cache refresh
+name: Warm bazel repository cache
 description: Warm Bazel repository cache for all variants.
 
 inputs:
