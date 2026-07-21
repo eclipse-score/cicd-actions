@@ -15,6 +15,8 @@ The action also verifies that:
 - the referenced Bazel config exists in a discovered `.bazelrc` file
 - each target resolves with `bazel query`
 
+Because it does not modify any caches, it is safe to run this action in pull requests or merge queues.
+
 ## Inputs
 
 | Name | Mandatory | Default | Description |

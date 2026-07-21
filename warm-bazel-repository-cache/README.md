@@ -4,7 +4,8 @@
 
 Fetches Bazel dependencies for one or more configured variants to warm repository cache artifacts.
 
-If the `variants` input is assembled dynamically or maintained centrally, run [`warm-bazel-repository-cache-input-check`](../warm-bazel-repository-cache-input-check/README.md) first to catch unknown configs, unsupported options, and invalid targets before starting the fetch loop.
+For testing the `variants` input without modifying caches, run [`warm-bazel-repository-cache-input-check`](../warm-bazel-repository-cache-input-check/README.md) first.
+This can be run in e.g. pull requests.
 
 ## Inputs
 
