@@ -17,13 +17,15 @@ description: Validate and warm Bazel repository cache for all variants.
 inputs:
   variants:
     description: |
-      Newline-separated list of arguments to append to `bazel fetch`.
+      Newline-separated list of Bazel targets with an optional leading
+      --config=<name> per line (no other --... options are supported).
       Each line is split on whitespace and passed as one fetch invocation.
       Examples: `--config=x86_64-linux //...`, `//...`, `//test //quality`.
     required: true
   dry-run:
     description: |
-      When set to true, only validates `variants` and does not run `bazel fetch`.
+      When set to true, validates `variants` and skips `bazel fetch`.
+      Validation still runs `bazel query`, which may resolve external repositories.
       Accepted values are `true` and `false`.
     required: false
     default: "false"
@@ -33,9 +35,13 @@ runs:
   steps:
     - name: Validate variants input
       shell: bash
-      run: bash "${{ github.action_path }}/validate_variants.sh" "${{ inputs.variants }}"
+      env:
+        VARIANTS_INPUT: ${{ inputs.variants }}
+      run: bash "${{ github.action_path }}/validate_variants.sh" "$VARIANTS_INPUT"
 
     - name: Warm Bazel repository cache for all variants (with retries)
       shell: bash
       if: ${{ inputs.dry-run != 'true' }}
-      run: bash "${{ github.action_path }}/warm_cache.sh" "${{ inputs.variants }}"
+      env:
+        VARIANTS_INPUT: ${{ inputs.variants }}
+      run: bash "${{ github.action_path }}/warm_cache.sh" "$VARIANTS_INPUT"

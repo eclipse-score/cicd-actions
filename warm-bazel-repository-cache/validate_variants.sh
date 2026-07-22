@@ -50,7 +50,7 @@ while IFS= read -r variant_line || [[ -n "$variant_line" ]]; do
     fi
 
     if [[ "$token" == --* ]]; then
-      echo "Unsupported option '$token' in variants line $line_no. Only --config=<name> is supported in this workflow input." >&2
+      echo "Unsupported option '$token' in variants line $line_no. Only --config=<name> is supported in this action input." >&2
       exit 1
     fi
 
@@ -70,8 +70,8 @@ while IFS= read -r variant_line || [[ -n "$variant_line" ]]; do
     fi
 
     escaped_config_name="$(printf '%s' "$config_name" | sed -E 's/[][\\.^$*+?(){}|]/\\\\&/g')"
-    if ! grep -E -q "^[[:space:]]*(build|common|fetch|test):${escaped_config_name}([[:space:]]|$)" "${bazelrc_files[@]}"; then
-      echo "Unknown --config=$config_name in variants line $line_no. No matching build/common/fetch/test stanza found in .bazelrc files." >&2
+    if ! grep -E -q "^[[:space:]]*[^:#[:space:]]+:${escaped_config_name}([[:space:]]|$)" "${bazelrc_files[@]}"; then
+      echo "Unknown --config=$config_name in variants line $line_no. No matching <command>:<name> stanza found in .bazelrc files." >&2
       exit 1
     fi
   fi
