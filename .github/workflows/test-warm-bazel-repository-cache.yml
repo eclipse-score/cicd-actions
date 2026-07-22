@@ -33,6 +33,7 @@ jobs:
         run: |
           set -euo pipefail
           mv resources/bazel_fixture/* "${GITHUB_WORKSPACE}/"
+          mv resources/bazel_fixture/.* "${GITHUB_WORKSPACE}/"
 
       - name: Run action in dry-run mode with valid variants
         uses: ./warm-bazel-repository-cache
@@ -55,6 +56,7 @@ jobs:
         run: |
           set -euo pipefail
           mv resources/bazel_fixture/* "${GITHUB_WORKSPACE}/"
+          mv resources/bazel_fixture/.* "${GITHUB_WORKSPACE}/"
 
       - name: Run action in dry-run mode with unknown config
         id: validation
@@ -88,8 +90,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           mv resources/bazel_fixture/* "${GITHUB_WORKSPACE}/"
+          mv resources/bazel_fixture/.* "${GITHUB_WORKSPACE}/"
 
       - name: Run action in dry-run mode with unsupported option
         id: validation
@@ -123,8 +125,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           mv resources/bazel_fixture/* "${GITHUB_WORKSPACE}/"
+          mv resources/bazel_fixture/.* "${GITHUB_WORKSPACE}/"
 
       - name: Run action in dry-run mode with unknown target
         id: validation
@@ -158,8 +160,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           mv resources/bazel_fixture/* "${GITHUB_WORKSPACE}/"
+          mv resources/bazel_fixture/.* "${GITHUB_WORKSPACE}/"
 
       - name: Configure Bazel with repository cache enabled
         uses: ./setup-bazel-cache
