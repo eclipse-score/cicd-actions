@@ -4,7 +4,7 @@
 
 Validates `variants` input and fetches Bazel dependencies for one or more configured variants to warm repository cache artifacts.
 
-Set `dry-run: true` to run validation only (no `bazel fetch`).
+Set `dry-run: true` to run validation only (no uploading or deletion of cache artifacts, fast).
 This mode is safe for pull requests and merge queues.
 Validation still runs `bazel query`, which may resolve external repositories.
 
