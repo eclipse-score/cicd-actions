@@ -65,7 +65,7 @@ jobs:
         with:
           dry-run: true
           variants: |
-            --config=missing //:placeholder
+            --config=missing //:enabled
 
       - name: Assert validation failed
         shell: bash
@@ -79,8 +79,8 @@ jobs:
             exit 1
           fi
 
-  rejects-unknown-config-without-dry-run:
-    name: Unknown config fails validation
+  invalid-input-skips-fetch:
+    name: Invalid input skips fetch
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -100,7 +100,7 @@ jobs:
         with:
           dry-run: false
           variants: |
-            --config=missing //:placeholder
+            --config=missing //:enabled
 
       - name: Assert validation failed
         shell: bash
@@ -135,7 +135,7 @@ jobs:
         with:
           dry-run: true
           variants: |
-            --config=ci --keep_going //:placeholder
+            --config=ci --keep_going //:enabled
 
       - name: Assert validation failed
         shell: bash
