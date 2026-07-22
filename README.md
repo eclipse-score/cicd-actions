@@ -9,8 +9,7 @@ Reusable GitHub Actions for S-CORE CI/CD automation. For reusable workflows, see
 - [`setup-bazel-cache`](./setup-bazel-cache/README.md): configure Bazel caching with opinionated defaults.
 - [`unblock-user-namespace-for-linux-sandbox`](./unblock-user-namespace-for-linux-sandbox/README.md): allow Bazel's `linux-sandbox` to create user namespaces on Ubuntu runners.
 - [`prune-cache`](./prune-cache/README.md): keep only the newest GitHub Actions cache generation per cache family and Git ref, deleting older ones.
-- [`warm-bazel-repository-cache-input-check`](./warm-bazel-repository-cache-input-check/README.md): validate repository-cache warmup variants against Bazel configs and targets.
-- [`warm-bazel-repository-cache`](./warm-bazel-repository-cache/README.md): warm Bazel repository cache for configured variants.
+- [`warm-bazel-repository-cache`](./warm-bazel-repository-cache/README.md): validate and warm Bazel repository cache for configured variants (supports validation-only dry runs).
 
 ## Self Testing
 

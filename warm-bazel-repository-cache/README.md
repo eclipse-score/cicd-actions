@@ -2,16 +2,17 @@
 
 ## Description
 
-Fetches Bazel dependencies for one or more configured variants to warm repository cache artifacts.
+Validates `variants` input and fetches Bazel dependencies for one or more configured variants to warm repository cache artifacts.
 
-For testing the `variants` input without modifying caches, run [`warm-bazel-repository-cache-input-check`](../warm-bazel-repository-cache-input-check/README.md) first.
-This can be run in e.g. pull requests.
+Set `dry-run: true` to run validation only (no `bazel fetch`).
+This mode is safe for pull requests and merge queues.
 
 ## Inputs
 
 | Name | Mandatory | Default | Description |
 | --- | --- | --- | --- |
 | `variants` | Yes | - | Newline-separated list of arguments to append to `bazel fetch`. Each line is split on whitespace and run as one `bazel fetch` invocation, for example `--config=x86_64-linux //...` or `//test //quality`. |
+| `dry-run` | No | `false` | When `true`, only validates `variants` (single `--config=<name>` max per line, config exists in `.bazelrc`, and all targets resolve via `bazel query`) and skips cache warming. |
 
 ## Required permissions
 
@@ -23,8 +24,9 @@ This action needs:
 
 ```yaml
 - name: Validate repository cache variants
-  uses: eclipse-score/cicd-actions/warm-bazel-repository-cache-input-check@main
+  uses: eclipse-score/cicd-actions/warm-bazel-repository-cache@main
   with:
+    dry-run: true
     variants: |
       //src/tools/...
       --config=x86_64-linux //...

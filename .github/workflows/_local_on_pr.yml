@@ -48,11 +48,6 @@ jobs:
       actions: write
       contents: read
 
-  warm-bazel-repository-cache-input-check-tests:
-    uses: ./.github/workflows/test-warm-bazel-repository-cache-input-check.yml
-    permissions:
-      contents: read
-
   warm-bazel-repository-cache-tests:
     uses: ./.github/workflows/test-warm-bazel-repository-cache.yml
     permissions:
@@ -99,7 +94,6 @@ jobs:
       - setup-qnx-sdp-tests
       - unblock-user-namespace-for-linux-sandbox-tests
       - setup-bazel-cache-tests
-      - warm-bazel-repository-cache-input-check-tests
       - warm-bazel-repository-cache-tests
       - prune-cache-tests
       - prune-cache-dry-run-tests
