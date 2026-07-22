@@ -24,38 +24,13 @@ jobs:
   valid-variants-dry-run:
     name: Valid variants pass dry-run validation
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: resources/bazel_fixture
     steps:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
-
-      - name: Create minimal Bazel workspace
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          cat <<'EOF' > "${GITHUB_WORKSPACE}/MODULE.bazel"
-          module(name = "repository_cache_input_check_test")
-
-          bazel_dep(name = "bazel_skylib", version = "1.7.1")
-          EOF
-
-          cat <<'EOF' > "${GITHUB_WORKSPACE}/BUILD.bazel"
-          load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
-
-          bool_flag(
-              name = "enabled",
-              build_setting_default = False,
-          )
-          EOF
-
-          cat <<'EOF' > "${GITHUB_WORKSPACE}/.bazelversion"
-          8.6.0
-          EOF
-
-          cat <<'EOF' > "${GITHUB_WORKSPACE}/.bazelrc"
-          common:ci --color=no
-          build:linux --compilation_mode=fastbuild
-          EOF
 
       - name: Run action in dry-run mode with valid variants
         uses: ./warm-bazel-repository-cache
@@ -69,33 +44,13 @@ jobs:
   rejects-unknown-config:
     name: Unknown config fails dry-run validation
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: resources/bazel_fixture
     steps:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
-
-      - name: Create minimal Bazel workspace
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          cat <<'EOF' > "${GITHUB_WORKSPACE}/MODULE.bazel"
-          module(name = "repository_cache_input_check_test")
-          EOF
-
-          cat <<'EOF' > "${GITHUB_WORKSPACE}/BUILD.bazel"
-          filegroup(
-              name = "placeholder",
-              srcs = [],
-          )
-          EOF
-
-          cat <<'EOF' > "${GITHUB_WORKSPACE}/.bazelversion"
-          8.6.0
-          EOF
-
-          cat <<'EOF' > "${GITHUB_WORKSPACE}/.bazelrc"
-          common:ci --color=no
-          EOF
 
       - name: Run action in dry-run mode with unknown config
         id: validation
@@ -104,7 +59,7 @@ jobs:
         with:
           dry-run: true
           variants: |
-            --config=linux //:placeholder
+            --config=missing //:placeholder
 
       - name: Assert validation failed
         shell: bash
@@ -121,33 +76,13 @@ jobs:
   rejects-unsupported-option:
     name: Unsupported option fails dry-run validation
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: resources/bazel_fixture
     steps:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
-
-      - name: Create minimal Bazel workspace
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          cat <<'EOF' > "${GITHUB_WORKSPACE}/MODULE.bazel"
-          module(name = "repository_cache_input_check_test")
-          EOF
-
-          cat <<'EOF' > "${GITHUB_WORKSPACE}/BUILD.bazel"
-          filegroup(
-              name = "placeholder",
-              srcs = [],
-          )
-          EOF
-
-          cat <<'EOF' > "${GITHUB_WORKSPACE}/.bazelversion"
-          8.6.0
-          EOF
-
-          cat <<'EOF' > "${GITHUB_WORKSPACE}/.bazelrc"
-          common:ci --color=no
-          EOF
 
       - name: Run action in dry-run mode with unsupported option
         id: validation
@@ -173,33 +108,13 @@ jobs:
   rejects-unknown-target:
     name: Unknown target fails dry-run validation
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: resources/bazel_fixture
     steps:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
-
-      - name: Create minimal Bazel workspace
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          cat <<'EOF' > "${GITHUB_WORKSPACE}/MODULE.bazel"
-          module(name = "repository_cache_input_check_test")
-          EOF
-
-          cat <<'EOF' > "${GITHUB_WORKSPACE}/BUILD.bazel"
-          filegroup(
-              name = "placeholder",
-              srcs = [],
-          )
-          EOF
-
-          cat <<'EOF' > "${GITHUB_WORKSPACE}/.bazelversion"
-          8.6.0
-          EOF
-
-          cat <<'EOF' > "${GITHUB_WORKSPACE}/.bazelrc"
-          common:ci --color=no
-          EOF
 
       - name: Run action in dry-run mode with unknown target
         id: validation
@@ -225,37 +140,13 @@ jobs:
   warm-bazel-repository-cache:
     name: Repository cache is warmed
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: resources/bazel_fixture
     steps:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
-
-      - name: Create minimal Bazel workspace
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          cat <<'EOF' > "${GITHUB_WORKSPACE}/MODULE.bazel"
-          module(name = "repository_cache_refresh_test")
-
-          bazel_dep(name = "bazel_skylib", version = "1.7.1")
-          EOF
-
-          cat <<'EOF' > "${GITHUB_WORKSPACE}/BUILD.bazel"
-          load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
-
-          bool_flag(
-              name = "enabled",
-              build_setting_default = False,
-          )
-          EOF
-
-          cat <<'EOF' > "${GITHUB_WORKSPACE}/.bazelversion"
-          8.6.0
-          EOF
-
-          cat <<'EOF' > "${GITHUB_WORKSPACE}/.bazelrc"
-          common:ci --color=no
-          EOF
 
       - name: Configure Bazel with repository cache enabled
         uses: ./setup-bazel-cache
