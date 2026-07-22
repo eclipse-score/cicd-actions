@@ -32,7 +32,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mv resources/* "${GITHUB_WORKSPACE}/"
+          mv resources/bazel_fixture/* "${GITHUB_WORKSPACE}/"
 
       - name: Run action in dry-run mode with valid variants
         uses: ./warm-bazel-repository-cache
