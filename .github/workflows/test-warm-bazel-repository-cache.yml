@@ -79,6 +79,41 @@ jobs:
             exit 1
           fi
 
+  rejects-unknown-config-without-dry-run:
+    name: Unknown config fails validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
+
+      - name: Stage Bazel fixture in workspace root
+        shell: bash
+        run: |
+          set -euo pipefail
+          mv resources/bazel_fixture/* "${GITHUB_WORKSPACE}/"
+          mv resources/bazel_fixture/.* "${GITHUB_WORKSPACE}/"
+
+      - name: Run action without dry-run mode with unknown config
+        id: validation
+        continue-on-error: true
+        uses: ./warm-bazel-repository-cache
+        with:
+          dry-run: false
+          variants: |
+            --config=missing //:placeholder
+
+      - name: Assert validation failed
+        shell: bash
+        env:
+          OUTCOME: ${{ steps.validation.outcome }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$OUTCOME" != "failure" ]]; then
+            echo "Expected unknown config validation to fail, got: $OUTCOME"
+            exit 1
+          fi
+
   rejects-unsupported-option:
     name: Unsupported option fails dry-run validation
     runs-on: ubuntu-latest
