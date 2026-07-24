@@ -28,14 +28,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Configure inter-repo access
         id: access
         uses: ./inter-repo-access
 
       - name: Checkout probe repository without explicit token
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ${{ github.repository }}
           path: checkout-probe
@@ -84,7 +84,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Ensure token is configured
         shell: bash
@@ -105,7 +105,7 @@ jobs:
           token: ${{ secrets.SCORE_BOT_CLASSIC_PAT }}
 
       - name: Checkout probe repository without explicit token
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ${{ github.repository }}
           path: checkout-probe
