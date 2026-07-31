@@ -5,6 +5,8 @@ Reusable GitHub Actions for S-CORE CI/CD automation. For reusable workflows, see
 ## Actions
 
 - [`inter-repo-access`](./inter-repo-access/README.md): resolve one auth mode and configure git for consistent cross-repository access.
+- [`docs`](./docs.md): build documentation and upload it as an artifact.
+- [`docs-publish`](./docs.md): publish versioned documentation to GitHub Pages.
 
 ## Self Testing
 
