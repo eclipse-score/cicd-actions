@@ -11,7 +11,7 @@ steps:
       unique-cache-name: [${{ github.workflow }}-]${{ github.job }}[-<matrix-uid>]
       # Optional parameters with default values:
       main-branch: main
-      skip-cache-restore: false
+      skip-cache-restore: auto
 ```
 
 Parameters:
@@ -21,7 +21,11 @@ Parameters:
   Append a matrix identifier if the same job runs with different configurations that produce different build outputs.
   Omit `github.workflow` if you use `workflow_call` triggers and want to avoid nesting caches under the caller's workflow name.
 - main-branch: The branch that is allowed to save the cache. Override if your default branch has a different name.
-- skip-cache-restore: Whether to skip restoring the cache. Useful for rebuilding a fresh cache.
+- skip-cache-restore: Whether to skip restoring the cache. Use `true` to always rebuild a clean cache, `false` to always restore it, or `auto` to rebuild it only on a cache-writing run when `MODULE.bazel.lock` changed (the default). PR and branch builds still restore the existing cache because they do not save a replacement.
+
+Outputs:
+
+- skip-cache-restore: The resolved cache-restore decision (`true` or `false`).
 
 ## Required permissions
 

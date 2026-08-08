@@ -14,6 +14,11 @@
 name: Setup Bazel Cache
 description: Configures Bazel caching with opinionated defaults. Cache saves are restricted to the main branch.
 
+outputs:
+  skip-cache-restore:
+    description: Whether cache restore was skipped after resolving skip-cache-restore.
+    value: ${{ steps.skip-cache-restore.outputs.enabled }}
+
 inputs:
   unique-cache-name:
     description: A unique identifier for the cache, used to prevent collisions between different workflows or different caches within the same workflow (bazel disk-cache).
@@ -25,9 +30,9 @@ inputs:
     default: "main"
 
   skip-cache-restore:
-    description: Skip restoring the cache. Used for rebuilding a clean cache.
+    description: Skip restoring the cache. Set to 'auto' to skip it on cache-writing runs when MODULE.bazel.lock changed.
     required: false
-    default: "false"
+    default: "auto"
 
   # Non stable API, subject to change without deprecation. Not intended for public use.
   _bazelisk_cache:
@@ -56,13 +61,30 @@ inputs:
 runs:
   using: composite
   steps:
+    - id: cache-save-enabled
+      shell: bash
+      run: |
+        echo "enabled=${{ github.ref == format('refs/heads/{0}', inputs.main-branch) }}" >> "$GITHUB_OUTPUT"
+
+    - id: module-bazel-lock-changed
+      if: ${{ inputs.skip-cache-restore == 'auto' && steps.cache-save-enabled.outputs.enabled == 'true' }}
+      uses: tj-actions/changed-files@9426d40962ed5378910ee2e21d5f8c6fcbf2dd96 # v47.0.6
+      with:
+        files: |
+          MODULE.bazel.lock
+
+    - id: skip-cache-restore
+      shell: bash
+      run: |
+        echo "enabled=${{ inputs.skip-cache-restore == 'true' || (inputs.skip-cache-restore == 'auto' && steps.cache-save-enabled.outputs.enabled == 'true' && steps.module-bazel-lock-changed.outputs.any_changed == 'true') }}" >> "$GITHUB_OUTPUT"
+
     - uses: lurtz/setup-bazel@834129750bde586454e5b5343451dd8f3b901d55 # cache-optimized-part-2 as of 2026-07-17
       with:
         disk-cache: ${{ inputs.unique-cache-name }}
-        cache-save: ${{ github.ref == format('refs/heads/{0}', inputs.main-branch) }}
+        cache-save: ${{ steps.cache-save-enabled.outputs.enabled }}
 
         bazelisk-cache: ${{ inputs._bazelisk_cache }} # true
         repository-cache: ${{ inputs._repository_cache }} # true
         cache-optimized: ${{ inputs._cache_optimized }} # true
         external-cache: ${{ inputs._external_cache }} # false
-        skip-cache-restore: ${{ inputs.skip-cache-restore }} # false
+        skip-cache-restore: ${{ steps.skip-cache-restore.outputs.enabled }} # false
