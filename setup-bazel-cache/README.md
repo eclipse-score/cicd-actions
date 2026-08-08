@@ -6,6 +6,12 @@ Bazel builds can be slow. Caching helps — but only if the cache is set up corr
 
 ```yaml
 steps:
+  # Required for skip-cache-restore: auto on cache-writing runs.
+  - uses: actions/checkout@<sha>
+    with:
+      # Two commits are needed to compare this push with its parent.
+      fetch-depth: 2
+
   - uses: eclipse-score/cicd-actions/setup-bazel-cache@<sha>
     with:
       unique-cache-name: [${{ github.workflow }}-]${{ github.job }}[-<matrix-uid>]
@@ -34,9 +40,13 @@ The job using this action needs:
 ```yaml
 permissions:
   actions: write
+  # Required for the checkout above and auto on cache-writing runs:
+  contents: read
 ```
 
 `actions: write` is required because deleting caches — which this action does to prune stale entries — is only available through the GitHub REST API. The internal runner token used for cache save and restore does not cover deletion; `GITHUB_TOKEN` with `actions: write` is the only supported mechanism for it.
+
+`contents: read` is needed for the checkout above and, with `skip-cache-restore: auto` on a cache-writing run, for the lockfile change detection to read repository history. If your job does not check out the repository and explicitly sets `skip-cache-restore` to `true` or `false`, it is unnecessary.
 
 ## The cache only gets written from `main`
 

@@ -75,8 +75,26 @@ runs:
 
     - id: skip-cache-restore
       shell: bash
+      env:
+        SKIP_CACHE_RESTORE: ${{ inputs.skip-cache-restore }}
+        CACHE_SAVE_ENABLED: ${{ steps.cache-save-enabled.outputs.enabled }}
+        MODULE_BAZEL_LOCK_CHANGED: ${{ steps.module-bazel-lock-changed.outputs.any_modified }}
       run: |
-        echo "enabled=${{ inputs.skip-cache-restore == 'true' || (inputs.skip-cache-restore == 'auto' && steps.cache-save-enabled.outputs.enabled == 'true' && steps.module-bazel-lock-changed.outputs.any_changed == 'true') }}" >> "$GITHUB_OUTPUT"
+        case "$SKIP_CACHE_RESTORE" in
+          true|false|auto) ;;
+          *)
+            echo "Invalid skip-cache-restore value: '$SKIP_CACHE_RESTORE'. Expected true, false, or auto." >&2
+            exit 1
+            ;;
+        esac
+
+        if [[ "$SKIP_CACHE_RESTORE" == "true" || \
+          ("$SKIP_CACHE_RESTORE" == "auto" && "$CACHE_SAVE_ENABLED" == "true" && "$MODULE_BAZEL_LOCK_CHANGED" == "true") ]]; then
+          enabled=true
+        else
+          enabled=false
+        fi
+        echo "enabled=$enabled" >> "$GITHUB_OUTPUT"
 
     - uses: lurtz/setup-bazel@834129750bde586454e5b5343451dd8f3b901d55 # cache-optimized-part-2 as of 2026-07-17
       with:
