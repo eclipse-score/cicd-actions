@@ -27,6 +27,36 @@ permissions:
   contents: read
 
 jobs:
+  auto-requires-checkout:
+    name: Auto mode reports a missing checkout
+    # This path only runs when workflow_dispatch targets main, where auto mode
+    # performs lockfile change detection. It removes checkout metadata after
+    # loading the local action so auto mode cannot inspect Git history.
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out action source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+
+      - name: Remove checkout metadata
+        shell: bash
+        run: mv "$GITHUB_WORKSPACE/.git" "$RUNNER_TEMP/setup-bazel-cache-test.git"
+
+      - name: Run auto mode without Git history
+        id: setup-bazel-cache
+        continue-on-error: true
+        uses: ./setup-bazel-cache
+        with:
+          unique-cache-name: ${{ github.workflow }}-${{ github.job }}
+
+      - name: Verify auto mode failed before cache setup
+        shell: bash
+        run: |
+          if [[ "${{ steps.setup-bazel-cache.outcome }}" != "failure" ]]; then
+            echo "ERROR: setup-bazel-cache succeeded without a checkout"
+            exit 1
+          fi
+
   setup-bazel-cache:
     name: Action runs without error
     # Needs a write-capable token, which forks do not get. See the file header.
