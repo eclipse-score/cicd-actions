@@ -11,10 +11,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # *******************************************************************************
 
-# Self-test for the setup-bazel-cache action, which declares `actions: write`.
-# The job below guards itself to write-capable contexts (same-repository pull
-# requests, the merge queue, and manual workflow_dispatch); fork pull requests
-# get a read-only token and are covered by the merge queue before merge.
+# Self-test for the setup-bazel-cache action, which can save caches. Cache-writing
+# jobs run only on manual main-branch dispatches or write-capable contexts
+# (same-repository pull requests and the merge queue). The explicit-mode test
+# does not save a cache and can therefore run for fork pull requests as well.
 
 name: Test Setup Bazel Cache
 
@@ -27,13 +27,102 @@ permissions:
   contents: read
 
 jobs:
-  auto-requires-checkout:
-    name: Auto mode reports a missing checkout
-    # This path only runs when workflow_dispatch targets main, where auto mode
-    # performs lockfile change detection. It removes checkout metadata after
-    # loading the local action so auto mode cannot inspect Git history.
+  auto-refuses-dirty-checkout:
+    name: Auto mode preserves a dirty workspace
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    steps:
+      - name: Check out action source with shallow history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+
+      - name: Make history deepening fail and dirty the workspace
+        shell: bash
+        run: |
+          git remote remove origin
+          echo "must survive" > "${GITHUB_WORKSPACE}/setup-bazel-cache-test-dirty-file"
+
+      - name: Run auto mode
+        id: setup-bazel-cache
+        continue-on-error: true
+        uses: ./setup-bazel-cache
+        with:
+          unique-cache-name: ${{ github.workflow }}-${{ github.job }}
+
+      - name: Verify auto mode refused to overwrite the workspace
+        shell: bash
+        run: |
+          if [[ "${{ steps.setup-bazel-cache.outcome }}" != "failure" ]]; then
+            echo "ERROR: setup-bazel-cache succeeded despite a dirty workspace"
+            exit 1
+          fi
+          if [[ "$(cat "${GITHUB_WORKSPACE}/setup-bazel-cache-test-dirty-file")" != "must survive" ]]; then
+            echo "ERROR: setup-bazel-cache changed the dirty workspace file"
+            exit 1
+          fi
+
+  auto-reuses-or-deepens-history:
+    name: Auto mode resolves history
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - fetch-depth: 2
+            history-method: existing
+          - fetch-depth: 1
+            history-method: deepened
+          - fetch-depth: 1
+            history-method: fresh
+    steps:
+      - name: Check out action source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+        with:
+          fetch-depth: ${{ matrix.fetch-depth }}
+
+      - name: Remove checkout metadata for a fresh checkout
+        if: matrix.history-method == 'fresh'
+        shell: bash
+        run: mv "$GITHUB_WORKSPACE/.git" "$RUNNER_TEMP/setup-bazel-cache-test.git"
+
+      - name: Run auto mode
+        id: setup-bazel-cache
+        uses: ./setup-bazel-cache
+        with:
+          unique-cache-name: ${{ github.workflow }}-${{ github.job }}-${{ matrix.history-method }}
+
+      - name: Verify history was ${{ matrix.history-method }}
+        shell: bash
+        run: |
+          if [[ "${{ steps.setup-bazel-cache.outcome }}" != "success" ]]; then
+            echo "ERROR: setup-bazel-cache failed"
+            exit 1
+          fi
+          if [[ "${{ steps.setup-bazel-cache.outputs.checkout-history }}" != "${{ matrix.history-method }}" ]]; then
+            echo "ERROR: expected '${{ matrix.history-method }}', got '${{ steps.setup-bazel-cache.outputs.checkout-history }}'"
+            exit 1
+          fi
+          case "${{ steps.setup-bazel-cache.outputs.lock-file-changed }}" in
+            true|false) ;;
+            *)
+              echo "ERROR: expected a lockfile change result, got '${{ steps.setup-bazel-cache.outputs.lock-file-changed }}'"
+              exit 1
+              ;;
+          esac
+
+  modes-skip-history-check:
+    name: Non-saving modes skip history check
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - skip-cache-restore: false
+            expected-skip-cache-restore: false
+          - skip-cache-restore: true
+            expected-skip-cache-restore: true
+          - skip-cache-restore: auto
+            expected-skip-cache-restore: false
     steps:
       - name: Check out action source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
@@ -42,18 +131,31 @@ jobs:
         shell: bash
         run: mv "$GITHUB_WORKSPACE/.git" "$RUNNER_TEMP/setup-bazel-cache-test.git"
 
-      - name: Run auto mode without Git history
+      - name: Run mode without Git history
         id: setup-bazel-cache
-        continue-on-error: true
         uses: ./setup-bazel-cache
         with:
           unique-cache-name: ${{ github.workflow }}-${{ github.job }}
+          main-branch: no-cache-save-branch
+          skip-cache-restore: ${{ matrix.skip-cache-restore }}
 
-      - name: Verify auto mode failed before cache setup
+      - name: Verify history and lockfile checks were skipped
         shell: bash
         run: |
-          if [[ "${{ steps.setup-bazel-cache.outcome }}" != "failure" ]]; then
-            echo "ERROR: setup-bazel-cache succeeded without a checkout"
+          if [[ "${{ steps.setup-bazel-cache.outcome }}" != "success" ]]; then
+            echo "ERROR: setup-bazel-cache failed"
+            exit 1
+          fi
+          if [[ "${{ steps.setup-bazel-cache.outputs.checkout-history }}" != "skipped" ]]; then
+            echo "ERROR: expected skipped history check, got '${{ steps.setup-bazel-cache.outputs.checkout-history }}'"
+            exit 1
+          fi
+          if [[ "${{ steps.setup-bazel-cache.outputs.lock-file-changed }}" != "unknown" ]]; then
+            echo "ERROR: expected unknown lockfile result, got '${{ steps.setup-bazel-cache.outputs.lock-file-changed }}'"
+            exit 1
+          fi
+          if [[ "${{ steps.setup-bazel-cache.outputs.skip-cache-restore }}" != "${{ matrix.expected-skip-cache-restore }}" ]]; then
+            echo "ERROR: expected skip-cache-restore=${{ matrix.expected-skip-cache-restore }}, got '${{ steps.setup-bazel-cache.outputs.skip-cache-restore }}'"
             exit 1
           fi
 

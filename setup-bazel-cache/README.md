@@ -4,14 +4,10 @@ Bazel builds can be slow. Caching helps — but only if the cache is set up corr
 
 ## Usage
 
+### Syntax
+
 ```yaml
 steps:
-  # Required for skip-cache-restore: auto on cache-writing runs.
-  - uses: actions/checkout@<sha>
-    with:
-      # Two commits are needed to compare this push with its parent.
-      fetch-depth: 2
-
   - uses: eclipse-score/cicd-actions/setup-bazel-cache@<sha>
     with:
       unique-cache-name: [${{ github.workflow }}-]${{ github.job }}[-<matrix-uid>]
@@ -20,46 +16,57 @@ steps:
       skip-cache-restore: auto
 ```
 
-Parameters:
+Parameters explained:
 
-- unique-cache-name: A unique name for the cache. This is required to avoid conflicts between different jobs and workflows.
+- `unique-cache-name`: A unique name for the cache. This is required to avoid conflicts between different jobs and workflows.
   Using `github.workflow` and `github.job` together gives each job its own cache automatically.
   Append a matrix identifier if the same job runs with different configurations that produce different build outputs.
   Omit `github.workflow` if you use `workflow_call` triggers and want to avoid nesting caches under the caller's workflow name.
-- main-branch: The branch that is allowed to save the cache. Override if your default branch has a different name.
-- skip-cache-restore: Whether to skip restoring the cache. Use `true` to always rebuild a clean cache, `false` to always restore it, or `auto` to rebuild it only on a cache-writing run when `MODULE.bazel.lock` changed (the default). PR and branch builds still restore the existing cache because they do not save a replacement.
+- `main-branch`: The branch that is allowed to save the cache. Override if your default branch has a different name.
+- `skip-cache-restore`: Whether to skip restoring the cache. Use `true` to always rebuild a clean cache, `false` to always restore it, or `auto` to rebuild it only on a cache-writing run when `MODULE.bazel.lock` changed (the default). PR and branch builds still restore the existing cache because they do not save a replacement.
 
 Outputs:
 
-- skip-cache-restore: The resolved cache-restore decision (`true` or `false`).
+- `skip-cache-restore`: The resolved cache-restore decision (`true` or `false`).
+- `checkout-history`: How the Git history for automatic cache-restore detection was obtained: `skipped`, `existing`, `deepened`, or `fresh`. `skipped` means history was not needed.
+- `lock-file-changed`: Whether `MODULE.bazel.lock` changed: `true`, `false`, or `unknown` when the check was skipped.
 
-## Required permissions
-
-The job using this action needs:
-
-```yaml
-permissions:
-  actions: write
-  # Required for the checkout above and auto on cache-writing runs:
-  contents: read
-```
-
-`actions: write` is required because deleting caches — which this action does to prune stale entries — is only available through the GitHub REST API. The internal runner token used for cache save and restore does not cover deletion; `GITHUB_TOKEN` with `actions: write` is the only supported mechanism for it.
-
-`contents: read` is needed for the checkout above and, with `skip-cache-restore: auto` on a cache-writing run, for the lockfile change detection to read repository history. If your job does not check out the repository and explicitly sets `skip-cache-restore` to `true` or `false`, it is unnecessary.
-
-## The cache only gets written from `main`
+### Triggers
 
 PR and branch builds read from the cache but never write to it. Only builds on `main` populate it.
+
+You need to use this action on branch builds to benefit from the cache, but it will not store anything. It will only store an updated cache on push to `main`.
 
 That means: **if nothing builds on `main` after a merge, the cache stays stale.** Make sure your repo has a CI job that runs on every push to `main` — not just on pull requests.
 
 If your default branch is not named `main`, pass `main-branch: <name>` to override.
 
-## Big caches are slow caches
+### Required permissions
 
-A cache that takes 2 minutes to restore and 2 minutes to save only helps if it saves more than 4 minutes of build time. Bazel caches tend to grow large over time, so it's worth keeping them in check:
+The job using this action needs:
 
-- Give each job its own `unique-cache-name` and only build what that job actually needs. A focused cache is faster to restore and less likely to be evicted.
-- GitHub evicts caches automatically when storage runs low — smaller caches survive longer.
-- Check **Actions → Caches** in your repo occasionally. If an entry is several gigabytes, it's probably doing more harm than good.
+```yaml
+permissions:
+  # When running with `skip-cache-restore: auto` (default), the action needs to read the repository contents to check for changes to `MODULE.bazel.lock`. If you set `skip-cache-restore` to `true` or `false`, this permission is not needed.
+  contents: read
+
+  # This action can delete stale cache entries when it saves a new cache. This is optional, and you can use the prune-cache action instead. Deleting caches requires `actions: write` permission.
+  actions: write
+```
+
+## How it works
+
+`skip-cache-restore: auto` is the default. In this mode, pull request and
+branch builds always restore the cache. For builds on `main`, the action checks
+whether the cache should be rebuilt or restored by comparing
+`MODULE.bazel.lock` with the previous commit. If it has changed, the cache is
+rebuilt; otherwise, it is restored. To make that comparison, the action needs
+a checkout with history (depth 2). If no checkout is available, the action will
+perform the checkout. If insufficient depth is available, the action will fetch
+the missing history. If the checkout is available and has sufficient depth, the
+action will use it to determine whether the cache should be rebuilt or
+restored. If deepening an existing checkout fails, the action only falls back
+to a fresh checkout when the workspace is clean. It fails rather than discard
+tracked, untracked, or ignored files from a dirty workspace. In that case,
+provide a checkout with `fetch-depth: 2` or set `skip-cache-restore` to `true`
+or `false`.
