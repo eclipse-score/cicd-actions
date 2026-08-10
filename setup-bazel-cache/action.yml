@@ -125,6 +125,9 @@ runs:
             echo "::error title=Cannot check out history into a dirty workspace::Automatic cache restore detection could not deepen the existing checkout. Refusing to run actions/checkout because it would discard workspace changes. Provide a checkout with fetch-depth: 2, or set skip-cache-restore to true or false."
             exit 1
           fi
+        elif [[ -n "$(find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
+          echo "::error title=Cannot check out history into a non-empty workspace::Automatic cache restore detection needs to check out the repository, but the workspace has files and no Git metadata. Refusing to run actions/checkout because it could discard them. Run actions/checkout before this action with fetch-depth: 2 (or greater), run this action before creating workspace files, or set skip-cache-restore to true or false."
+          exit 1
         fi
 
         echo "needs-checkout=true" >> "$GITHUB_OUTPUT"

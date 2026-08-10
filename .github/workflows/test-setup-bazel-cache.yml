@@ -72,18 +72,11 @@ jobs:
             history-method: existing
           - fetch-depth: 1
             history-method: deepened
-          - fetch-depth: 1
-            history-method: fresh
     steps:
       - name: Check out action source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
         with:
           fetch-depth: ${{ matrix.fetch-depth }}
-
-      - name: Remove checkout metadata for a fresh checkout
-        if: matrix.history-method == 'fresh'
-        shell: bash
-        run: mv "$GITHUB_WORKSPACE/.git" "$RUNNER_TEMP/setup-bazel-cache-test.git"
 
       - name: Run auto mode
         id: setup-bazel-cache
@@ -109,6 +102,39 @@ jobs:
               exit 1
               ;;
           esac
+
+  auto-refuses-nonempty-workspace-without-git:
+    name: Auto mode preserves a non-Git workspace
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out action source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+
+      - name: Remove checkout metadata and add a workspace file
+        shell: bash
+        run: |
+          mv "$GITHUB_WORKSPACE/.git" "$RUNNER_TEMP/setup-bazel-cache-test.git"
+          echo "must survive" > "${GITHUB_WORKSPACE}/setup-bazel-cache-test-non-git-file"
+
+      - name: Run auto mode
+        id: setup-bazel-cache
+        continue-on-error: true
+        uses: ./setup-bazel-cache
+        with:
+          unique-cache-name: ${{ github.workflow }}-${{ github.job }}
+
+      - name: Verify auto mode refused to overwrite the workspace
+        shell: bash
+        run: |
+          if [[ "${{ steps.setup-bazel-cache.outcome }}" != "failure" ]]; then
+            echo "ERROR: setup-bazel-cache succeeded despite a non-Git workspace"
+            exit 1
+          fi
+          if [[ "$(cat "${GITHUB_WORKSPACE}/setup-bazel-cache-test-non-git-file")" != "must survive" ]]; then
+            echo "ERROR: setup-bazel-cache changed the non-Git workspace file"
+            exit 1
+          fi
 
   modes-skip-history-check:
     name: Non-saving modes skip history check

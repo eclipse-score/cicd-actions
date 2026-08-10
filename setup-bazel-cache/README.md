@@ -33,11 +33,17 @@ Outputs:
 
 ### Triggers
 
-PR and branch builds read from the cache but never write to it. Only builds on `main` populate it.
+Use this action in every job where it should speed up a Bazel build, including
+pull-request and branch jobs. Also run at least one such job on every push to
+the default branch: only that run can refresh the shared cache after a merge.
+The other jobs restore the latest cache but never replace it.
 
-You need to use this action on branch builds to benefit from the cache, but it will not store anything. It will only store an updated cache on push to `main`.
-
-That means: **if nothing builds on `main` after a merge, the cache stays stale.** Make sure your repo has a CI job that runs on every push to `main` — not just on pull requests.
+```yaml
+on:
+  pull_request:
+  push:
+    branches: [main]
+```
 
 If your default branch is not named `main`, pass `main-branch: <name>` to override.
 
@@ -56,17 +62,27 @@ permissions:
 
 ## How it works
 
-`skip-cache-restore: auto` is the default. In this mode, pull request and
-branch builds always restore the cache. For builds on `main`, the action checks
-whether the cache should be rebuilt or restored by comparing
-`MODULE.bazel.lock` with the previous commit. If it has changed, the cache is
-rebuilt; otherwise, it is restored. To make that comparison, the action needs
-a checkout with history (depth 2). If no checkout is available, the action will
-perform the checkout. If insufficient depth is available, the action will fetch
-the missing history. If the checkout is available and has sufficient depth, the
-action will use it to determine whether the cache should be rebuilt or
-restored. If deepening an existing checkout fails, the action only falls back
-to a fresh checkout when the workspace is clean. It fails rather than discard
-tracked, untracked, or ignored files from a dirty workspace. In that case,
-provide a checkout with `fetch-depth: 2` or set `skip-cache-restore` to `true`
-or `false`.
+The action configures a Bazel disk cache together with Bazelisk and repository
+caches. The cache name comes from `unique-cache-name`.
+
+Only a build running on `main` saves a cache. Pull-request and other branch
+builds can restore that cache, but cannot replace it. This keeps untrusted or
+short-lived branches from overwriting the shared cache.
+
+### Automatic restore decision
+
+`skip-cache-restore: auto` is the default. Branch builds always restore the
+cache. On `main`, the action compares `MODULE.bazel.lock` with the previous
+commit: it skips restore and rebuilds the cache when the lock file changed;
+otherwise it restores the existing cache. Set `skip-cache-restore` to `true` or
+`false` to always rebuild or always restore instead.
+
+### Git history for automatic mode
+
+The comparison on `main` needs the previous commit. The action uses an existing
+checkout when it already has depth 2, deepens a shallow checkout when possible,
+or checks out the repository itself when the workspace is empty. It never runs
+a fresh checkout into a dirty or non-Git workspace, because that could discard
+files. In that case, run `actions/checkout` with `fetch-depth: 2` before this
+action, run this action before creating workspace files, or set
+`skip-cache-restore` to `true` or `false`.
