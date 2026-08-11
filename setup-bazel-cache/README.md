@@ -63,7 +63,7 @@ permissions:
 ## How it works
 
 The action configures a Bazel disk cache together with Bazelisk and repository
-caches. The cache name comes from `unique-cache-name`.
+caches. The disk cache name comes from `unique-cache-name`.
 
 Only a build running on `main` saves a cache. Pull-request and other branch
 builds can restore that cache, but cannot replace it. This keeps untrusted or
