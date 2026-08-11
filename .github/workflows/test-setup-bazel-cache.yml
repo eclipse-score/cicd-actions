@@ -21,6 +21,8 @@ name: Test Setup Bazel Cache
 on:
   workflow_call:
   workflow_dispatch:
+  push:
+    branches: [main]
 
 permissions:
   actions: write
@@ -29,7 +31,7 @@ permissions:
 jobs:
   auto-refuses-dirty-checkout:
     name: Auto mode preserves a dirty workspace
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: Check out action source with shallow history
@@ -62,7 +64,7 @@ jobs:
 
   auto-reuses-or-deepens-history:
     name: Auto mode resolves history
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -105,7 +107,7 @@ jobs:
 
   auto-refuses-nonempty-workspace-without-git:
     name: Auto mode preserves a non-Git workspace
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: Check out action source
