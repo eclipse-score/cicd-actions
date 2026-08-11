@@ -28,19 +28,18 @@ permissions:
   contents: read
 
 jobs:
-  auto-refuses-dirty-checkout:
-    name: Auto mode preserves a dirty workspace
+  auto-refuses-unavailable-history:
+    name: Auto mode requires checkout history
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: Check out action source with shallow history
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
 
-      - name: Make history deepening fail and dirty the workspace
+      - name: Make history deepening unavailable
         shell: bash
         run: |
           git remote remove origin
-          echo "must survive" > "${GITHUB_WORKSPACE}/setup-bazel-cache-test-dirty-file"
 
       - name: Run auto mode
         id: setup-bazel-cache
@@ -49,15 +48,11 @@ jobs:
         with:
           unique-cache-name: ${{ github.workflow }}-${{ github.job }}
 
-      - name: Verify auto mode refused to overwrite the workspace
+      - name: Verify auto mode refused unavailable history
         shell: bash
         run: |
           if [[ "${{ steps.setup-bazel-cache.outcome }}" != "failure" ]]; then
-            echo "ERROR: setup-bazel-cache succeeded despite a dirty workspace"
-            exit 1
-          fi
-          if [[ "$(cat "${GITHUB_WORKSPACE}/setup-bazel-cache-test-dirty-file")" != "must survive" ]]; then
-            echo "ERROR: setup-bazel-cache changed the dirty workspace file"
+            echo "ERROR: setup-bazel-cache succeeded despite unavailable history"
             exit 1
           fi
 
@@ -104,19 +99,18 @@ jobs:
               ;;
           esac
 
-  auto-refuses-nonempty-workspace-without-git:
-    name: Auto mode preserves a non-Git workspace
+  auto-requires-git-checkout:
+    name: Auto mode requires a Git checkout
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: Check out action source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
 
-      - name: Remove checkout metadata and add a workspace file
+      - name: Remove checkout metadata
         shell: bash
         run: |
           mv "$GITHUB_WORKSPACE/.git" "$RUNNER_TEMP/setup-bazel-cache-test.git"
-          echo "must survive" > "${GITHUB_WORKSPACE}/setup-bazel-cache-test-non-git-file"
 
       - name: Run auto mode
         id: setup-bazel-cache
@@ -125,15 +119,15 @@ jobs:
         with:
           unique-cache-name: ${{ github.workflow }}-${{ github.job }}
 
-      - name: Verify auto mode refused to overwrite the workspace
+      - name: Verify auto mode refused missing checkout history
         shell: bash
         run: |
           if [[ "${{ steps.setup-bazel-cache.outcome }}" != "failure" ]]; then
-            echo "ERROR: setup-bazel-cache succeeded despite a non-Git workspace"
+            echo "ERROR: setup-bazel-cache succeeded despite missing checkout history"
             exit 1
           fi
-          if [[ "$(cat "${GITHUB_WORKSPACE}/setup-bazel-cache-test-non-git-file")" != "must survive" ]]; then
-            echo "ERROR: setup-bazel-cache changed the non-Git workspace file"
+          if [[ -e "$GITHUB_WORKSPACE/.git" ]]; then
+            echo "ERROR: setup-bazel-cache performed an implicit checkout"
             exit 1
           fi
 

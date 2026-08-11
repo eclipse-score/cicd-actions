@@ -28,7 +28,7 @@ Parameters explained:
 Outputs:
 
 - `skip-cache-restore`: The resolved cache-restore decision (`true` or `false`).
-- `checkout-history`: How the Git history for automatic cache-restore detection was obtained: `skipped`, `existing`, `deepened`, or `fresh`. `skipped` means history was not needed.
+- `checkout-history`: How the Git history for automatic cache-restore detection was obtained: `skipped`, `existing`, or `deepened`. `skipped` means history was not needed.
 - `lock-file-changed`: Whether `MODULE.bazel.lock` changed: `true`, `false`, or `unknown` when the check was skipped.
 
 ### Triggers
@@ -77,9 +77,8 @@ otherwise it restores the existing cache. Set `skip-cache-restore` to `true` or
 ### Git history for automatic mode
 
 The comparison on `main` needs the previous commit. The action uses an existing
-checkout when it already has depth 2, deepens a shallow checkout when possible,
-or checks out the repository itself when the workspace is empty. It never runs
-a fresh checkout into a dirty or non-Git workspace, because that could discard
-files. In that case, run `actions/checkout` with `fetch-depth: 2` before this
-action, run this action before creating workspace files, or set
-`skip-cache-restore` to `true` or `false`.
+checkout when it already has depth 2, or deepens a shallow checkout by one
+commit when possible. It never checks out or clones a repository itself. When
+the required history is unavailable, run `actions/checkout` with
+`fetch-depth: 2` (or greater) before this action, or set `skip-cache-restore`
+to `true` or `false`.
