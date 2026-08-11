@@ -55,9 +55,6 @@ The job using this action needs:
 permissions:
   # When running with `skip-cache-restore: auto` (default), the action needs to read the repository contents to check for changes to `MODULE.bazel.lock`. If you set `skip-cache-restore` to `true` or `false`, this permission is not needed.
   contents: read
-
-  # This action can delete stale cache entries when it saves a new cache. This is optional, and you can use the prune-cache action instead. Deleting caches requires `actions: write` permission.
-  actions: write
 ```
 
 ## How it works
