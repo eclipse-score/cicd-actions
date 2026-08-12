@@ -12,164 +12,41 @@
 # *******************************************************************************
 
 name: Setup Bazel Cache
-description: Configures Bazel caching with opinionated defaults. Cache saves are restricted to the main branch.
-
-outputs:
-  skip-cache-restore:
-    description: Whether cache restore was skipped after resolving skip-cache-restore.
-    value: ${{ steps.cache-restore.outputs.skip }}
-  checkout-history:
-    description: "How history for automatic cache-restore detection was obtained: skipped, existing, or deepened."
-    value: ${{ steps.ensure-history.outputs.method }}
-  lock-file-changed:
-    description: "Whether MODULE.bazel.lock changed: true, false, or unknown when the check was skipped."
-    value: ${{ steps.lock-file-change-result.outputs.changed }}
+description: Configures opinionated Bazel caches on Linux. Only the main branch saves caches.
 
 inputs:
   unique-cache-name:
-    description: A unique identifier for the cache, used to prevent collisions between different workflows or different caches within the same workflow (bazel disk-cache).
+    description: Unique disk-cache name for this workflow job and matrix configuration.
     required: true
-
   main-branch:
-    description: Branch name that is allowed to save the cache. Override only when the default branch is not named 'main'.
+    description: Branch allowed to save caches.
     required: false
-    default: "main"
-
+    default: main
+  skip-disk-cache-restore:
+    description: Skip the disk-cache restore. Use auto to rebuild it on main when MODULE.bazel.lock changed.
+    required: false
+    default: ""
+  skip-repository-cache-restore:
+    description: Skip the repository-cache restore.
+    required: false
+    default: ""
   skip-cache-restore:
-    description: Skip restoring the cache. Set to 'auto' to skip it on cache-writing runs when MODULE.bazel.lock changed.
+    description: "Deprecated: global restore mode. Use the cache-specific restore inputs instead."
     required: false
-    default: "auto"
+    default: ""
 
-  # Non stable API, subject to change without deprecation. Not intended for public use.
-  _bazelisk_cache:
-    description: For debugging purposes only.
-    required: false
-    default: "true"
-
-  _repository_cache:
-    # Repository cache does barely improve performance.
-    # It does cost us valuable disk and cache space.
-    # But downloading everything all the time is just too unstable.
-    description: For debugging purposes only.
-    required: false
-    default: "true"
-
-  _cache_optimized:
-    description: For debugging purposes only.
-    required: false
-    default: "true"
-
-  _external_cache:
-    description: For debugging purposes only.
-    required: false
-    default: "false"
+outputs:
+  skip-disk-cache-restore:
+    description: Resolved disk-cache restore decision.
+  skip-repository-cache-restore:
+    description: Resolved repository-cache restore decision.
+  checkout-history:
+    description: "How history for automatic detection was obtained: skipped, existing, or deepened."
+  lock-file-changed:
+    description: "Whether MODULE.bazel.lock changed: true, false, or unknown."
 
 runs:
-  using: composite
-  steps:
-    - id: cache-mode
-      name: Resolve cache mode
-      shell: bash
-      env:
-        CACHE_SAVE: ${{ github.ref == format('refs/heads/{0}', inputs.main-branch) }}
-        SKIP_CACHE_RESTORE: ${{ inputs.skip-cache-restore }}
-      run: |
-        case "$SKIP_CACHE_RESTORE" in
-          true|false|auto) ;;
-          *)
-            echo "Invalid skip-cache-restore value: '$SKIP_CACHE_RESTORE'. Expected true, false, or auto." >&2
-            exit 1
-            ;;
-        esac
-
-        echo "cache-save=$CACHE_SAVE" >> "$GITHUB_OUTPUT"
-        if [[ "$SKIP_CACHE_RESTORE" == "auto" && "$CACHE_SAVE" == "true" ]]; then
-          echo "check-lock-file=true" >> "$GITHUB_OUTPUT"
-        else
-          echo "check-lock-file=false" >> "$GITHUB_OUTPUT"
-        fi
-
-    - id: ensure-history
-      name: Ensure history for automatic cache restore
-      shell: bash
-      env:
-        CHECK_LOCK_FILE: ${{ steps.cache-mode.outputs.check-lock-file }}
-      run: |
-        if [[ "$CHECK_LOCK_FILE" != "true" ]]; then
-          echo "method=skipped" >> "$GITHUB_OUTPUT"
-          exit 0
-        fi
-
-        if git -C "$GITHUB_WORKSPACE" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-          if git -C "$GITHUB_WORKSPACE" rev-parse --verify HEAD^ >/dev/null 2>&1; then
-            echo "method=existing" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          # A normal actions/checkout uses fetch-depth: 1. Extend it to the
-          # required depth of 2 while preserving the caller's workspace and ref.
-          if GIT_TERMINAL_PROMPT=0 git -C "$GITHUB_WORKSPACE" fetch --no-tags --deepen=1 origin >/dev/null 2>&1 && \
-            git -C "$GITHUB_WORKSPACE" rev-parse --verify HEAD^ >/dev/null 2>&1; then
-            echo "method=deepened" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          echo "::error title=Cannot deepen checkout history::Automatic cache restore detection could not deepen the existing checkout. Run actions/checkout with fetch-depth: 2 (or greater), or set skip-cache-restore to true or false."
-          exit 1
-        fi
-
-        echo "::error title=Missing checkout history::Automatic cache restore detection needs a repository checkout with fetch-depth: 2 (or greater). Run actions/checkout before this action, or set skip-cache-restore to true or false."
-        exit 1
-
-    - id: changed-lock-file
-      if: ${{ steps.cache-mode.outputs.check-lock-file == 'true' }}
-      uses: tj-actions/changed-files@9426d40962ed5378910ee2e21d5f8c6fcbf2dd96 # v47.0.6
-      with:
-        files: |
-          MODULE.bazel.lock
-
-    - id: lock-file-change-result
-      name: Resolve lock-file change result
-      shell: bash
-      env:
-        CHECK_LOCK_FILE: ${{ steps.cache-mode.outputs.check-lock-file }}
-        LOCK_FILE_CHANGED: ${{ steps.changed-lock-file.outputs.any_modified }}
-      run: |
-        if [[ "$CHECK_LOCK_FILE" != "true" ]]; then
-          echo "changed=unknown" >> "$GITHUB_OUTPUT"
-          exit 0
-        fi
-
-        case "$LOCK_FILE_CHANGED" in
-          true|false) echo "changed=$LOCK_FILE_CHANGED" >> "$GITHUB_OUTPUT" ;;
-          *)
-            echo "Unexpected lock-file change result: '$LOCK_FILE_CHANGED'." >&2
-            exit 1
-            ;;
-        esac
-
-    - id: cache-restore
-      name: Resolve cache restore
-      shell: bash
-      env:
-        SKIP_CACHE_RESTORE: ${{ inputs.skip-cache-restore }}
-        LOCK_FILE_CHANGED: ${{ steps.lock-file-change-result.outputs.changed }}
-      run: |
-        if [[ "$SKIP_CACHE_RESTORE" == "true" || \
-          ("$SKIP_CACHE_RESTORE" == "auto" && "$LOCK_FILE_CHANGED" == "true") ]]; then
-          skip=true
-        else
-          skip=false
-        fi
-        echo "skip=$skip" >> "$GITHUB_OUTPUT"
-
-    - uses: lurtz/setup-bazel@834129750bde586454e5b5343451dd8f3b901d55 # cache-optimized-part-2 as of 2026-07-17
-      with:
-        disk-cache: ${{ inputs.unique-cache-name }}
-        cache-save: ${{ steps.cache-mode.outputs.cache-save }}
-
-        bazelisk-cache: ${{ inputs._bazelisk_cache }} # true
-        repository-cache: ${{ inputs._repository_cache }} # true
-        cache-optimized: ${{ inputs._cache_optimized }} # true
-        external-cache: ${{ inputs._external_cache }} # false
-        skip-cache-restore: ${{ steps.cache-restore.outputs.skip }} # false
+  using: node24
+  main: dst/main/index.js
+  post: dst/post/index.js
+  post-if: "!cancelled()"

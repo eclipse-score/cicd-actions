@@ -1,0 +1,25 @@
+{
+  "name": "setup-bazel-cache",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Opinionated Bazel cache setup GitHub Action",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "esbuild src/main.js --bundle --platform=node --format=cjs --target=node24 --legal-comments=eof --outfile=dst/main/index.js && esbuild src/post.js --bundle --platform=node --format=cjs --target=node24 --legal-comments=eof --outfile=dst/post/index.js",
+    "lint": "eslint src/ test/",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@actions/cache": "^6.0.1",
+    "@actions/core": "^3.0.0",
+    "@actions/glob": "^0.7.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "esbuild": "^0.25.0",
+    "eslint": "^9.0.0"
+  }
+}
