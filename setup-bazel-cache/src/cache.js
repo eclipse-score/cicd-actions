@@ -15,6 +15,14 @@ import * as cache from '@actions/cache';
 import * as core from '@actions/core';
 import * as glob from '@actions/glob';
 
+const RESTORE_RESULT = Object.freeze({
+  FALSE: 'false',
+  PARTIAL: 'partial',
+  SKIPPED: 'skipped',
+  TRUE: 'true',
+  UNKNOWN: 'unknown',
+});
+
 /** Return the stable cache-family prefix used for fallback restores. */
 function cachePrefix(configuration, cacheConfiguration) {
   return `${configuration.baseKey}-${cacheConfiguration.name}-`;
@@ -54,14 +62,16 @@ async function restore(configuration, cacheConfiguration) {
     );
     if (!restoredKey) {
       core.info('No matching cache found');
-      return;
+      return RESTORE_RESULT.FALSE;
     }
     core.info(`Restored ${restoredKey}`);
     if (!cacheConfiguration.optimized && restoredKey === key) {
       core.saveState(hitState(cacheConfiguration), 'true');
     }
+    return restoredKey === key ? RESTORE_RESULT.TRUE : RESTORE_RESULT.PARTIAL;
   } catch (error) {
     core.warning(`Cache restore failed: ${error.stack || error}`);
+    return RESTORE_RESULT.UNKNOWN;
   } finally {
     core.endGroup();
   }
@@ -89,4 +99,4 @@ async function save(configuration, cacheConfiguration) {
   }
 }
 
-export { cachePrefix, exactKey, restore, save };
+export { cachePrefix, exactKey, RESTORE_RESULT, restore, save };

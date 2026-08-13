@@ -16,18 +16,18 @@ description: Configures opinionated Bazel caches on Linux. Only the main branch 
 
 inputs:
   unique-cache-name:
-    description: Unique disk-cache name for this workflow job and matrix configuration.
+    description: Stable disk-cache name for this workflow job and matrix configuration (1-400 characters).
     required: true
   main-branch:
-    description: Branch allowed to save caches.
+    description: Branch allowed to save caches. Use a branch name, not a refs/heads/ ref.
     required: false
     default: main
   skip-disk-cache-restore:
-    description: Skip the disk-cache restore. Use auto to rebuild it on main when MODULE.bazel.lock changed.
+    description: Skip the disk-cache restore. Empty uses auto, which rebuilds it on main when MODULE.bazel.lock changed.
     required: false
     default: ""
   skip-repository-cache-restore:
-    description: Skip the repository-cache restore.
+    description: Skip the repository-cache restore. Empty is false.
     required: false
     default: ""
   skip-cache-restore:
@@ -36,10 +36,20 @@ inputs:
     default: ""
 
 outputs:
+  cache-save:
+    description: Whether this ref is allowed to save caches in the post action.
+  skip-bazelisk-cache-restore:
+    description: Resolved Bazelisk-cache restore decision.
   skip-disk-cache-restore:
     description: Resolved disk-cache restore decision.
   skip-repository-cache-restore:
     description: Resolved repository-cache restore decision.
+  bazelisk-cache-restored:
+    description: "Bazelisk restore result: true, false, partial, skipped, or unknown."
+  disk-cache-restored:
+    description: "Disk-cache restore result: true, false, partial, skipped, or unknown."
+  repository-cache-restored:
+    description: "Repository-cache restore result: true, false, partial, skipped, or unknown."
   checkout-history:
     description: "How history for automatic detection was obtained: skipped, existing, or deepened."
   lock-file-changed:

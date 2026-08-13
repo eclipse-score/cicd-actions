@@ -70023,6 +70023,13 @@ function hashFiles3(patterns_1) {
 }
 
 // src/cache.js
+var RESTORE_RESULT = Object.freeze({
+  FALSE: "false",
+  PARTIAL: "partial",
+  SKIPPED: "skipped",
+  TRUE: "true",
+  UNKNOWN: "unknown"
+});
 function cachePrefix(configuration, cacheConfiguration) {
   return `${configuration.baseKey}-${cacheConfiguration.name}-`;
 }
@@ -70057,7 +70064,23 @@ async function save(configuration, cacheConfiguration) {
 // src/config.js
 var import_node_os3 = __toESM(require("node:os"), 1);
 var import_node_path = __toESM(require("node:path"), 1);
+var MAX_UNIQUE_CACHE_NAME_LENGTH = 400;
+function validateUniqueCacheName(value) {
+  if (!value || value.length > MAX_UNIQUE_CACHE_NAME_LENGTH || hasControlCharacter(value)) {
+    throw new Error(
+      "unique-cache-name must contain 1 to 400 printable characters."
+    );
+  }
+  return value;
+}
+function hasControlCharacter(value) {
+  return [...value].some((character) => {
+    const codePoint = character.codePointAt(0);
+    return codePoint < 32 || codePoint === 127;
+  });
+}
 function createConfiguration(workspace, uniqueCacheName) {
+  validateUniqueCacheName(uniqueCacheName);
   const home = import_node_os3.default.homedir();
   const cacheRoot = import_node_path.default.join(home, ".cache");
   const baseKey = `setup-bazel-cache-v1-linux-${import_node_os3.default.arch()}`;

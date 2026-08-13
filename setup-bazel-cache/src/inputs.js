@@ -13,6 +13,7 @@
 
 const BOOLEAN_MODES = new Set(['true', 'false']);
 const AUTOMATIC_MODES = new Set(['true', 'false', 'auto']);
+const INVALID_BRANCH_CHARACTERS = /[\s~^:?*[\]\\]/;
 
 /** Reject unknown modes early because GitHub Action inputs are untyped strings. */
 function validateMode(name, value, allowed) {
@@ -49,6 +50,28 @@ function parseRestoreConfiguration(raw) {
   return { legacy: false, disk: resolvedDisk, repository: resolvedRepository, bazelisk: 'false' };
 }
 
+/** Ensure the configured branch can be unambiguously converted to a head ref. */
+function parseMainBranch(value) {
+  const branch = value.trim();
+  if (
+    !branch ||
+    branch.startsWith('refs/') ||
+    branch.startsWith('.') ||
+    branch.endsWith('.') ||
+    branch.endsWith('.lock') ||
+    branch.startsWith('/') ||
+    branch.endsWith('/') ||
+    branch.includes('..') ||
+    branch.includes('//') ||
+    INVALID_BRANCH_CHARACTERS.test(branch)
+  ) {
+    throw new Error(
+      `Invalid main-branch value '${value}'. Expected a Git branch name without a refs/ prefix.`,
+    );
+  }
+  return branch;
+}
+
 /** Convert one configured mode into the boolean needed by the cache layer. */
 function resolveMode(mode, cacheSave, lockFileChanged) {
   return mode === 'true' || (mode === 'auto' && cacheSave && lockFileChanged);
@@ -83,6 +106,7 @@ function needsLockFileCheck(configuration, cacheSave) {
 export {
   isCacheSaveRef,
   needsLockFileCheck,
+  parseMainBranch,
   parseRestoreConfiguration,
   resolveRestoreConfiguration,
 };

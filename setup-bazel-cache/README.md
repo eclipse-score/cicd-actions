@@ -20,7 +20,8 @@ steps:
 ```
 
 - `unique-cache-name` separates disk caches belonging to different jobs or
-  matrix configurations.
+  matrix configurations. It must be a stable, printable value up to 400
+  characters long.
 - `main-branch` selects the only branch allowed to save caches.
 - `skip-disk-cache-restore` accepts `true`, `false`, or `auto`. In the default `auto`
   mode, a main-branch run starts a fresh disk cache when `MODULE.bazel.lock`
@@ -50,8 +51,14 @@ permissions:
 
 ## Outputs
 
+- `cache-save`: whether this ref can save caches in the post action
+- `skip-bazelisk-cache-restore`: resolved Bazelisk-cache restore decision
 - `skip-disk-cache-restore`: resolved disk-cache restore decision (`true` or `false`)
 - `skip-repository-cache-restore`: resolved repository-cache restore decision
+- `bazelisk-cache-restored`, `disk-cache-restored`, and
+  `repository-cache-restored`: restore result for each cache (`true` for an
+  exact key, `partial` for a prefix match, `false` for a miss, `skipped`, or
+  `unknown` after a cache API failure)
 - `checkout-history`: `skipped`, `existing`, or `deepened`
 - `lock-file-changed`: `true`, `false`, or `unknown`
 

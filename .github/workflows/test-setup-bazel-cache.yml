@@ -310,9 +310,31 @@ jobs:
           fi
 
       - name: Run setup-bazel-cache action
+        id: setup-bazel-cache
         uses: ./setup-bazel-cache
         with:
           unique-cache-name: ${{ github.workflow }}-${{ github.job }}
+
+      - name: Verify cache decision and restore outputs
+        shell: bash
+        env:
+          CACHE_SAVE: ${{ steps.setup-bazel-cache.outputs.cache-save }}
+          EXPECTED_CACHE_SAVE: ${{ github.ref == 'refs/heads/main' }}
+          BAZELISK_RESTORE: ${{ steps.setup-bazel-cache.outputs.bazelisk-cache-restored }}
+          DISK_RESTORE: ${{ steps.setup-bazel-cache.outputs.disk-cache-restored }}
+          REPOSITORY_RESTORE: ${{ steps.setup-bazel-cache.outputs.repository-cache-restored }}
+        run: |
+          set -euo pipefail
+          [[ "$CACHE_SAVE" == "$EXPECTED_CACHE_SAVE" ]]
+          for result in "$BAZELISK_RESTORE" "$DISK_RESTORE" "$REPOSITORY_RESTORE"; do
+            case "$result" in
+              true|false|partial|skipped|unknown) ;;
+              *)
+                echo "ERROR: unexpected cache restore result: $result"
+                exit 1
+                ;;
+            esac
+          done
 
       - name: Verify ~/.bazelrc was written by action with cache configuration
         shell: bash

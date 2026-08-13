@@ -16,6 +16,7 @@ import test from 'node:test';
 import {
   isCacheSaveRef,
   needsLockFileCheck,
+  parseMainBranch,
   parseRestoreConfiguration,
   resolveRestoreConfiguration,
 } from '../src/inputs.js';
@@ -35,6 +36,13 @@ test('only the configured main branch can save caches', () => {
   assert.equal(isCacheSaveRef('refs/heads/feature', 'main'), false);
   assert.equal(isCacheSaveRef('refs/pull/123/merge', 'main'), false);
   assert.equal(isCacheSaveRef('refs/heads/trunk', 'trunk'), true);
+});
+
+test('main branch must be a branch name rather than a Git ref', () => {
+  assert.equal(parseMainBranch('release/1.0'), 'release/1.0');
+  assert.throws(() => parseMainBranch(''), /Invalid main-branch/);
+  assert.throws(() => parseMainBranch('refs/heads/main'), /without a refs\/ prefix/);
+  assert.throws(() => parseMainBranch('main branch'), /Invalid main-branch/);
 });
 
 test('new API has auto disk and restoring repository defaults', () => {

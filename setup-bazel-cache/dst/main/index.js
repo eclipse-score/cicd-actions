@@ -69491,6 +69491,13 @@ function hashFiles3(patterns_1) {
 }
 
 // src/cache.js
+var RESTORE_RESULT = Object.freeze({
+  FALSE: "false",
+  PARTIAL: "partial",
+  SKIPPED: "skipped",
+  TRUE: "true",
+  UNKNOWN: "unknown"
+});
 function cachePrefix(configuration, cacheConfiguration) {
   return `${configuration.baseKey}-${cacheConfiguration.name}-`;
 }
@@ -69517,14 +69524,16 @@ async function restore(configuration, cacheConfiguration) {
     );
     if (!restoredKey) {
       info("No matching cache found");
-      return;
+      return RESTORE_RESULT.FALSE;
     }
     info(`Restored ${restoredKey}`);
     if (!cacheConfiguration.optimized && restoredKey === key) {
       saveState(hitState(cacheConfiguration), "true");
     }
+    return restoredKey === key ? RESTORE_RESULT.TRUE : RESTORE_RESULT.PARTIAL;
   } catch (error2) {
     warning(`Cache restore failed: ${error2.stack || error2}`);
+    return RESTORE_RESULT.UNKNOWN;
   } finally {
     endGroup();
   }
@@ -69533,7 +69542,23 @@ async function restore(configuration, cacheConfiguration) {
 // src/config.js
 var import_node_os3 = __toESM(require("node:os"), 1);
 var import_node_path = __toESM(require("node:path"), 1);
+var MAX_UNIQUE_CACHE_NAME_LENGTH = 400;
+function validateUniqueCacheName(value) {
+  if (!value || value.length > MAX_UNIQUE_CACHE_NAME_LENGTH || hasControlCharacter(value)) {
+    throw new Error(
+      "unique-cache-name must contain 1 to 400 printable characters."
+    );
+  }
+  return value;
+}
+function hasControlCharacter(value) {
+  return [...value].some((character) => {
+    const codePoint = character.codePointAt(0);
+    return codePoint < 32 || codePoint === 127;
+  });
+}
 function createConfiguration(workspace, uniqueCacheName) {
+  validateUniqueCacheName(uniqueCacheName);
   const home = import_node_os3.default.homedir();
   const cacheRoot = import_node_path.default.join(home, ".cache");
   const baseKey = `setup-bazel-cache-v1-linux-${import_node_os3.default.arch()}`;
@@ -69613,6 +69638,7 @@ function lockFileChanged(workspace, git = runGit) {
 // src/inputs.js
 var BOOLEAN_MODES = /* @__PURE__ */ new Set(["true", "false"]);
 var AUTOMATIC_MODES = /* @__PURE__ */ new Set(["true", "false", "auto"]);
+var INVALID_BRANCH_CHARACTERS = /[\s~^:?*[\]\\]/;
 function validateMode(name, value, allowed) {
   if (!allowed.has(value)) {
     throw new Error(`Invalid ${name} value '${value}'. Expected ${[...allowed].join(", ")}.`);
@@ -69636,6 +69662,15 @@ function parseRestoreConfiguration(raw) {
   validateMode("skip-disk-cache-restore", resolvedDisk, AUTOMATIC_MODES);
   validateMode("skip-repository-cache-restore", resolvedRepository, BOOLEAN_MODES);
   return { legacy: false, disk: resolvedDisk, repository: resolvedRepository, bazelisk: "false" };
+}
+function parseMainBranch(value) {
+  const branch = value.trim();
+  if (!branch || branch.startsWith("refs/") || branch.startsWith(".") || branch.endsWith(".") || branch.endsWith(".lock") || branch.startsWith("/") || branch.endsWith("/") || branch.includes("..") || branch.includes("//") || INVALID_BRANCH_CHARACTERS.test(branch)) {
+    throw new Error(
+      `Invalid main-branch value '${value}'. Expected a Git branch name without a refs/ prefix.`
+    );
+  }
+  return branch;
 }
 function resolveMode(mode, cacheSave, lockFileChanged2) {
   return mode === "true" || mode === "auto" && cacheSave && lockFileChanged2;
@@ -69663,7 +69698,7 @@ async function run() {
     const workspace = process.env.GITHUB_WORKSPACE;
     if (!workspace) throw new Error("GITHUB_WORKSPACE is not set.");
     const uniqueCacheName = getInput("unique-cache-name", { required: true });
-    const mainBranch = getInput("main-branch") || "main";
+    const mainBranch = parseMainBranch(getInput("main-branch", { required: true }));
     const restoreConfiguration = parseRestoreConfiguration({
       skipCacheRestore: getInput("skip-cache-restore"),
       skipDiskCacheRestore: getInput("skip-disk-cache-restore"),
@@ -69688,22 +69723,43 @@ async function run() {
       changed = lockFileChanged(workspace);
     }
     const restoreModes = resolveRestoreConfiguration(restoreConfiguration, cacheSave, changed === true);
-    setOutput("skip-disk-cache-restore", restoreModes.skipDisk.toString());
-    setOutput("skip-repository-cache-restore", restoreModes.skipRepository.toString());
-    setOutput("checkout-history", checkoutHistory);
-    setOutput("lock-file-changed", changed === null ? "unknown" : changed.toString());
+    setDecisionOutputs({ cacheSave, checkoutHistory, changed, restoreModes });
     import_node_fs2.default.writeFileSync(configuration.bazelrc, configuration.bazelrcContents, { flag: "wx" });
     info(`Created ${configuration.bazelrc}`);
-    if (restoreModes.skipBazelisk) info("Skipping Bazelisk cache restore");
-    else await restore(configuration, configuration.caches.bazelisk);
-    if (restoreModes.skipDisk) info("Skipping Bazel disk-cache restore");
-    else await restore(configuration, configuration.caches.disk);
-    if (restoreModes.skipRepository) info("Skipping Bazel repository-cache restore");
-    else await restore(configuration, configuration.caches.repository);
+    const restoreResults = {
+      bazelisk: await restoreCache2(configuration, configuration.caches.bazelisk, restoreModes.skipBazelisk),
+      disk: await restoreCache2(configuration, configuration.caches.disk, restoreModes.skipDisk),
+      repository: await restoreCache2(
+        configuration,
+        configuration.caches.repository,
+        restoreModes.skipRepository
+      )
+    };
+    setRestoreOutputs(restoreResults);
     saveState(configuration.cacheSaveState, JSON.stringify({ cacheSave, uniqueCacheName, workspace }));
   } catch (error2) {
     setFailed(error2.stack || error2.message);
   }
+}
+async function restoreCache2(configuration, cacheConfiguration, skip) {
+  if (skip) {
+    info(`Skipping ${cacheConfiguration.name} cache restore`);
+    return RESTORE_RESULT.SKIPPED;
+  }
+  return restore(configuration, cacheConfiguration);
+}
+function setDecisionOutputs({ cacheSave, checkoutHistory, changed, restoreModes }) {
+  setOutput("cache-save", cacheSave.toString());
+  setOutput("skip-bazelisk-cache-restore", restoreModes.skipBazelisk.toString());
+  setOutput("skip-disk-cache-restore", restoreModes.skipDisk.toString());
+  setOutput("skip-repository-cache-restore", restoreModes.skipRepository.toString());
+  setOutput("checkout-history", checkoutHistory);
+  setOutput("lock-file-changed", changed === null ? "unknown" : changed.toString());
+}
+function setRestoreOutputs({ bazelisk, disk, repository }) {
+  setOutput("bazelisk-cache-restored", bazelisk);
+  setOutput("disk-cache-restored", disk);
+  setOutput("repository-cache-restored", repository);
 }
 run();
 /*! Bundled license information:

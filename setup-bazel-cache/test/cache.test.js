@@ -16,7 +16,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { cachePrefix, exactKey } from '../src/cache.js';
+import { cachePrefix, exactKey, RESTORE_RESULT } from '../src/cache.js';
 import { createConfiguration } from '../src/config.js';
 
 test('cache families have explicit names', () => {
@@ -29,6 +29,16 @@ test('cache families have explicit names', () => {
     cachePrefix(configuration, configuration.caches.repository),
     `${configuration.baseKey}-repository-`
   );
+});
+
+test('restore results use a stable output vocabulary', () => {
+  assert.deepEqual(RESTORE_RESULT, {
+    FALSE: 'false',
+    PARTIAL: 'partial',
+    SKIPPED: 'skipped',
+    TRUE: 'true',
+    UNKNOWN: 'unknown',
+  });
 });
 
 test('content-based cache keys contain a SHA-256 hash', async (context) => {

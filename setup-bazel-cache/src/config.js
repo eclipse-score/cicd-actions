@@ -14,12 +14,36 @@
 import os from 'node:os';
 import path from 'node:path';
 
+const MAX_UNIQUE_CACHE_NAME_LENGTH = 400;
+
+/** Reject malformed key components before cache APIs can fail late in the job. */
+function validateUniqueCacheName(value) {
+  if (
+    !value ||
+    value.length > MAX_UNIQUE_CACHE_NAME_LENGTH ||
+    hasControlCharacter(value)
+  ) {
+    throw new Error(
+      'unique-cache-name must contain 1 to 400 printable characters.',
+    );
+  }
+  return value;
+}
+
+function hasControlCharacter(value) {
+  return [...value].some((character) => {
+    const codePoint = character.codePointAt(0);
+    return codePoint < 32 || codePoint === 127;
+  });
+}
+
 /**
  * Build the complete Linux cache configuration in one place. Repository-cache
  * identity intentionally follows only Bzlmod metadata because this action does
  * not support legacy WORKSPACE dependency declarations.
  */
 function createConfiguration(workspace, uniqueCacheName) {
+  validateUniqueCacheName(uniqueCacheName);
   const home = os.homedir();
   const cacheRoot = path.join(home, '.cache');
   const baseKey = `setup-bazel-cache-v1-linux-${os.arch()}`;
@@ -58,4 +82,4 @@ function createConfiguration(workspace, uniqueCacheName) {
   };
 }
 
-export { createConfiguration };
+export { createConfiguration, validateUniqueCacheName };
