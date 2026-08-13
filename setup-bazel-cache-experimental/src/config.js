@@ -62,7 +62,7 @@ function createConfiguration(workspace, uniqueCacheName) {
         paths: [path.join(cacheRoot, 'bazelisk')],
       },
       disk: {
-        name: `disk-${uniqueCacheName}`,
+        name: `disk-${uniqueCacheName.length}-${uniqueCacheName}`,
         generational: true,
         files: [],
         paths: [path.join(cacheRoot, 'bazel-disk')],

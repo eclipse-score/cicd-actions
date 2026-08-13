@@ -15,9 +15,10 @@
 #
 # - A push runs in the pushed branch's cache scope. This gives same-repository
 #   feature branches automatic coverage before their pull request is merged.
-# - A merge-group run uses the temporary merge-queue ref's cache scope. This
-#   gives fork pull requests write-capable coverage after approval, without
-#   allowing their code to write to the default branch's caches.
+# - The pull-request workflow calls this workflow for merge-group runs, using
+#   the temporary merge-queue ref's cache scope. This gives fork pull requests
+#   write-capable coverage after approval, without allowing their code to write
+#   to the default branch's caches.
 # - A manual run is available only for diagnostics; normal coverage does not
 #   depend on somebody remembering to dispatch it.
 #
@@ -27,15 +28,14 @@
 #
 # Saving and restoring require separate jobs because JavaScript action post
 # steps run only when their job ends. A successful seed job creates a baseline.
-# A second job restores that baseline and adds markers. Its post step saves a
-# new additive generation. The third job proves that the disk and repository
-# additions survived.
+# A second job restores that baseline, adds markers, and fails intentionally.
+# Its post step may save because every selected cache restore was additive. The
+# third job proves that the failed job's disk and repository additions survived.
 
 name: Test Setup Bazel Cache Experimental Persistence
 
 on:
-  merge_group:
-    types: [checks_requested]
+  workflow_call:
   push:
     branches-ignore:
       - main
@@ -92,9 +92,10 @@ jobs:
             echo "$marker" > "${HOME}/.cache/${cache}/${marker}"
           done
 
-  save-additions:
-    name: Save additive cache entries
+  save-additions-after-failure:
+    name: Save additive cache entries after job failure
     needs: seed-cache
+    continue-on-error: true
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -141,9 +142,14 @@ jobs:
             echo "$marker" > "${HOME}/.cache/${cache}/${marker}"
           done
 
-  restore-additions:
-    name: Restore saved additive entries
-    needs: save-additions
+      - name: Fail after adding to restored caches
+        shell: bash
+        run: exit 1
+
+  restore-failed-job-additions:
+    name: Restore additive entries saved after failure
+    if: always()
+    needs: save-additions-after-failure
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -166,7 +172,7 @@ jobs:
           skip-disk-cache-restore: "false"
           skip-repository-cache-restore: "false"
 
-      - name: Verify saved additions
+      - name: Verify failed-job additions
         shell: bash
         env:
           BAZELISK_RESTORE: ${{ steps.restore.outputs.bazelisk-cache-restored }}

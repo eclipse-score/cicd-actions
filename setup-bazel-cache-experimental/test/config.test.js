@@ -23,7 +23,7 @@ test('configuration uses readable Linux cache names and owns the bazelrc', () =>
     configuration.baseKey,
     `setup-bazel-cache-experimental-v1-linux-${os.arch()}`,
   );
-  assert.equal(configuration.caches.disk.name, 'disk-build-debug');
+  assert.equal(configuration.caches.disk.name, 'disk-11-build-debug');
   assert.equal(configuration.bazelrc, path.join(os.homedir(), '.bazelrc'));
   assert.match(configuration.bazelrcContents, /^build --disk_cache=.*bazel-disk$/m);
   assert.match(configuration.bazelrcContents, /^common --repository_cache=.*bazel-repo$/m);

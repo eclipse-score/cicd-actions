@@ -158,7 +158,7 @@ action's post step only after its job has finished:
 1. A successful job seeds a baseline for all three caches.
 2. A second job restores that baseline, verifies
    `failed-job-cache-save: "true"`, and adds disk and repository markers. Its
-   post step saves those additions.
+   build then fails intentionally, and its post step saves those additions.
 3. A final job restores the next generation and verifies the added markers.
 
 Unit tests separately verify that misses, skipped restores, and cache API

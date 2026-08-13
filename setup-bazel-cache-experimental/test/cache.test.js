@@ -29,12 +29,23 @@ test('cache families have explicit names', () => {
   const configuration = createConfiguration('/workspace', 'linux-debug');
   assert.equal(
     cachePrefix(configuration, configuration.caches.disk),
-    `${configuration.baseKey}-disk-linux-debug-`
+    `${configuration.baseKey}-disk-11-linux-debug-`
   );
   assert.equal(
     cachePrefix(configuration, configuration.caches.repository),
     `${configuration.baseKey}-repository-`
   );
+});
+
+test('disk cache family names cannot prefix-match another configuration', async (context) => {
+  context.mock.method(Date, 'now', () => 1700000000000);
+
+  const build = createConfiguration('/workspace', 'build');
+  const buildRelease = createConfiguration('/workspace', 'build-release');
+  const buildPlan = await keyPlan(build, build.caches.disk);
+  const buildReleasePlan = await keyPlan(buildRelease, buildRelease.caches.disk);
+
+  assert.equal(buildReleasePlan.key.startsWith(buildPlan.restoreKeys[0]), false);
 });
 
 test('restore results use a stable output vocabulary', () => {
