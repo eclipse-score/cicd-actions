@@ -44,10 +44,11 @@ steps:
   the single publisher for the shared repository snapshot. It affects saving
   only; the job can still restore the shared cache.
 
-The action creates `~/.bazelrc` with `--disk_cache` and `--repository_cache`.
-It deliberately fails before inspecting Git history or restoring caches if
-that file already exists, because merging independently owned user-level Bazel
-configuration is ambiguous.
+The action creates a temporary bazelrc with `--disk_cache` and
+`--repository_cache`, then appends it to the `BAZELRC` environment variable.
+Existing workspace, home, and environment-provided bazelrc files are preserved;
+the temporary file is read last so the action's cache locations take
+precedence.
 
 The action supports Linux runners only.
 
@@ -60,10 +61,12 @@ that pull-request authors must not be able to read.
 
 ## Automatic mode and checkout history
 
-On the main branch, `skip-disk-cache-restore: auto` compares `MODULE.bazel.lock` with
-the previous commit. An ordinary shallow checkout is deepened by one commit
-when necessary. If that is impossible, use `actions/checkout` with
-`fetch-depth: 2`, or set `skip-disk-cache-restore` explicitly.
+On the main branch, `skip-disk-cache-restore: auto` compares `MODULE.bazel.lock`
+with the commit preceding the current push, covering every commit in a
+multi-commit push. For events without a push base, it compares the previous
+commit. An ordinary shallow checkout fetches the comparison commit when
+necessary. If that is impossible, use `actions/checkout` with
+`fetch-depth: 0`, or set `skip-disk-cache-restore` explicitly.
 
 The job needs `contents: read` for automatic history deepening:
 
@@ -81,22 +84,24 @@ permissions:
 - `repository-cache-save`: whether this run will publish the shared repository
   cache (`true` only on the configured default branch when
   `save-repository-cache` is enabled)
-- `failed-job-cache-save`: whether every cache selected for saving was restored
-  exactly or by prefix, allowing an additive save if a later step fails
+- `failed-job-cache-save`: whether Bazelisk was restored exactly and every
+  generational cache selected for saving was restored exactly or by prefix,
+  allowing an additive save if a later step fails
 - `bazelisk-cache-restored`, `disk-cache-restored`, and
   `repository-cache-restored`: restore result for each cache (`true` for an
   exact key, `partial` for a prefix match, `false` for a miss, `skipped`, or
   `unknown` after a cache API failure)
-- `checkout-history`: `skipped`, `existing`, or `deepened`
+- `checkout-history`: `skipped`, `existing`, `deepened`, or `fetched`
 - `lock-file-changed`: `true`, `false`, or `unknown`
 
 ## Cache lifecycle
 
 Cache keys use the prefix
 `setup-bazel-cache-experimental-v1-linux-<architecture>`.
-Bazelisk uses an exact `.bazelversion` content hash. The repository cache uses
-one rolling timestamped generation family for the repository and runner
-architecture. Bazel repository-cache entries are content-addressed, so
+Bazelisk uses an exact `.bazelversion` content hash and does not restore
+snapshots created for another version. The repository cache uses one rolling
+timestamped generation family for the repository and runner architecture.
+Bazel repository-cache entries are content-addressed, so
 `MODULE.bazel.lock` and individual Bazel configs are not correctness boundaries
 for this cache. Builds, fetch jobs, platforms, and configs all restore and
 augment the same snapshot. Disk caches use timestamped generations and include
@@ -104,12 +109,15 @@ augment the same snapshot. Disk caches use timestamped generations and include
 cache outage does not fail the build.
 
 Successful jobs may publish new cache baselines. A failed job publishes only
-when every cache selected for saving was restored with result `true` or
-`partial`. This proves that its snapshot extends an existing cache. A restore
-result of `false`, `skipped`, or `unknown` suppresses the entire failed-job save
-because the incomplete snapshot would likely be worse than the existing
-generation. When `save-repository-cache` is disabled, the repository restore
-does not participate in this decision. Cancelled jobs never save.
+when Bazelisk was restored with an exact `true` result and every generational
+cache selected for saving was restored with result `true` or `partial`. Requiring
+an exact Bazelisk hit prevents a failed job from publishing an old binary under
+a new `.bazelversion` content key. The generational-cache results prove that
+their snapshots extend existing caches. A restore result of `false`, `skipped`,
+or `unknown` suppresses the entire failed-job save because the incomplete
+snapshot would likely be worse than the existing generation. When
+`save-repository-cache` is disabled, the repository restore does not participate
+in this decision. Cancelled jobs never save.
 
 Each disk-cache generation includes the previously restored cache plus new
 entries. Use the companion [`prune-cache`](../prune-cache/README.md) action to
@@ -157,8 +165,10 @@ action's post step only after its job has finished:
 
 1. A successful job seeds a baseline for all three caches.
 2. A second job restores that baseline, verifies
-   `failed-job-cache-save: "true"`, and adds disk and repository markers. Its
-   build then fails intentionally, and its post step saves those additions.
+   `failed-job-cache-save: "true"`, and adds disk and repository markers.
+   Automatic runs complete successfully. A manual run can enable
+   `exercise-failed-job` to fail intentionally and exercise the
+   failure-sensitive post condition.
 3. A final job restores the next generation and verifies the added markers.
 
 Unit tests separately verify that misses, skipped restores, and cache API

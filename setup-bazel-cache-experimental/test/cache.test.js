@@ -19,7 +19,6 @@ import test from 'node:test';
 import {
   cachePrefix,
   canSaveAfterFailure,
-  exactKey,
   keyPlan,
   RESTORE_RESULT,
 } from '../src/cache.js';
@@ -70,12 +69,16 @@ test('failed jobs may save only when every selected cache restore was additive',
   assert.equal(canSaveAfterFailure({ ...additive, disk: RESTORE_RESULT.SKIPPED }, true), false);
   assert.equal(canSaveAfterFailure({ ...additive, disk: RESTORE_RESULT.UNKNOWN }, true), false);
   assert.equal(
+    canSaveAfterFailure({ ...additive, bazelisk: RESTORE_RESULT.PARTIAL }, true),
+    false,
+  );
+  assert.equal(
     canSaveAfterFailure({ ...additive, repository: RESTORE_RESULT.FALSE }, false),
     true,
   );
 });
 
-test('content-based cache keys contain a SHA-256 hash', async (context) => {
+test('content-based cache keys do not restore snapshots for other content', async (context) => {
   const workspace = fs.mkdtempSync(
     path.join(os.tmpdir(), 'setup-bazel-cache-experimental-test-'),
   );
@@ -83,8 +86,12 @@ test('content-based cache keys contain a SHA-256 hash', async (context) => {
   fs.writeFileSync(path.join(workspace, '.bazelversion'), '8.6.0\n');
 
   const configuration = createConfiguration(workspace, 'test');
-  const key = await exactKey(configuration, configuration.caches.bazelisk);
-  assert.match(key, new RegExp(`^${configuration.baseKey}-bazelisk-[a-f0-9]{64}$`));
+  const plan = await keyPlan(configuration, configuration.caches.bazelisk);
+  assert.match(
+    plan.key,
+    new RegExp(`^${configuration.baseKey}-bazelisk-[a-f0-9]{64}$`),
+  );
+  assert.deepEqual(plan.restoreKeys, []);
 });
 
 test('repository cache uses one rolling generation family for all configurations', async (context) => {

@@ -46,7 +46,7 @@ outputs:
   repository-cache-save:
     description: Whether this run will save the shared repository cache.
   failed-job-cache-save:
-    description: Whether all selected caches were restored and may be saved after a later step fails.
+    description: Whether Bazelisk was restored exactly and all generational caches may be saved after a later step fails.
   bazelisk-cache-restored:
     description: "Bazelisk restore result: true, false, partial, skipped, or unknown."
   disk-cache-restored:
@@ -54,7 +54,7 @@ outputs:
   repository-cache-restored:
     description: "Repository-cache restore result: true, false, partial, skipped, or unknown."
   checkout-history:
-    description: "How history for automatic detection was obtained: skipped, existing, or deepened."
+    description: "How history for automatic detection was obtained: skipped, existing, deepened, or fetched."
   lock-file-changed:
     description: "Whether MODULE.bazel.lock changed: true, false, or unknown."
 

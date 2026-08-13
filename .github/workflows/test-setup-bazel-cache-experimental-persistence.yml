@@ -28,14 +28,20 @@
 #
 # Saving and restoring require separate jobs because JavaScript action post
 # steps run only when their job ends. A successful seed job creates a baseline.
-# A second job restores that baseline, adds markers, and fails intentionally.
-# Its post step may save because every selected cache restore was additive. The
-# third job proves that the failed job's disk and repository additions survived.
+# A second job restores that baseline and adds markers. Automatic runs keep the
+# job green; manual diagnostics can opt into a real failure to exercise the
+# failure-sensitive post condition. The third job proves that the disk and
+# repository additions survived.
 
 name: Test Setup Bazel Cache Experimental Persistence
 
 on:
   workflow_call:
+    inputs:
+      exercise-failed-job:
+        description: Intentionally fail the cache-writing job.
+        type: boolean
+        default: false
   push:
     branches-ignore:
       - main
@@ -43,6 +49,11 @@ on:
       - .github/workflows/test-setup-bazel-cache-experimental-persistence.yml
       - setup-bazel-cache-experimental/**
   workflow_dispatch:
+    inputs:
+      exercise-failed-job:
+        description: Intentionally fail the cache-writing job and publish an expected red check.
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -93,9 +104,9 @@ jobs:
           done
 
   save-additions-after-failure:
-    name: Save additive cache entries after job failure
+    name: Save additive cache entries
     needs: seed-cache
-    continue-on-error: true
+    continue-on-error: ${{ inputs.exercise-failed-job }}
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -143,11 +154,12 @@ jobs:
           done
 
       - name: Fail after adding to restored caches
+        if: inputs.exercise-failed-job
         shell: bash
         run: exit 1
 
   restore-failed-job-additions:
-    name: Restore additive entries saved after failure
+    name: Restore saved additive entries
     if: always()
     needs: save-additions-after-failure
     runs-on: ubuntu-latest

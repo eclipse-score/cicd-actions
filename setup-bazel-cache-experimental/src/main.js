@@ -15,7 +15,11 @@ import * as core from '@actions/core';
 import fs from 'node:fs';
 import { canSaveAfterFailure, RESTORE_RESULT, restore } from './cache.js';
 import { createConfiguration } from './config.js';
-import { ensureComparisonHistory, lockFileChanged } from './git.js';
+import {
+  ensureComparisonHistory,
+  lockFileChanged,
+  resolveComparisonBase,
+} from './git.js';
 import {
   isCacheSaveRef,
   needsLockFileCheck,
@@ -52,20 +56,15 @@ async function run() {
     });
 
     const configuration = createConfiguration(workspace, uniqueCacheName);
-    if (fs.existsSync(configuration.bazelrc)) {
-      throw new Error(
-        `${configuration.bazelrc} already exists. ` +
-        'setup-bazel-cache-experimental requires exclusive ownership of this file.'
-      );
-    }
 
     const cacheSave = isCacheSaveRef(process.env.GITHUB_REF, mainBranch);
     const repositoryCacheSave = cacheSave && repositoryCacheSaveRequested;
     let checkoutHistory = 'skipped';
     let changed = null;
     if (needsLockFileCheck(restoreConfiguration, cacheSave)) {
-      checkoutHistory = ensureComparisonHistory(workspace);
-      changed = lockFileChanged(workspace);
+      const comparisonBase = resolveComparisonBase();
+      checkoutHistory = ensureComparisonHistory(workspace, comparisonBase);
+      changed = lockFileChanged(workspace, comparisonBase);
     }
     const restoreModes = resolveRestoreConfiguration(restoreConfiguration, cacheSave, changed === true);
 
@@ -79,6 +78,8 @@ async function run() {
 
     fs.writeFileSync(configuration.bazelrc, configuration.bazelrcContents, { flag: 'wx' });
     core.info(`Created ${configuration.bazelrc}`);
+    const bazelrcFiles = [process.env.BAZELRC, configuration.bazelrc].filter(Boolean);
+    core.exportVariable('BAZELRC', bazelrcFiles.join(','));
 
     const restoreResults = {
       bazelisk: await restoreCache(configuration, configuration.caches.bazelisk, restoreModes.skipBazelisk),

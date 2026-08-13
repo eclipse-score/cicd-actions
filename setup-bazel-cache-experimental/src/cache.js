@@ -30,7 +30,9 @@ function cachePrefix(configuration, cacheConfiguration) {
 
 /** A failed job may publish only snapshots that extend successfully restored caches. */
 function canSaveAfterFailure(restoreResults, repositoryCacheSave) {
-  const selected = [restoreResults.bazelisk, restoreResults.disk];
+  if (restoreResults.bazelisk !== RESTORE_RESULT.TRUE) return false;
+
+  const selected = [restoreResults.disk];
   if (repositoryCacheSave) selected.push(restoreResults.repository);
   return selected.every(
     (result) => result === RESTORE_RESULT.TRUE || result === RESTORE_RESULT.PARTIAL,
@@ -51,7 +53,7 @@ async function keyPlan(configuration, cacheConfiguration) {
   }
 
   if (!cacheConfiguration.generational) {
-    return { key: contentPrefix, restoreKeys: [prefix] };
+    return { key: contentPrefix, restoreKeys: [] };
   }
 
   const generationPrefix = `${contentPrefix}${contentPrefix === prefix ? '' : '-'}`;

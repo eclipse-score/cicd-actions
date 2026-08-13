@@ -70046,7 +70046,7 @@ async function keyPlan(configuration, cacheConfiguration) {
     contentPrefix = `${prefix2}${hash}`;
   }
   if (!cacheConfiguration.generational) {
-    return { key: contentPrefix, restoreKeys: [prefix2] };
+    return { key: contentPrefix, restoreKeys: [] };
   }
   const generationPrefix = `${contentPrefix}${contentPrefix === prefix2 ? "" : "-"}`;
   return {
@@ -70099,10 +70099,11 @@ function createConfiguration(workspace, uniqueCacheName) {
   validateUniqueCacheName(uniqueCacheName);
   const home = import_node_os3.default.homedir();
   const cacheRoot = import_node_path.default.join(home, ".cache");
+  const runnerTemp = process.env.RUNNER_TEMP || import_node_os3.default.tmpdir();
   const baseKey = `setup-bazel-cache-experimental-v1-linux-${import_node_os3.default.arch()}`;
   return {
     additiveCacheSaveEnvironment: "SETUP_BAZEL_CACHE_EXPERIMENTAL_ADDITIVE_SAVE",
-    bazelrc: import_node_path.default.join(home, ".bazelrc"),
+    bazelrc: import_node_path.default.join(runnerTemp, "setup-bazel-cache-experimental.bazelrc"),
     bazelrcContents: [
       `build --disk_cache=${import_node_path.default.join(cacheRoot, "bazel-disk")}`,
       `common --repository_cache=${import_node_path.default.join(cacheRoot, "bazel-repo")}`,

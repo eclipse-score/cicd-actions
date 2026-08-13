@@ -29449,7 +29449,7 @@ function saveState(name, value) {
 }
 
 // src/main.js
-var import_node_fs2 = __toESM(require("node:fs"), 1);
+var import_node_fs3 = __toESM(require("node:fs"), 1);
 
 // node_modules/@actions/cache/lib/cache.js
 var path6 = __toESM(require("path"), 1);
@@ -69512,7 +69512,8 @@ function cachePrefix(configuration, cacheConfiguration) {
   return `${configuration.baseKey}-${cacheConfiguration.name}-`;
 }
 function canSaveAfterFailure(restoreResults, repositoryCacheSave) {
-  const selected = [restoreResults.bazelisk, restoreResults.disk];
+  if (restoreResults.bazelisk !== RESTORE_RESULT.TRUE) return false;
+  const selected = [restoreResults.disk];
   if (repositoryCacheSave) selected.push(restoreResults.repository);
   return selected.every(
     (result) => result === RESTORE_RESULT.TRUE || result === RESTORE_RESULT.PARTIAL
@@ -69530,7 +69531,7 @@ async function keyPlan(configuration, cacheConfiguration) {
     contentPrefix = `${prefix2}${hash}`;
   }
   if (!cacheConfiguration.generational) {
-    return { key: contentPrefix, restoreKeys: [prefix2] };
+    return { key: contentPrefix, restoreKeys: [] };
   }
   const generationPrefix = `${contentPrefix}${contentPrefix === prefix2 ? "" : "-"}`;
   return {
@@ -69590,10 +69591,11 @@ function createConfiguration(workspace, uniqueCacheName) {
   validateUniqueCacheName(uniqueCacheName);
   const home = import_node_os3.default.homedir();
   const cacheRoot = import_node_path.default.join(home, ".cache");
+  const runnerTemp = process.env.RUNNER_TEMP || import_node_os3.default.tmpdir();
   const baseKey = `setup-bazel-cache-experimental-v1-linux-${import_node_os3.default.arch()}`;
   return {
     additiveCacheSaveEnvironment: "SETUP_BAZEL_CACHE_EXPERIMENTAL_ADDITIVE_SAVE",
-    bazelrc: import_node_path.default.join(home, ".bazelrc"),
+    bazelrc: import_node_path.default.join(runnerTemp, "setup-bazel-cache-experimental.bazelrc"),
     bazelrcContents: [
       `build --disk_cache=${import_node_path.default.join(cacheRoot, "bazel-disk")}`,
       `common --repository_cache=${import_node_path.default.join(cacheRoot, "bazel-repo")}`,
@@ -69626,6 +69628,10 @@ function createConfiguration(workspace, uniqueCacheName) {
 
 // src/git.js
 var childProcess = __toESM(require("node:child_process"), 1);
+var import_node_fs2 = __toESM(require("node:fs"), 1);
+var FALLBACK_COMPARISON_BASE = "HEAD^";
+var NULL_SHA = "0".repeat(40);
+var SHA_PATTERN = /^[0-9a-f]{40}$/;
 function runGit(workspace, args, options = {}) {
   return childProcess.spawnSync("git", ["-C", workspace, ...args], {
     encoding: "utf8",
@@ -69636,28 +69642,51 @@ function runGit(workspace, args, options = {}) {
 function succeeds(result) {
   return result.status === 0;
 }
-function ensureComparisonHistory(workspace, git = runGit) {
+function resolveComparisonBase(eventName = process.env.GITHUB_EVENT_NAME, eventPath = process.env.GITHUB_EVENT_PATH, readFile = import_node_fs2.default.readFileSync) {
+  if (eventName !== "push") return FALLBACK_COMPARISON_BASE;
+  if (!eventPath) {
+    throw new Error("GITHUB_EVENT_PATH is not set for this push event.");
+  }
+  const event = JSON.parse(readFile(eventPath, "utf8"));
+  if (typeof event.before !== "string" || !SHA_PATTERN.test(event.before)) {
+    throw new Error("The workflow event's 'before' value is not a valid Git commit SHA.");
+  }
+  return event.before === NULL_SHA ? FALLBACK_COMPARISON_BASE : event.before;
+}
+function ensureComparisonHistory(workspace, comparisonBase, git = runGit) {
   if (!succeeds(git(workspace, ["rev-parse", "--is-inside-work-tree"], { quiet: true }))) {
     throw new Error(
       "Automatic disk-cache restore detection needs a repository checkout with at least two commits."
     );
   }
-  if (succeeds(git(workspace, ["rev-parse", "--verify", "HEAD^"], { quiet: true }))) {
+  if (succeeds(git(
+    workspace,
+    ["rev-parse", "--verify", `${comparisonBase}^{commit}`],
+    { quiet: true }
+  ))) {
     return "existing";
   }
-  const fetch = git(workspace, ["fetch", "--no-tags", "--deepen=1", "origin"], {
+  const fetchArguments = comparisonBase === FALLBACK_COMPARISON_BASE ? ["fetch", "--no-tags", "--deepen=1", "origin"] : ["fetch", "--no-tags", "--depth=1", "origin", comparisonBase];
+  const fetch = git(workspace, fetchArguments, {
     quiet: true,
     env: { GIT_TERMINAL_PROMPT: "0" }
   });
-  if (succeeds(fetch) && succeeds(git(workspace, ["rev-parse", "--verify", "HEAD^"], { quiet: true }))) {
-    return "deepened";
+  if (succeeds(fetch) && succeeds(git(
+    workspace,
+    ["rev-parse", "--verify", `${comparisonBase}^{commit}`],
+    { quiet: true }
+  ))) {
+    return comparisonBase === FALLBACK_COMPARISON_BASE ? "deepened" : "fetched";
   }
   throw new Error(
-    "Automatic disk-cache restore detection could not obtain the previous commit. Run actions/checkout with fetch-depth: 2 or set 'skip-disk-cache-restore' explicitly."
+    `Automatic disk-cache restore detection could not obtain ${comparisonBase}. Run actions/checkout with fetch-depth: 0 or set 'skip-disk-cache-restore' explicitly.`
   );
 }
-function lockFileChanged(workspace, git = runGit) {
-  const result = git(workspace, ["diff", "--quiet", "HEAD^", "HEAD", "--", "MODULE.bazel.lock"]);
+function lockFileChanged(workspace, comparisonBase, git = runGit) {
+  const result = git(
+    workspace,
+    ["diff", "--quiet", comparisonBase, "HEAD", "--", "MODULE.bazel.lock"]
+  );
   if (result.status === 0) return false;
   if (result.status === 1) return true;
   throw new Error(`Could not compare MODULE.bazel.lock: ${result.stderr || "git diff failed"}`);
@@ -69732,18 +69761,14 @@ async function run() {
       skipRepositoryCacheRestore: getInput("skip-repository-cache-restore")
     });
     const configuration = createConfiguration(workspace, uniqueCacheName);
-    if (import_node_fs2.default.existsSync(configuration.bazelrc)) {
-      throw new Error(
-        `${configuration.bazelrc} already exists. setup-bazel-cache-experimental requires exclusive ownership of this file.`
-      );
-    }
     const cacheSave = isCacheSaveRef(process.env.GITHUB_REF, mainBranch);
     const repositoryCacheSave = cacheSave && repositoryCacheSaveRequested;
     let checkoutHistory = "skipped";
     let changed = null;
     if (needsLockFileCheck(restoreConfiguration, cacheSave)) {
-      checkoutHistory = ensureComparisonHistory(workspace);
-      changed = lockFileChanged(workspace);
+      const comparisonBase = resolveComparisonBase();
+      checkoutHistory = ensureComparisonHistory(workspace, comparisonBase);
+      changed = lockFileChanged(workspace, comparisonBase);
     }
     const restoreModes = resolveRestoreConfiguration(restoreConfiguration, cacheSave, changed === true);
     setDecisionOutputs({
@@ -69753,8 +69778,10 @@ async function run() {
       repositoryCacheSave,
       restoreModes
     });
-    import_node_fs2.default.writeFileSync(configuration.bazelrc, configuration.bazelrcContents, { flag: "wx" });
+    import_node_fs3.default.writeFileSync(configuration.bazelrc, configuration.bazelrcContents, { flag: "wx" });
     info(`Created ${configuration.bazelrc}`);
+    const bazelrcFiles = [process.env.BAZELRC, configuration.bazelrc].filter(Boolean);
+    exportVariable("BAZELRC", bazelrcFiles.join(","));
     const restoreResults = {
       bazelisk: await restoreCache2(configuration, configuration.caches.bazelisk, restoreModes.skipBazelisk),
       disk: await restoreCache2(configuration, configuration.caches.disk, restoreModes.skipDisk),

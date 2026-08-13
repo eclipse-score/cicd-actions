@@ -65,7 +65,7 @@ jobs:
           - fetch-depth: 2
             history-method: existing
           - fetch-depth: 1
-            history-method: deepened
+            history-method: fetched
     steps:
       - name: Check out action source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
@@ -193,8 +193,8 @@ jobs:
             exit 1
           fi
 
-  refuses-existing-bazelrc:
-    name: Existing user bazelrc is refused without modification
+  preserves-existing-bazelrc:
+    name: Existing user bazelrc is preserved
     runs-on: ubuntu-latest
     steps:
       - name: Check out action source
@@ -202,21 +202,28 @@ jobs:
 
       - name: Create existing user bazelrc
         shell: bash
-        run: echo 'existing-marker' > "${HOME}/.bazelrc"
+        run: |
+          echo 'existing-home-marker' > "${HOME}/.bazelrc"
+          echo 'existing-environment-marker' > "${RUNNER_TEMP}/existing.bazelrc"
+          echo "BAZELRC=${RUNNER_TEMP}/existing.bazelrc" >> "$GITHUB_ENV"
 
       - name: Run with an existing user bazelrc
         id: setup-bazel-cache
-        continue-on-error: true
         uses: ./setup-bazel-cache-experimental
         with:
           unique-cache-name: ${{ github.workflow }}-${{ github.job }}
 
-      - name: Verify early failure preserved the file
+      - name: Verify the user and generated bazelrc files
         shell: bash
         run: |
           set -euo pipefail
-          [[ "${{ steps.setup-bazel-cache.outcome }}" == "failure" ]]
-          [[ "$(cat "${HOME}/.bazelrc")" == "existing-marker" ]]
+          [[ "${{ steps.setup-bazel-cache.outcome }}" == "success" ]]
+          [[ "$(cat "${HOME}/.bazelrc")" == "existing-home-marker" ]]
+          [[ "$(cat "${RUNNER_TEMP}/existing.bazelrc")" == "existing-environment-marker" ]]
+          generated_bazelrc="${RUNNER_TEMP}/setup-bazel-cache-experimental.bazelrc"
+          [[ "$BAZELRC" == "${RUNNER_TEMP}/existing.bazelrc,${generated_bazelrc}" ]]
+          grep -Fq -- "--disk_cache=" "$generated_bazelrc"
+          grep -Fq -- "--repository_cache=" "$generated_bazelrc"
 
   setup-bazel-cache:
     name: Action runs without error
@@ -238,15 +245,6 @@ jobs:
           set -euo pipefail
           echo 'module(name = "cache_test")' > "${GITHUB_WORKSPACE}/MODULE.bazel"
           echo '8.6.0' > "${GITHUB_WORKSPACE}/.bazelversion"
-
-      - name: Verify ~/.bazelrc does not exist before action
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ -f "${HOME}/.bazelrc" ]]; then
-            echo "ERROR: ~/.bazelrc already exists before setup-bazel-cache ran"
-            exit 1
-          fi
 
       - name: Run setup-bazel-cache-experimental action
         id: setup-bazel-cache
@@ -277,28 +275,28 @@ jobs:
             esac
           done
 
-      - name: Verify ~/.bazelrc was written by action with cache configuration
+      - name: Verify temporary bazelrc contains cache configuration
         shell: bash
         run: |
           set -euo pipefail
 
-          if [[ ! -f "${HOME}/.bazelrc" ]]; then
-            echo "ERROR: ~/.bazelrc was not created by setup-bazel-cache"
+          if [[ ! -f "$BAZELRC" ]]; then
+            echo "ERROR: temporary bazelrc was not created by setup-bazel-cache"
             exit 1
           fi
 
-          if ! grep -Fq -- "--disk_cache=" "${HOME}/.bazelrc"; then
-            echo "ERROR: ~/.bazelrc does not contain disk_cache configuration"
+          if ! grep -Fq -- "--disk_cache=" "$BAZELRC"; then
+            echo "ERROR: temporary bazelrc does not contain disk_cache configuration"
             exit 1
           fi
 
-          if ! grep -Fq -- "--repository_cache=" "${HOME}/.bazelrc"; then
-            echo "ERROR: ~/.bazelrc does not contain repository_cache configuration"
+          if ! grep -Fq -- "--repository_cache=" "$BAZELRC"; then
+            echo "ERROR: temporary bazelrc does not contain repository_cache configuration"
             exit 1
           fi
 
-          echo "~/.bazelrc contents:"
-          cat "${HOME}/.bazelrc"
+          echo "Temporary bazelrc contents:"
+          cat "$BAZELRC"
 
       - name: Run bazel info to verify workspace and cache configuration are valid
         shell: bash
