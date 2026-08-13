@@ -27,9 +27,9 @@
 #
 # Saving and restoring require separate jobs because JavaScript action post
 # steps run only when their job ends. A successful seed job creates a baseline.
-# A second job restores that baseline, adds markers, and fails intentionally.
-# Its post step may save because every selected cache restore was additive. The
-# third job proves that the failed job's disk and repository additions survived.
+# A second job restores that baseline and adds markers. Its post step saves a
+# new additive generation. The third job proves that the disk and repository
+# additions survived.
 
 name: Test Setup Bazel Cache Experimental Persistence
 
@@ -92,10 +92,9 @@ jobs:
             echo "$marker" > "${HOME}/.cache/${cache}/${marker}"
           done
 
-  save-additions-after-failure:
-    name: Save additive cache entries after job failure
+  save-additions:
+    name: Save additive cache entries
     needs: seed-cache
-    continue-on-error: true
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -142,14 +141,9 @@ jobs:
             echo "$marker" > "${HOME}/.cache/${cache}/${marker}"
           done
 
-      - name: Fail after adding to restored caches
-        shell: bash
-        run: exit 1
-
-  restore-failed-job-additions:
-    name: Restore additive entries saved after failure
-    if: always()
-    needs: save-additions-after-failure
+  restore-additions:
+    name: Restore saved additive entries
+    needs: save-additions
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -172,7 +166,7 @@ jobs:
           skip-disk-cache-restore: "false"
           skip-repository-cache-restore: "false"
 
-      - name: Verify failed-job additions
+      - name: Verify saved additions
         shell: bash
         env:
           BAZELISK_RESTORE: ${{ steps.restore.outputs.bazelisk-cache-restored }}

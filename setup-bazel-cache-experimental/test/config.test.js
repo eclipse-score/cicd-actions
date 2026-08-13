@@ -31,6 +31,10 @@ test('configuration uses readable Linux cache names and owns the bazelrc', () =>
   assert.equal(configuration.caches.disk.generational, true);
   assert.equal(configuration.caches.repository.generational, true);
   assert.deepEqual(configuration.caches.repository.files, []);
+  assert.equal(
+    configuration.additiveCacheSaveEnvironment,
+    'SETUP_BAZEL_CACHE_EXPERIMENTAL_ADDITIVE_SAVE',
+  );
 });
 
 test('unique cache names are constrained to safe cache-key components', () => {

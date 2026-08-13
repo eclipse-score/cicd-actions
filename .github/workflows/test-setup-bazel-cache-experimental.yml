@@ -259,12 +259,14 @@ jobs:
         env:
           CACHE_SAVE: ${{ steps.setup-bazel-cache.outputs.cache-save }}
           EXPECTED_CACHE_SAVE: ${{ github.ref == 'refs/heads/main' }}
+          FAILED_JOB_CACHE_SAVE: ${{ steps.setup-bazel-cache.outputs.failed-job-cache-save }}
           BAZELISK_RESTORE: ${{ steps.setup-bazel-cache.outputs.bazelisk-cache-restored }}
           DISK_RESTORE: ${{ steps.setup-bazel-cache.outputs.disk-cache-restored }}
           REPOSITORY_RESTORE: ${{ steps.setup-bazel-cache.outputs.repository-cache-restored }}
         run: |
           set -euo pipefail
           [[ "$CACHE_SAVE" == "$EXPECTED_CACHE_SAVE" ]]
+          [[ "$SETUP_BAZEL_CACHE_EXPERIMENTAL_ADDITIVE_SAVE" == "$FAILED_JOB_CACHE_SAVE" ]]
           for result in "$BAZELISK_RESTORE" "$DISK_RESTORE" "$REPOSITORY_RESTORE"; do
             case "$result" in
               true|false|partial|skipped|unknown) ;;

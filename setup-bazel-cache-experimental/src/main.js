@@ -96,7 +96,10 @@ async function run() {
       repositoryCacheSave,
     );
     core.setOutput('failed-job-cache-save', failedJobCacheSave.toString());
-    core.saveState(configuration.additiveCacheSaveState, failedJobCacheSave.toString());
+    core.exportVariable(
+      configuration.additiveCacheSaveEnvironment,
+      failedJobCacheSave.toString(),
+    );
     core.saveState(
       configuration.cacheSaveState,
       JSON.stringify({ cacheSave, repositoryCacheSave, uniqueCacheName, workspace }),

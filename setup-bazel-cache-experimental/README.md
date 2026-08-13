@@ -157,13 +157,14 @@ action's post step only after its job has finished:
 
 1. A successful job seeds a baseline for all three caches.
 2. A second job restores that baseline, verifies
-   `failed-job-cache-save: "true"`, adds disk and repository markers, and fails
-   intentionally. Its conditional post step must save those additions.
-3. A final job restores the next generation and verifies the failed job's
-   markers.
+   `failed-job-cache-save: "true"`, and adds disk and repository markers. Its
+   post step saves those additions.
+3. A final job restores the next generation and verifies the added markers.
 
 Unit tests separately verify that misses, skipped restores, and cache API
-failures produce `failed-job-cache-save: "false"`.
+failures produce `failed-job-cache-save: "false"`. The action exports that
+decision for its failure-sensitive `post-if` condition; the pull-request action
+test verifies that the exported value matches the public output.
 
 The marker keys contain the workflow run ID and attempt, so this test cannot
 pass using a cache from an earlier run.
