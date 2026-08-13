@@ -16,7 +16,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { cachePrefix, exactKey, RESTORE_RESULT } from '../src/cache.js';
+import {
+  cachePrefix,
+  canSaveAfterFailure,
+  exactKey,
+  keyPlan,
+  RESTORE_RESULT,
+} from '../src/cache.js';
 import { createConfiguration } from '../src/config.js';
 
 test('cache families have explicit names', () => {
@@ -41,12 +47,47 @@ test('restore results use a stable output vocabulary', () => {
   });
 });
 
+test('failed jobs may save only when every selected cache restore was additive', () => {
+  const additive = {
+    bazelisk: RESTORE_RESULT.TRUE,
+    disk: RESTORE_RESULT.PARTIAL,
+    repository: RESTORE_RESULT.PARTIAL,
+  };
+  assert.equal(canSaveAfterFailure(additive, true), true);
+
+  assert.equal(canSaveAfterFailure({ ...additive, disk: RESTORE_RESULT.FALSE }, true), false);
+  assert.equal(canSaveAfterFailure({ ...additive, disk: RESTORE_RESULT.SKIPPED }, true), false);
+  assert.equal(canSaveAfterFailure({ ...additive, disk: RESTORE_RESULT.UNKNOWN }, true), false);
+  assert.equal(
+    canSaveAfterFailure({ ...additive, repository: RESTORE_RESULT.FALSE }, false),
+    true,
+  );
+});
+
 test('content-based cache keys contain a SHA-256 hash', async (context) => {
-  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'setup-bazel-cache-test-'));
+  const workspace = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'setup-bazel-cache-experimental-test-'),
+  );
   context.after(() => fs.rmSync(workspace, { recursive: true, force: true }));
   fs.writeFileSync(path.join(workspace, '.bazelversion'), '8.6.0\n');
 
   const configuration = createConfiguration(workspace, 'test');
   const key = await exactKey(configuration, configuration.caches.bazelisk);
   assert.match(key, new RegExp(`^${configuration.baseKey}-bazelisk-[a-f0-9]{64}$`));
+});
+
+test('repository cache uses one rolling generation family for all configurations', async (context) => {
+  let timestamp = 1700000000000;
+  context.mock.method(Date, 'now', () => timestamp);
+
+  const configuration = createConfiguration('/workspace', 'test');
+  const prefix = cachePrefix(configuration, configuration.caches.repository);
+  const first = await keyPlan(configuration, configuration.caches.repository);
+  assert.equal(first.key, `${prefix}${timestamp}`);
+  assert.deepEqual(first.restoreKeys, [prefix]);
+
+  timestamp += 1;
+  const second = await keyPlan(configuration, configuration.caches.repository);
+  assert.equal(second.key, `${prefix}${timestamp}`);
+  assert.deepEqual(second.restoreKeys, [prefix]);
 });

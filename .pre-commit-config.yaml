@@ -53,11 +53,11 @@ repos:
 
   - repo: local
     hooks:
-      - id: build-setup-bazel-cache
-        name: Test and build setup-bazel-cache distribution files
+      - id: build-setup-bazel-cache-experimental
+        name: Test and build setup-bazel-cache-experimental distribution files
         language: script
-        entry: setup-bazel-cache/build.sh
-        files: ^setup-bazel-cache/((src|test)/.*\.js|package(-lock)?\.json|action\.yml|build\.sh|eslint\.config\.js)$
+        entry: setup-bazel-cache-experimental/build.sh
+        files: ^setup-bazel-cache-experimental/((src|test)/.*\.js|package(-lock)?\.json|action\.yml|build\.sh|eslint\.config\.js)$
         pass_filenames: false
       - id: build-setup-qnx-sdp
         name: Build setup-qnx-sdp distribution files

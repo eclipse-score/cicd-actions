@@ -1,81 +1,84 @@
 # Setup Bazel Cache
 
-This Linux-only action configures Bazelisk, Bazel disk, and Bazel repository
-caches with opinionated defaults. Branch and pull-request jobs restore caches;
-only the configured main branch saves them.
+Bazel builds can be slow. Caching helps — but only if the cache is set up correctly and stays small enough to be worth restoring. This action handles the setup so you don't have to.
 
 ## Usage
 
+### Syntax
+
 ```yaml
 steps:
-  - uses: actions/checkout@<sha>
-
   - uses: eclipse-score/cicd-actions/setup-bazel-cache@<sha>
     with:
-      unique-cache-name: ${{ github.workflow }}-${{ github.job }}
-      # Optional:
+      unique-cache-name: [${{ github.workflow }}-]${{ github.job }}[-<matrix-uid>]
+      # Optional parameters with default values:
       main-branch: main
-      skip-disk-cache-restore: auto
-      skip-repository-cache-restore: false
+      skip-cache-restore: auto
 ```
 
-- `unique-cache-name` separates disk caches belonging to different jobs or
-  matrix configurations. It must be a stable, printable value up to 400
-  characters long.
-- `main-branch` selects the only branch allowed to save caches.
-- `skip-disk-cache-restore` accepts `true`, `false`, or `auto`. In the default `auto`
-  mode, a main-branch run starts a fresh disk cache when `MODULE.bazel.lock`
-  changed. Other refs restore the latest main-branch cache.
-- `skip-repository-cache-restore` accepts `true` or `false` and defaults to `false`.
+Parameters explained:
 
-The action creates `~/.bazelrc` with `--disk_cache` and `--repository_cache`.
-It deliberately fails before inspecting Git history or restoring caches if
-that file already exists, because merging independently owned user-level Bazel
-configuration is ambiguous.
+- `unique-cache-name`: A unique name for the cache. This is required to avoid conflicts between different jobs and workflows.
+  Using `github.workflow` and `github.job` together gives each job its own cache automatically.
+  Append a matrix identifier if the same job runs with different configurations that produce different build outputs.
+  Omit `github.workflow` if you use `workflow_call` triggers and want to avoid nesting caches under the caller's workflow name.
+- `main-branch`: The branch that is allowed to save the cache. Override if your default branch has a different name.
+- `skip-cache-restore`: Whether to skip restoring the cache. Use `true` to always rebuild a clean cache, `false` to always restore it, or `auto` to rebuild it only on a cache-writing run when `MODULE.bazel.lock` changed (the default). PR and branch builds still restore the existing cache because they do not save a replacement.
 
-The action supports Linux runners only.
+Outputs:
 
-## Automatic mode and checkout history
+- `skip-cache-restore`: The resolved cache-restore decision (`true` or `false`).
+- `checkout-history`: How the Git history for automatic cache-restore detection was obtained: `skipped`, `existing`, or `deepened`. `skipped` means history was not needed.
+- `lock-file-changed`: Whether `MODULE.bazel.lock` changed: `true`, `false`, or `unknown` when the check was skipped.
 
-On the main branch, `skip-disk-cache-restore: auto` compares `MODULE.bazel.lock` with
-the previous commit. An ordinary shallow checkout is deepened by one commit
-when necessary. If that is impossible, use `actions/checkout` with
-`fetch-depth: 2`, or set `skip-disk-cache-restore` explicitly.
+### Triggers
 
-The job needs `contents: read` for automatic history deepening:
+Use this action in every job where it should speed up a Bazel build, including
+pull-request and branch jobs. Also run at least one such job on every push to
+the default branch: only that run can refresh the shared cache after a merge.
+The other jobs restore the latest cache but never replace it.
+
+```yaml
+on:
+  pull_request:
+  push:
+    branches: [main]
+```
+
+If your default branch is not named `main`, pass `main-branch: <name>` to override.
+
+### Required permissions
+
+The job using this action needs:
 
 ```yaml
 permissions:
+  # When running with `skip-cache-restore: auto` (default), the action needs to read the repository contents to check for changes to `MODULE.bazel.lock`. If you set `skip-cache-restore` to `true` or `false`, this permission is not needed.
   contents: read
 ```
 
-## Outputs
+## How it works
 
-- `cache-save`: whether this ref can save caches in the post action
-- `skip-bazelisk-cache-restore`: resolved Bazelisk-cache restore decision
-- `skip-disk-cache-restore`: resolved disk-cache restore decision (`true` or `false`)
-- `skip-repository-cache-restore`: resolved repository-cache restore decision
-- `bazelisk-cache-restored`, `disk-cache-restored`, and
-  `repository-cache-restored`: restore result for each cache (`true` for an
-  exact key, `partial` for a prefix match, `false` for a miss, `skipped`, or
-  `unknown` after a cache API failure)
-- `checkout-history`: `skipped`, `existing`, or `deepened`
-- `lock-file-changed`: `true`, `false`, or `unknown`
+The action configures a Bazel disk cache together with Bazelisk and repository
+caches. The disk cache name comes from `unique-cache-name`.
 
-## Deprecated input
+Only a build running on `main` saves a cache. Pull-request and other branch
+builds can restore that cache, but cannot replace it. This keeps untrusted or
+short-lived branches from overwriting the shared cache.
 
-`skip-cache-restore` remains available for migration and emits a warning. It
-accepts `true`, `false`, or `auto` and applies the resolved decision globally
-to Bazelisk, disk, and repository caches. Do not combine it with either new
-skip input. The input will be removed in the next breaking release; there is
-no corresponding deprecated output.
+### Automatic restore decision
 
-## Cache lifecycle
+`skip-cache-restore: auto` is the default. Branch builds always restore the
+cache. On `main`, the action compares `MODULE.bazel.lock` with the previous
+commit: it skips restore and rebuilds the cache when the lock file changed;
+otherwise it restores the existing cache. Set `skip-cache-restore` to `true` or
+`false` to always rebuild or always restore instead.
 
-Cache keys use the prefix `setup-bazel-cache-v1-linux-<architecture>`.
-Bazelisk and repository caches use content hashes. Disk caches use timestamped
-generations and include `unique-cache-name`. Cache API failures are reported as
-warnings so a transient cache outage does not fail the build.
+### Git history for automatic mode
 
-The repository-cache hash uses only `MODULE.bazel` and `MODULE.bazel.lock`.
-Legacy `WORKSPACE` dependency declarations are intentionally unsupported.
+The comparison on `main` needs the previous commit. The action uses an existing
+checkout when it already has depth 2, or deepens a shallow checkout by one
+commit when possible. It never checks out or clones a repository itself. When
+the required history is unavailable, run `actions/checkout` with
+`fetch-depth: 2` (or greater) before this action, or set `skip-cache-restore`
+to `true` or `false`.

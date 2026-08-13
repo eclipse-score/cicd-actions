@@ -70033,19 +70033,34 @@ var RESTORE_RESULT = Object.freeze({
 function cachePrefix(configuration, cacheConfiguration) {
   return `${configuration.baseKey}-${cacheConfiguration.name}-`;
 }
-async function exactKey(configuration, cacheConfiguration) {
+async function keyPlan(configuration, cacheConfiguration) {
   const prefix2 = cachePrefix(configuration, cacheConfiguration);
-  if (cacheConfiguration.optimized) return `${prefix2}${Date.now()}`;
-  const hash = await hashFiles3(cacheConfiguration.files.join("\n"), configuration.workspace, {
-    followSymbolicLinks: false
-  });
-  return `${prefix2}${hash}`;
+  let contentPrefix = prefix2;
+  if (cacheConfiguration.files.length > 0) {
+    const hash = await hashFiles3(
+      cacheConfiguration.files.join("\n"),
+      configuration.workspace,
+      { followSymbolicLinks: false }
+    );
+    contentPrefix = `${prefix2}${hash}`;
+  }
+  if (!cacheConfiguration.generational) {
+    return { key: contentPrefix, restoreKeys: [prefix2] };
+  }
+  const generationPrefix = `${contentPrefix}${contentPrefix === prefix2 ? "" : "-"}`;
+  return {
+    key: `${generationPrefix}${Date.now()}`,
+    restoreKeys: generationPrefix === prefix2 ? [prefix2] : [generationPrefix, prefix2]
+  };
+}
+async function exactKey(configuration, cacheConfiguration) {
+  return (await keyPlan(configuration, cacheConfiguration)).key;
 }
 function hitState(cacheConfiguration) {
   return `cache-hit-${cacheConfiguration.name}`;
 }
 async function save(configuration, cacheConfiguration) {
-  if (!cacheConfiguration.optimized && getState(hitState(cacheConfiguration)) === "true") {
+  if (!cacheConfiguration.generational && getState(hitState(cacheConfiguration)) === "true") {
     info(`Not saving exact ${cacheConfiguration.name} cache hit`);
     return;
   }
@@ -70066,9 +70081,9 @@ var import_node_os3 = __toESM(require("node:os"), 1);
 var import_node_path = __toESM(require("node:path"), 1);
 var MAX_UNIQUE_CACHE_NAME_LENGTH = 400;
 function validateUniqueCacheName(value) {
-  if (!value || value.length > MAX_UNIQUE_CACHE_NAME_LENGTH || hasControlCharacter(value)) {
+  if (!value || value.length > MAX_UNIQUE_CACHE_NAME_LENGTH || hasControlCharacter(value) || value.includes(",")) {
     throw new Error(
-      "unique-cache-name must contain 1 to 400 printable characters."
+      "unique-cache-name must contain 1 to 400 printable characters without commas."
     );
   }
   return value;
@@ -70083,7 +70098,7 @@ function createConfiguration(workspace, uniqueCacheName) {
   validateUniqueCacheName(uniqueCacheName);
   const home = import_node_os3.default.homedir();
   const cacheRoot = import_node_path.default.join(home, ".cache");
-  const baseKey = `setup-bazel-cache-v1-linux-${import_node_os3.default.arch()}`;
+  const baseKey = `setup-bazel-cache-experimental-v1-linux-${import_node_os3.default.arch()}`;
   return {
     bazelrc: import_node_path.default.join(home, ".bazelrc"),
     bazelrcContents: [
@@ -70091,7 +70106,8 @@ function createConfiguration(workspace, uniqueCacheName) {
       `common --repository_cache=${import_node_path.default.join(cacheRoot, "bazel-repo")}`,
       ""
     ].join("\n"),
-    cacheSaveState: "setup-bazel-cache-configuration",
+    additiveCacheSaveState: "ADDITIVE_CACHE_SAVE",
+    cacheSaveState: "setup-bazel-cache-experimental-configuration",
     caches: {
       bazelisk: {
         name: "bazelisk",
@@ -70100,16 +70116,14 @@ function createConfiguration(workspace, uniqueCacheName) {
       },
       disk: {
         name: `disk-${uniqueCacheName}`,
-        optimized: true,
+        generational: true,
         files: [],
         paths: [import_node_path.default.join(cacheRoot, "bazel-disk")]
       },
       repository: {
         name: "repository",
-        files: [
-          import_node_path.default.join(workspace, "MODULE.bazel"),
-          import_node_path.default.join(workspace, "MODULE.bazel.lock")
-        ],
+        generational: true,
+        files: [],
         paths: [import_node_path.default.join(cacheRoot, "bazel-repo")]
       }
     },
@@ -70121,12 +70135,12 @@ function createConfiguration(workspace, uniqueCacheName) {
 // src/post.js
 async function run() {
   try {
-    const state3 = getState("setup-bazel-cache-configuration");
+    const state3 = getState("setup-bazel-cache-experimental-configuration");
     if (!state3) {
       info("Setup did not complete; caches will not be saved");
       return;
     }
-    const { cacheSave, uniqueCacheName, workspace } = JSON.parse(state3);
+    const { cacheSave, repositoryCacheSave, uniqueCacheName, workspace } = JSON.parse(state3);
     if (!cacheSave) {
       info("Cache saving is disabled on this ref");
       return;
@@ -70134,7 +70148,11 @@ async function run() {
     const configuration = createConfiguration(workspace, uniqueCacheName);
     await save(configuration, configuration.caches.bazelisk);
     await save(configuration, configuration.caches.disk);
-    await save(configuration, configuration.caches.repository);
+    if (repositoryCacheSave) {
+      await save(configuration, configuration.caches.repository);
+    } else {
+      info("Repository cache saving is disabled for this job");
+    }
   } catch (error2) {
     setFailed(error2.stack || error2.message);
   }

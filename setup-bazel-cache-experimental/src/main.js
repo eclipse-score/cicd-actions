@@ -13,13 +13,14 @@
 
 import * as core from '@actions/core';
 import fs from 'node:fs';
-import { RESTORE_RESULT, restore } from './cache.js';
+import { canSaveAfterFailure, RESTORE_RESULT, restore } from './cache.js';
 import { createConfiguration } from './config.js';
 import { ensureComparisonHistory, lockFileChanged } from './git.js';
 import {
   isCacheSaveRef,
   needsLockFileCheck,
   parseMainBranch,
+  parseRepositoryCacheSave,
   parseRestoreConfiguration,
   resolveRestoreConfiguration,
 } from './inputs.js';
@@ -32,7 +33,9 @@ import {
 async function run() {
   try {
     if (process.platform !== 'linux') {
-      throw new Error(`setup-bazel-cache supports Linux runners only, not '${process.platform}'.`);
+      throw new Error(
+        `setup-bazel-cache-experimental supports Linux runners only, not '${process.platform}'.`,
+      );
     }
 
     const workspace = process.env.GITHUB_WORKSPACE;
@@ -40,27 +43,24 @@ async function run() {
 
     const uniqueCacheName = core.getInput('unique-cache-name', { required: true });
     const mainBranch = parseMainBranch(core.getInput('main-branch', { required: true }));
+    const repositoryCacheSaveRequested = parseRepositoryCacheSave(
+      core.getInput('save-repository-cache'),
+    );
     const restoreConfiguration = parseRestoreConfiguration({
-      skipCacheRestore: core.getInput('skip-cache-restore'),
       skipDiskCacheRestore: core.getInput('skip-disk-cache-restore'),
       skipRepositoryCacheRestore: core.getInput('skip-repository-cache-restore'),
     });
-    if (restoreConfiguration.legacy) {
-      // TODO(breaking-release): Remove together with the adapter in inputs.js.
-      core.warning(
-        "Input 'skip-cache-restore' is deprecated and will be removed in the next breaking release. " +
-        "Use 'skip-disk-cache-restore' and 'skip-repository-cache-restore'."
-      );
-    }
 
     const configuration = createConfiguration(workspace, uniqueCacheName);
     if (fs.existsSync(configuration.bazelrc)) {
       throw new Error(
-        `${configuration.bazelrc} already exists. setup-bazel-cache requires exclusive ownership of this file.`
+        `${configuration.bazelrc} already exists. ` +
+        'setup-bazel-cache-experimental requires exclusive ownership of this file.'
       );
     }
 
     const cacheSave = isCacheSaveRef(process.env.GITHUB_REF, mainBranch);
+    const repositoryCacheSave = cacheSave && repositoryCacheSaveRequested;
     let checkoutHistory = 'skipped';
     let changed = null;
     if (needsLockFileCheck(restoreConfiguration, cacheSave)) {
@@ -69,7 +69,13 @@ async function run() {
     }
     const restoreModes = resolveRestoreConfiguration(restoreConfiguration, cacheSave, changed === true);
 
-    setDecisionOutputs({ cacheSave, checkoutHistory, changed, restoreModes });
+    setDecisionOutputs({
+      cacheSave,
+      checkoutHistory,
+      changed,
+      repositoryCacheSave,
+      restoreModes,
+    });
 
     fs.writeFileSync(configuration.bazelrc, configuration.bazelrcContents, { flag: 'wx' });
     core.info(`Created ${configuration.bazelrc}`);
@@ -85,7 +91,16 @@ async function run() {
     };
     setRestoreOutputs(restoreResults);
 
-    core.saveState(configuration.cacheSaveState, JSON.stringify({ cacheSave, uniqueCacheName, workspace }));
+    const failedJobCacheSave = cacheSave && canSaveAfterFailure(
+      restoreResults,
+      repositoryCacheSave,
+    );
+    core.setOutput('failed-job-cache-save', failedJobCacheSave.toString());
+    core.saveState(configuration.additiveCacheSaveState, failedJobCacheSave.toString());
+    core.saveState(
+      configuration.cacheSaveState,
+      JSON.stringify({ cacheSave, repositoryCacheSave, uniqueCacheName, workspace }),
+    );
   } catch (error) {
     core.setFailed(error.stack || error.message);
   }
@@ -99,8 +114,15 @@ async function restoreCache(configuration, cacheConfiguration, skip) {
   return restore(configuration, cacheConfiguration);
 }
 
-function setDecisionOutputs({ cacheSave, checkoutHistory, changed, restoreModes }) {
+function setDecisionOutputs({
+  cacheSave,
+  checkoutHistory,
+  changed,
+  repositoryCacheSave,
+  restoreModes,
+}) {
   core.setOutput('cache-save', cacheSave.toString());
+  core.setOutput('repository-cache-save', repositoryCacheSave.toString());
   core.setOutput('skip-bazelisk-cache-restore', restoreModes.skipBazelisk.toString());
   core.setOutput('skip-disk-cache-restore', restoreModes.skipDisk.toString());
   core.setOutput('skip-repository-cache-restore', restoreModes.skipRepository.toString());

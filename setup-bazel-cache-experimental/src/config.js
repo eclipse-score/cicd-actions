@@ -21,10 +21,11 @@ function validateUniqueCacheName(value) {
   if (
     !value ||
     value.length > MAX_UNIQUE_CACHE_NAME_LENGTH ||
-    hasControlCharacter(value)
+    hasControlCharacter(value) ||
+    value.includes(',')
   ) {
     throw new Error(
-      'unique-cache-name must contain 1 to 400 printable characters.',
+      'unique-cache-name must contain 1 to 400 printable characters without commas.',
     );
   }
   return value;
@@ -37,16 +38,12 @@ function hasControlCharacter(value) {
   });
 }
 
-/**
- * Build the complete Linux cache configuration in one place. Repository-cache
- * identity intentionally follows only Bzlmod metadata because this action does
- * not support legacy WORKSPACE dependency declarations.
- */
+/** Build the complete Linux cache configuration in one place. */
 function createConfiguration(workspace, uniqueCacheName) {
   validateUniqueCacheName(uniqueCacheName);
   const home = os.homedir();
   const cacheRoot = path.join(home, '.cache');
-  const baseKey = `setup-bazel-cache-v1-linux-${os.arch()}`;
+  const baseKey = `setup-bazel-cache-experimental-v1-linux-${os.arch()}`;
 
   return {
     bazelrc: path.join(home, '.bazelrc'),
@@ -55,7 +52,8 @@ function createConfiguration(workspace, uniqueCacheName) {
       `common --repository_cache=${path.join(cacheRoot, 'bazel-repo')}`,
       '',
     ].join('\n'),
-    cacheSaveState: 'setup-bazel-cache-configuration',
+    additiveCacheSaveState: 'ADDITIVE_CACHE_SAVE',
+    cacheSaveState: 'setup-bazel-cache-experimental-configuration',
     caches: {
       bazelisk: {
         name: 'bazelisk',
@@ -64,16 +62,14 @@ function createConfiguration(workspace, uniqueCacheName) {
       },
       disk: {
         name: `disk-${uniqueCacheName}`,
-        optimized: true,
+        generational: true,
         files: [],
         paths: [path.join(cacheRoot, 'bazel-disk')],
       },
       repository: {
         name: 'repository',
-        files: [
-          path.join(workspace, 'MODULE.bazel'),
-          path.join(workspace, 'MODULE.bazel.lock'),
-        ],
+        generational: true,
+        files: [],
         paths: [path.join(cacheRoot, 'bazel-repo')],
       },
     },

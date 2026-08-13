@@ -22,32 +22,23 @@ function validateMode(name, value, allowed) {
   }
 }
 
-/**
- * Resolve the public inputs without applying the lock-file decision yet.
- *
- * TODO(breaking-release): Remove the isolated skip-cache-restore adapter.
- */
+/** Resolve the public restore inputs without applying the lock-file decision yet. */
 function parseRestoreConfiguration(raw) {
-  const legacy = raw.skipCacheRestore.trim();
   const disk = raw.skipDiskCacheRestore.trim();
   const repository = raw.skipRepositoryCacheRestore.trim();
-
-  if (legacy) {
-    if (disk || repository) {
-      throw new Error(
-        "Deprecated input 'skip-cache-restore' cannot be combined with " +
-        "'skip-disk-cache-restore' or 'skip-repository-cache-restore'."
-      );
-    }
-    validateMode('skip-cache-restore', legacy, AUTOMATIC_MODES);
-    return { legacy: true, disk: legacy, repository: legacy, bazelisk: legacy };
-  }
 
   const resolvedDisk = disk || 'auto';
   const resolvedRepository = repository || 'false';
   validateMode('skip-disk-cache-restore', resolvedDisk, AUTOMATIC_MODES);
   validateMode('skip-repository-cache-restore', resolvedRepository, BOOLEAN_MODES);
-  return { legacy: false, disk: resolvedDisk, repository: resolvedRepository, bazelisk: 'false' };
+  return { disk: resolvedDisk, repository: resolvedRepository, bazelisk: 'false' };
+}
+
+/** Resolve whether this job is a publisher for the shared repository cache. */
+function parseRepositoryCacheSave(value) {
+  const resolved = value.trim() || 'true';
+  validateMode('save-repository-cache', resolved, BOOLEAN_MODES);
+  return resolved === 'true';
 }
 
 /** Ensure the configured branch can be unambiguously converted to a head ref. */
@@ -107,6 +98,7 @@ export {
   isCacheSaveRef,
   needsLockFileCheck,
   parseMainBranch,
+  parseRepositoryCacheSave,
   parseRestoreConfiguration,
   resolveRestoreConfiguration,
 };

@@ -19,21 +19,24 @@ import { createConfiguration, validateUniqueCacheName } from '../src/config.js';
 
 test('configuration uses readable Linux cache names and owns the bazelrc', () => {
   const configuration = createConfiguration('/workspace', 'build-debug');
-  assert.equal(configuration.baseKey, `setup-bazel-cache-v1-linux-${os.arch()}`);
+  assert.equal(
+    configuration.baseKey,
+    `setup-bazel-cache-experimental-v1-linux-${os.arch()}`,
+  );
   assert.equal(configuration.caches.disk.name, 'disk-build-debug');
   assert.equal(configuration.bazelrc, path.join(os.homedir(), '.bazelrc'));
   assert.match(configuration.bazelrcContents, /^build --disk_cache=.*bazel-disk$/m);
   assert.match(configuration.bazelrcContents, /^common --repository_cache=.*bazel-repo$/m);
   assert.doesNotMatch(configuration.bazelrcContents, /output_base/);
-  assert.deepEqual(configuration.caches.repository.files, [
-    '/workspace/MODULE.bazel',
-    '/workspace/MODULE.bazel.lock',
-  ]);
+  assert.equal(configuration.caches.disk.generational, true);
+  assert.equal(configuration.caches.repository.generational, true);
+  assert.deepEqual(configuration.caches.repository.files, []);
 });
 
 test('unique cache names are constrained to safe cache-key components', () => {
   assert.equal(validateUniqueCacheName('linux-debug'), 'linux-debug');
-  assert.throws(() => validateUniqueCacheName(''), /1 to 400 printable characters/);
-  assert.throws(() => validateUniqueCacheName('a'.repeat(401)), /1 to 400 printable characters/);
-  assert.throws(() => validateUniqueCacheName('debug\nrelease'), /1 to 400 printable characters/);
+  assert.throws(() => validateUniqueCacheName(''), /printable characters without commas/);
+  assert.throws(() => validateUniqueCacheName('a'.repeat(401)), /printable characters without commas/);
+  assert.throws(() => validateUniqueCacheName('debug\nrelease'), /printable characters without commas/);
+  assert.throws(() => validateUniqueCacheName('debug,release'), /printable characters without commas/);
 });

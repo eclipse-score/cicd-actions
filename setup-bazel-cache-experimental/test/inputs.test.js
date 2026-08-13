@@ -17,6 +17,7 @@ import {
   isCacheSaveRef,
   needsLockFileCheck,
   parseMainBranch,
+  parseRepositoryCacheSave,
   parseRestoreConfiguration,
   resolveRestoreConfiguration,
 } from '../src/inputs.js';
@@ -24,7 +25,6 @@ import {
 /** Supply every optional raw input so individual tests only override relevant values. */
 function raw(overrides = {}) {
   return {
-    skipCacheRestore: '',
     skipDiskCacheRestore: '',
     skipRepositoryCacheRestore: '',
     ...overrides,
@@ -38,6 +38,13 @@ test('only the configured main branch can save caches', () => {
   assert.equal(isCacheSaveRef('refs/heads/trunk', 'trunk'), true);
 });
 
+test('repository cache publishing defaults to enabled and accepts explicit booleans', () => {
+  assert.equal(parseRepositoryCacheSave(''), true);
+  assert.equal(parseRepositoryCacheSave('true'), true);
+  assert.equal(parseRepositoryCacheSave('false'), false);
+  assert.throws(() => parseRepositoryCacheSave('auto'), /Invalid save-repository-cache/);
+});
+
 test('main branch must be a branch name rather than a Git ref', () => {
   assert.equal(parseMainBranch('release/1.0'), 'release/1.0');
   assert.throws(() => parseMainBranch(''), /Invalid main-branch/);
@@ -48,7 +55,6 @@ test('main branch must be a branch name rather than a Git ref', () => {
 test('new API has auto disk and restoring repository defaults', () => {
   const configuration = parseRestoreConfiguration(raw());
   assert.deepEqual(configuration, {
-    legacy: false,
     disk: 'auto',
     repository: 'false',
     bazelisk: 'false',
@@ -78,33 +84,6 @@ test('explicit modes do not need the lock-file comparison', () => {
     skipDisk: true,
     skipRepository: true,
   });
-});
-
-test('legacy true retains the global restore behavior', () => {
-  const configuration = parseRestoreConfiguration(raw({ skipCacheRestore: 'true' }));
-  assert.equal(configuration.legacy, true);
-  assert.deepEqual(resolveRestoreConfiguration(configuration, true, false), {
-    skipBazelisk: true,
-    skipDisk: true,
-    skipRepository: true,
-  });
-});
-
-test('legacy auto applies one lock-file decision to every cache', () => {
-  const configuration = parseRestoreConfiguration(raw({ skipCacheRestore: 'auto' }));
-  assert.equal(needsLockFileCheck(configuration, true), true);
-  assert.deepEqual(resolveRestoreConfiguration(configuration, true, true), {
-    skipBazelisk: true,
-    skipDisk: true,
-    skipRepository: true,
-  });
-});
-
-test('legacy and new APIs cannot be mixed', () => {
-  assert.throws(
-    () => parseRestoreConfiguration(raw({ skipCacheRestore: 'false', skipDiskCacheRestore: 'false' })),
-    /cannot be combined/
-  );
 });
 
 test('invalid modes are rejected', () => {

@@ -47,6 +47,11 @@ jobs:
     permissions:
       contents: read
 
+  setup-bazel-cache-experimental-tests:
+    uses: ./.github/workflows/test-setup-bazel-cache-experimental.yml
+    permissions:
+      contents: read
+
   warm-bazel-repository-cache-tests:
     uses: ./.github/workflows/test-warm-bazel-repository-cache.yml
     permissions:
@@ -93,6 +98,7 @@ jobs:
       - setup-qnx-sdp-tests
       - unblock-user-namespace-for-linux-sandbox-tests
       - setup-bazel-cache-tests
+      - setup-bazel-cache-experimental-tests
       - warm-bazel-repository-cache-tests
       - prune-cache-tests
       - prune-cache-dry-run-tests

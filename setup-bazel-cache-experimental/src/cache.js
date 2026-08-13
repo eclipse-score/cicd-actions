@@ -28,17 +28,42 @@ function cachePrefix(configuration, cacheConfiguration) {
   return `${configuration.baseKey}-${cacheConfiguration.name}-`;
 }
 
-/**
- * Create a unique save key. Content caches use a reproducible hash while the
- * disk cache uses generations so main can publish refreshed build outputs.
- */
-async function exactKey(configuration, cacheConfiguration) {
+/** A failed job may publish only snapshots that extend successfully restored caches. */
+function canSaveAfterFailure(restoreResults, repositoryCacheSave) {
+  const selected = [restoreResults.bazelisk, restoreResults.disk];
+  if (repositoryCacheSave) selected.push(restoreResults.repository);
+  return selected.every(
+    (result) => result === RESTORE_RESULT.TRUE || result === RESTORE_RESULT.PARTIAL,
+  );
+}
+
+/** Build the primary key and ordered fallback prefixes for one cache. */
+async function keyPlan(configuration, cacheConfiguration) {
   const prefix = cachePrefix(configuration, cacheConfiguration);
-  if (cacheConfiguration.optimized) return `${prefix}${Date.now()}`;
-  const hash = await glob.hashFiles(cacheConfiguration.files.join('\n'), configuration.workspace, {
-    followSymbolicLinks: false,
-  });
-  return `${prefix}${hash}`;
+  let contentPrefix = prefix;
+  if (cacheConfiguration.files.length > 0) {
+    const hash = await glob.hashFiles(
+      cacheConfiguration.files.join('\n'),
+      configuration.workspace,
+      { followSymbolicLinks: false },
+    );
+    contentPrefix = `${prefix}${hash}`;
+  }
+
+  if (!cacheConfiguration.generational) {
+    return { key: contentPrefix, restoreKeys: [prefix] };
+  }
+
+  const generationPrefix = `${contentPrefix}${contentPrefix === prefix ? '' : '-'}`;
+  return {
+    key: `${generationPrefix}${Date.now()}`,
+    restoreKeys: generationPrefix === prefix ? [prefix] : [generationPrefix, prefix],
+  };
+}
+
+/** Create the primary cache key used by focused key-generation tests and saves. */
+async function exactKey(configuration, cacheConfiguration) {
+  return (await keyPlan(configuration, cacheConfiguration)).key;
 }
 
 /** Keep exact-hit state names consistent between the main and post processes. */
@@ -53,11 +78,11 @@ function hitState(cacheConfiguration) {
 async function restore(configuration, cacheConfiguration) {
   core.startGroup(`Restore ${cacheConfiguration.name} cache`);
   try {
-    const key = await exactKey(configuration, cacheConfiguration);
+    const { key, restoreKeys } = await keyPlan(configuration, cacheConfiguration);
     const restoredKey = await cache.restoreCache(
       cacheConfiguration.paths,
       key,
-      [cachePrefix(configuration, cacheConfiguration)],
+      restoreKeys,
       { segmentTimeoutInMs: 300000 }
     );
     if (!restoredKey) {
@@ -65,7 +90,7 @@ async function restore(configuration, cacheConfiguration) {
       return RESTORE_RESULT.FALSE;
     }
     core.info(`Restored ${restoredKey}`);
-    if (!cacheConfiguration.optimized && restoredKey === key) {
+    if (!cacheConfiguration.generational && restoredKey === key) {
       core.saveState(hitState(cacheConfiguration), 'true');
     }
     return restoredKey === key ? RESTORE_RESULT.TRUE : RESTORE_RESULT.PARTIAL;
@@ -78,11 +103,11 @@ async function restore(configuration, cacheConfiguration) {
 }
 
 /**
- * Publish a cache generation from the post action. Exact content hits are not
- * uploaded again, while the mutable disk cache always receives a new generation.
+ * Publish a cache generation from the post action. Exact immutable content hits
+ * are not uploaded again, while additive caches always receive a new generation.
  */
 async function save(configuration, cacheConfiguration) {
-  if (!cacheConfiguration.optimized && core.getState(hitState(cacheConfiguration)) === 'true') {
+  if (!cacheConfiguration.generational && core.getState(hitState(cacheConfiguration)) === 'true') {
     core.info(`Not saving exact ${cacheConfiguration.name} cache hit`);
     return;
   }
@@ -99,4 +124,12 @@ async function save(configuration, cacheConfiguration) {
   }
 }
 
-export { cachePrefix, exactKey, RESTORE_RESULT, restore, save };
+export {
+  cachePrefix,
+  canSaveAfterFailure,
+  exactKey,
+  keyPlan,
+  RESTORE_RESULT,
+  restore,
+  save,
+};

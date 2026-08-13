@@ -21,13 +21,13 @@ import { createConfiguration } from './config.js';
  */
 async function run() {
   try {
-    const state = core.getState('setup-bazel-cache-configuration');
+    const state = core.getState('setup-bazel-cache-experimental-configuration');
     if (!state) {
       core.info('Setup did not complete; caches will not be saved');
       return;
     }
 
-    const { cacheSave, uniqueCacheName, workspace } = JSON.parse(state);
+    const { cacheSave, repositoryCacheSave, uniqueCacheName, workspace } = JSON.parse(state);
     if (!cacheSave) {
       core.info('Cache saving is disabled on this ref');
       return;
@@ -36,7 +36,11 @@ async function run() {
     const configuration = createConfiguration(workspace, uniqueCacheName);
     await save(configuration, configuration.caches.bazelisk);
     await save(configuration, configuration.caches.disk);
-    await save(configuration, configuration.caches.repository);
+    if (repositoryCacheSave) {
+      await save(configuration, configuration.caches.repository);
+    } else {
+      core.info('Repository cache saving is disabled for this job');
+    }
   } catch (error) {
     core.setFailed(error.stack || error.message);
   }
