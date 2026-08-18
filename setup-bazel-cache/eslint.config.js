@@ -12,16 +12,14 @@
 // *******************************************************************************
 
 import js from '@eslint/js';
+import globals from 'globals';
 
 export default [
   js.configs.recommended,
   {
     languageOptions: {
-      ecmaVersion: 2022,
       globals: {
-        Buffer: 'readonly',
-        console: 'readonly',
-        process: 'readonly',
+        ...globals.node,
       },
     },
   },
