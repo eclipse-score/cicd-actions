@@ -27,16 +27,20 @@ async function run() {
       return;
     }
 
-    const { cacheSave, repositoryCacheSave, diskCacheName, workspace } = JSON.parse(state);
+    const { cacheSave, cacheSaves, diskCacheKey, workspace } = JSON.parse(state);
     if (!cacheSave) {
       core.info('Cache saving is disabled on this ref');
       return;
     }
 
-    const configuration = createConfiguration(workspace, diskCacheName);
+    const configuration = createConfiguration(workspace, diskCacheKey);
     await save(configuration, configuration.caches.bazelisk);
-    await save(configuration, configuration.caches.disk);
-    if (repositoryCacheSave) {
+    if (cacheSaves.disk) {
+      await save(configuration, configuration.caches.disk);
+    } else {
+      core.info('Disk cache saving is disabled for this job');
+    }
+    if (cacheSaves.repository) {
       await save(configuration, configuration.caches.repository);
     } else {
       core.info('Repository cache saving is disabled for this job');

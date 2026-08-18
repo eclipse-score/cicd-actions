@@ -14,17 +14,18 @@ steps:
 
   - uses: eclipse-score/cicd-actions/setup-bazel-cache@<sha>
     with:
-      disk-cache-name: ${{ github.workflow }}-${{ github.job }}
+      disk-cache-key: ${{ github.workflow }}-${{ github.job }}
       # Optional:
       cache-save-branches: |
         main
         release/*
-      skip-disk-cache-restore: auto
-      skip-repository-cache-restore: false
-      save-repository-cache: true
+      repository-cache-restore: auto
+      repository-cache-save: auto
+      disk-cache-restore: auto
+      disk-cache-save: false
 ```
 
-- `disk-cache-name` separates disk caches belonging to different jobs or
+- `disk-cache-key` separates disk caches belonging to different jobs or
   matrix configurations. It must be a stable, printable value up to 400
   characters long and must not contain commas.
 - `cache-save-branches` is an optional newline-separated list of branch glob
@@ -34,14 +35,12 @@ steps:
   Pull-request refs never save caches, even when a pattern would match them.
   When multiple patterns are configured, they replace the default-branch
   fallback; include it explicitly if needed.
-- `skip-disk-cache-restore` accepts `true`, `false`, or `auto`. In the default `auto`
-  mode, a cache-saving branch run starts a fresh disk cache when
-  `MODULE.bazel.lock` changed. Other refs restore the latest available cache.
-- `skip-repository-cache-restore` accepts `true` or `false` and defaults to `false`.
-- `save-repository-cache` accepts `true` or `false` and defaults to `true`.
-  Set it to `false` in parallel build jobs when a dedicated warm-cache job is
-  the single publisher for the shared repository snapshot. It affects saving
-  only; the job can still restore the shared cache.
+- `repository-cache-restore`, `repository-cache-save`, `disk-cache-restore`, and
+  `disk-cache-save` accept `true`, `false`, or `auto`. Restore inputs are positive:
+  `false` skips the restore, while `auto` starts a fresh cache on a cache-saving
+  branch when `MODULE.bazel.lock` changed. Other refs restore the latest available
+  cache. Save inputs only take effect on configured cache-saving branches; `false`
+  disables saving for that cache.
 
 The action creates a temporary bazelrc with `--disk_cache` and
 `--repository_cache`, then appends it to the `BAZELRC` environment variable.
@@ -60,12 +59,12 @@ that pull-request authors must not be able to read.
 
 ## Automatic mode and checkout history
 
-On a cache-saving branch, `skip-disk-cache-restore: auto` compares
+On a cache-saving branch, `disk-cache-restore: auto` compares
 `MODULE.bazel.lock` with the commit preceding the current push, covering every
 commit in a multi-commit push. For events without a push base, it compares the
 previous commit. An ordinary shallow checkout fetches the comparison commit
 when necessary. If that is impossible, use `actions/checkout` with
-`fetch-depth: 0`, or set `skip-disk-cache-restore` explicitly.
+`fetch-depth: 0`, or set `disk-cache-restore` explicitly.
 
 The job needs `contents: read` for automatic history deepening:
 
@@ -77,12 +76,12 @@ permissions:
 ## Outputs
 
 - `cache-save`: whether this ref can save caches in the post action
+- `repository-cache-restore`: resolved repository-cache restore decision
+- `repository-cache-save`: whether this run will publish the shared repository cache
+- `disk-cache-restore`: resolved disk-cache restore decision
+- `disk-cache-save`: whether this run will publish the Bazel disk cache
 - `skip-bazelisk-cache-restore`: resolved Bazelisk-cache restore decision
 - `skip-disk-cache-restore`: resolved disk-cache restore decision (`true` or `false`)
-- `skip-repository-cache-restore`: resolved repository-cache restore decision
-- `repository-cache-save`: whether this run will publish the shared repository
-  cache (`true` only on a configured cache-saving branch when
-  `save-repository-cache` is enabled)
 - `failed-job-cache-save`: whether Bazelisk was restored exactly and every
   generational cache selected for saving was restored exactly or by prefix,
   allowing an additive save if a later step fails
@@ -104,7 +103,7 @@ Bazel repository-cache entries are content-addressed, so
 `MODULE.bazel.lock` and individual Bazel configs are not correctness boundaries
 for this cache. Builds, fetch jobs, platforms, and configs all restore and
 augment the same snapshot. Disk caches use timestamped generations and include
-`disk-cache-name`. Cache API failures are reported as warnings so a transient
+`disk-cache-key`. Cache API failures are reported as warnings so a transient
 cache outage does not fail the build.
 
 Successful jobs may publish new cache baselines. A failed job publishes only
@@ -115,7 +114,7 @@ a new `.bazelversion` content key. The generational-cache results prove that
 their snapshots extend existing caches. A restore result of `false`, `skipped`,
 or `unknown` suppresses the entire failed-job save because the incomplete
 snapshot would likely be worse than the existing generation. When
-`save-repository-cache` is disabled, the repository restore does not participate
+`repository-cache-save` is disabled, the repository restore does not participate
 in this decision. Cancelled jobs never save.
 
 Each disk-cache generation includes the previously restored cache plus new
@@ -127,7 +126,7 @@ with Bazel's `--experimental_disk_cache_gc_max_size` and
 `--experimental_disk_cache_gc_max_age` flags when needed.
 
 The rolling repository snapshot may retain artifacts that are no longer
-referenced. Periodically setting `skip-repository-cache-restore: "true"` on a
+referenced. Periodically setting `repository-cache-restore: "false"` on a
 cache-writing run rebuilds a compact generation from only the dependencies used
 by that run. A dedicated warm-cache job should fetch every supported variant
 before publishing such a replacement.
@@ -137,10 +136,10 @@ default-branch jobs restore the same generation, add different dependencies,
 and all save, the job that finishes last publishes a snapshot without the
 other jobs' additions. For deterministic coverage, use one dedicated job that:
 
-1. runs this action with `save-repository-cache: "true"`;
+1. runs this action with `repository-cache-save: "true"`;
 2. runs `warm-bazel-repository-cache` for every supported config and variant.
 
-Set `save-repository-cache: "false"` in other parallel jobs. They still restore
+Set `repository-cache-save: "false"` in other parallel jobs. They still restore
 the shared repository snapshot, while their disk and Bazelisk caches retain the
 normal save behavior.
 

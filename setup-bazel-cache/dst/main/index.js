@@ -69511,10 +69511,11 @@ var RESTORE_RESULT = Object.freeze({
 function cachePrefix(configuration, cacheConfiguration) {
   return `${configuration.baseKey}-${cacheConfiguration.name}-`;
 }
-function canSaveAfterFailure(restoreResults, repositoryCacheSave) {
+function canSaveAfterFailure(restoreResults, cacheSaves) {
   if (restoreResults.bazelisk !== RESTORE_RESULT.TRUE) return false;
-  const selected = [restoreResults.disk];
-  if (repositoryCacheSave) selected.push(restoreResults.repository);
+  const selected = [];
+  if (cacheSaves.disk) selected.push(restoreResults.disk);
+  if (cacheSaves.repository) selected.push(restoreResults.repository);
   return selected.every(
     (result) => result === RESTORE_RESULT.TRUE || result === RESTORE_RESULT.PARTIAL
   );
@@ -69572,11 +69573,11 @@ async function restore(configuration, cacheConfiguration) {
 // src/config.js
 var import_node_os3 = __toESM(require("node:os"), 1);
 var import_node_path = __toESM(require("node:path"), 1);
-var MAX_DISK_CACHE_NAME_LENGTH = 400;
-function validateDiskCacheName(value) {
-  if (!value || value.length > MAX_DISK_CACHE_NAME_LENGTH || hasControlCharacter(value) || value.includes(",")) {
+var MAX_DISK_CACHE_KEY_LENGTH = 400;
+function validateDiskCacheKey(value) {
+  if (!value || value.length > MAX_DISK_CACHE_KEY_LENGTH || hasControlCharacter(value) || value.includes(",")) {
     throw new Error(
-      "disk-cache-name must contain 1 to 400 printable characters without commas."
+      "disk-cache-key must contain 1 to 400 printable characters without commas."
     );
   }
   return value;
@@ -69587,8 +69588,8 @@ function hasControlCharacter(value) {
     return codePoint < 32 || codePoint === 127;
   });
 }
-function createConfiguration(workspace, diskCacheName) {
-  validateDiskCacheName(diskCacheName);
+function createConfiguration(workspace, diskCacheKey) {
+  validateDiskCacheKey(diskCacheKey);
   const home = import_node_os3.default.homedir();
   const cacheRoot = import_node_path.default.join(home, ".cache");
   const runnerTemp = process.env.RUNNER_TEMP || import_node_os3.default.tmpdir();
@@ -69609,7 +69610,7 @@ function createConfiguration(workspace, diskCacheName) {
         paths: [import_node_path.default.join(cacheRoot, "bazelisk")]
       },
       disk: {
-        name: `disk-${diskCacheName.length}-${diskCacheName}`,
+        name: `disk-${diskCacheKey.length}-${diskCacheKey}`,
         generational: true,
         files: [],
         paths: [import_node_path.default.join(cacheRoot, "bazel-disk")]
@@ -69694,7 +69695,7 @@ function ensureComparisonHistory(workspace, comparisonBase, git = runGit) {
     return comparisonBase === FALLBACK_COMPARISON_BASE ? "deepened" : "fetched";
   }
   throw new Error(
-    `Automatic disk-cache restore detection could not obtain ${comparisonBase}. Run actions/checkout with fetch-depth: 0 or set 'skip-disk-cache-restore' explicitly.`
+    `Automatic disk-cache restore detection could not obtain ${comparisonBase}. Run actions/checkout with fetch-depth: 0 or set 'disk-cache-restore' explicitly.`
   );
 }
 function lockFileChanged(workspace, comparisonBase, git = runGit) {
@@ -69708,7 +69709,6 @@ function lockFileChanged(workspace, comparisonBase, git = runGit) {
 }
 
 // src/inputs.js
-var BOOLEAN_MODES = /* @__PURE__ */ new Set(["true", "false"]);
 var AUTOMATIC_MODES = /* @__PURE__ */ new Set(["true", "false", "auto"]);
 var INVALID_BRANCH_PATTERN_CHARACTERS = /[\s~^:\\]/;
 function validateMode(name, value, allowed) {
@@ -69716,19 +69716,22 @@ function validateMode(name, value, allowed) {
     throw new Error(`Invalid ${name} value '${value}'. Expected ${[...allowed].join(", ")}.`);
   }
 }
-function parseRestoreConfiguration(raw) {
-  const disk = raw.skipDiskCacheRestore.trim();
-  const repository = raw.skipRepositoryCacheRestore.trim();
-  const resolvedDisk = disk || "auto";
-  const resolvedRepository = repository || "false";
-  validateMode("skip-disk-cache-restore", resolvedDisk, AUTOMATIC_MODES);
-  validateMode("skip-repository-cache-restore", resolvedRepository, BOOLEAN_MODES);
-  return { disk: resolvedDisk, repository: resolvedRepository, bazelisk: "false" };
-}
-function parseRepositoryCacheSave(value) {
-  const resolved = value.trim() || "true";
-  validateMode("save-repository-cache", resolved, BOOLEAN_MODES);
-  return resolved === "true";
+function parseCacheConfiguration(raw) {
+  const diskRestore = raw.diskCacheRestore.trim() || "auto";
+  const repositoryRestore = raw.repositoryCacheRestore.trim() || "auto";
+  const diskSave = raw.diskCacheSave.trim() || "false";
+  const repositorySave = raw.repositoryCacheSave.trim() || "auto";
+  validateMode("disk-cache-restore", diskRestore, AUTOMATIC_MODES);
+  validateMode("repository-cache-restore", repositoryRestore, AUTOMATIC_MODES);
+  validateMode("disk-cache-save", diskSave, AUTOMATIC_MODES);
+  validateMode("repository-cache-save", repositorySave, AUTOMATIC_MODES);
+  return {
+    diskRestore,
+    repositoryRestore,
+    diskSave,
+    repositorySave,
+    bazelisk: "false"
+  };
 }
 function parseBranchPattern(value, name = "cache-save-branches") {
   const pattern = value.trim();
@@ -69751,14 +69754,24 @@ function parseCacheSaveBranches(value, defaultBranch) {
   }
   return patterns.map((pattern) => parseBranchPattern(pattern));
 }
-function resolveMode(mode, cacheSave, lockFileChanged2) {
-  return mode === "true" || mode === "auto" && cacheSave && lockFileChanged2;
+function resolveRestoreMode(mode, cacheSave, lockFileChanged2) {
+  return mode === "false" || mode === "auto" && cacheSave && lockFileChanged2;
 }
 function resolveRestoreConfiguration(configuration, cacheSave, lockFileChanged2) {
   return {
-    skipBazelisk: resolveMode(configuration.bazelisk, cacheSave, lockFileChanged2),
-    skipDisk: resolveMode(configuration.disk, cacheSave, lockFileChanged2),
-    skipRepository: resolveMode(configuration.repository, cacheSave, lockFileChanged2)
+    skipBazelisk: false,
+    skipDisk: resolveRestoreMode(configuration.diskRestore, cacheSave, lockFileChanged2),
+    skipRepository: resolveRestoreMode(
+      configuration.repositoryRestore,
+      cacheSave,
+      lockFileChanged2
+    )
+  };
+}
+function resolveCacheSaveConfiguration(configuration, cacheSave) {
+  return {
+    disk: cacheSave && configuration.diskSave !== "false",
+    repository: cacheSave && configuration.repositorySave !== "false"
   };
 }
 function isCacheSaveRef(ref, branchPatterns) {
@@ -69772,7 +69785,7 @@ function isCacheSaveRef(ref, branchPatterns) {
   }));
 }
 function needsLockFileCheck(configuration, cacheSave) {
-  return cacheSave && (configuration.disk === "auto" || configuration.repository === "auto" || configuration.bazelisk === "auto");
+  return cacheSave && (configuration.diskRestore === "auto" || configuration.repositoryRestore === "auto" || configuration.bazelisk === "auto");
 }
 
 // src/main.js
@@ -69785,35 +69798,34 @@ async function run() {
     }
     const workspace = process.env.GITHUB_WORKSPACE;
     if (!workspace) throw new Error("GITHUB_WORKSPACE is not set.");
-    const diskCacheName = getInput("disk-cache-name", { required: true });
+    const diskCacheKey = getInput("disk-cache-key", { required: true });
     const rawCacheSaveBranches = getInput("cache-save-branches");
     const cacheSaveBranches = parseCacheSaveBranches(
       rawCacheSaveBranches,
       rawCacheSaveBranches.trim() ? void 0 : resolveDefaultBranch()
     );
-    const repositoryCacheSaveRequested = parseRepositoryCacheSave(
-      getInput("save-repository-cache")
-    );
-    const restoreConfiguration = parseRestoreConfiguration({
-      skipDiskCacheRestore: getInput("skip-disk-cache-restore"),
-      skipRepositoryCacheRestore: getInput("skip-repository-cache-restore")
+    const cacheConfiguration = parseCacheConfiguration({
+      diskCacheRestore: getInput("disk-cache-restore"),
+      diskCacheSave: getInput("disk-cache-save"),
+      repositoryCacheRestore: getInput("repository-cache-restore"),
+      repositoryCacheSave: getInput("repository-cache-save")
     });
-    const configuration = createConfiguration(workspace, diskCacheName);
+    const configuration = createConfiguration(workspace, diskCacheKey);
     const cacheSave = isCacheSaveRef(process.env.GITHUB_REF || "", cacheSaveBranches);
-    const repositoryCacheSave = cacheSave && repositoryCacheSaveRequested;
+    const cacheSaves = resolveCacheSaveConfiguration(cacheConfiguration, cacheSave);
     let checkoutHistory = "skipped";
     let changed = null;
-    if (needsLockFileCheck(restoreConfiguration, cacheSave)) {
+    if (needsLockFileCheck(cacheConfiguration, cacheSave)) {
       const comparisonBase = resolveComparisonBase();
       checkoutHistory = ensureComparisonHistory(workspace, comparisonBase);
       changed = lockFileChanged(workspace, comparisonBase);
     }
-    const restoreModes = resolveRestoreConfiguration(restoreConfiguration, cacheSave, changed === true);
+    const restoreModes = resolveRestoreConfiguration(cacheConfiguration, cacheSave, changed === true);
     setDecisionOutputs({
       cacheSave,
       checkoutHistory,
       changed,
-      repositoryCacheSave,
+      cacheSaves,
       restoreModes
     });
     import_node_fs3.default.writeFileSync(configuration.bazelrc, configuration.bazelrcContents, { flag: "wx" });
@@ -69830,10 +69842,7 @@ async function run() {
       )
     };
     setRestoreOutputs(restoreResults);
-    const failedJobCacheSave = cacheSave && canSaveAfterFailure(
-      restoreResults,
-      repositoryCacheSave
-    );
+    const failedJobCacheSave = cacheSave && canSaveAfterFailure(restoreResults, cacheSaves);
     setOutput("failed-job-cache-save", failedJobCacheSave.toString());
     exportVariable(
       configuration.additiveCacheSaveEnvironment,
@@ -69841,7 +69850,7 @@ async function run() {
     );
     saveState(
       configuration.cacheSaveState,
-      JSON.stringify({ cacheSave, repositoryCacheSave, diskCacheName, workspace })
+      JSON.stringify({ cacheSave, cacheSaves, diskCacheKey, workspace })
     );
   } catch (error2) {
     setFailed(error2.stack || error2.message);
@@ -69858,14 +69867,17 @@ function setDecisionOutputs({
   cacheSave,
   checkoutHistory,
   changed,
-  repositoryCacheSave,
+  cacheSaves,
   restoreModes
 }) {
   setOutput("cache-save", cacheSave.toString());
-  setOutput("repository-cache-save", repositoryCacheSave.toString());
+  setOutput("disk-cache-save", cacheSaves.disk.toString());
+  setOutput("repository-cache-save", cacheSaves.repository.toString());
   setOutput("skip-bazelisk-cache-restore", restoreModes.skipBazelisk.toString());
   setOutput("skip-disk-cache-restore", restoreModes.skipDisk.toString());
   setOutput("skip-repository-cache-restore", restoreModes.skipRepository.toString());
+  setOutput("disk-cache-restore", (!restoreModes.skipDisk).toString());
+  setOutput("repository-cache-restore", (!restoreModes.skipRepository).toString());
   setOutput("checkout-history", checkoutHistory);
   setOutput("lock-file-changed", changed === null ? "unknown" : changed.toString());
 }

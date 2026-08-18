@@ -29,11 +29,12 @@ function cachePrefix(configuration, cacheConfiguration) {
 }
 
 /** A failed job may publish only snapshots that extend successfully restored caches. */
-function canSaveAfterFailure(restoreResults, repositoryCacheSave) {
+function canSaveAfterFailure(restoreResults, cacheSaves) {
   if (restoreResults.bazelisk !== RESTORE_RESULT.TRUE) return false;
 
-  const selected = [restoreResults.disk];
-  if (repositoryCacheSave) selected.push(restoreResults.repository);
+  const selected = [];
+  if (cacheSaves.disk) selected.push(restoreResults.disk);
+  if (cacheSaves.repository) selected.push(restoreResults.repository);
   return selected.every(
     (result) => result === RESTORE_RESULT.TRUE || result === RESTORE_RESULT.PARTIAL,
   );

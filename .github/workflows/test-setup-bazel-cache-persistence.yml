@@ -82,10 +82,12 @@ jobs:
         id: setup
         uses: ./setup-bazel-cache
         with:
-          disk-cache-name: persistence-${{ github.run_id }}-${{ github.run_attempt }}
+          disk-cache-key: persistence-${{ github.run_id }}-${{ github.run_attempt }}
           cache-save-branches: ${{ github.ref_name }}
-          skip-disk-cache-restore: "false"
-          skip-repository-cache-restore: "false"
+          disk-cache-restore: "true"
+          disk-cache-save: "true"
+          repository-cache-restore: "true"
+          repository-cache-save: "true"
 
       - name: Add baseline cache markers
         shell: bash
@@ -124,10 +126,12 @@ jobs:
         id: restore
         uses: ./setup-bazel-cache
         with:
-          disk-cache-name: persistence-${{ github.run_id }}-${{ github.run_attempt }}
+          disk-cache-key: persistence-${{ github.run_id }}-${{ github.run_attempt }}
           cache-save-branches: ${{ github.ref_name }}
-          skip-disk-cache-restore: "false"
-          skip-repository-cache-restore: "false"
+          disk-cache-restore: "true"
+          disk-cache-save: "true"
+          repository-cache-restore: "true"
+          repository-cache-save: "true"
 
       - name: Verify additive restore and add markers
         shell: bash
@@ -179,10 +183,12 @@ jobs:
         id: restore
         uses: ./setup-bazel-cache
         with:
-          disk-cache-name: persistence-${{ github.run_id }}-${{ github.run_attempt }}
+          disk-cache-key: persistence-${{ github.run_id }}-${{ github.run_attempt }}
           cache-save-branches: ${{ github.ref_name }}
-          skip-disk-cache-restore: "false"
-          skip-repository-cache-restore: "false"
+          disk-cache-restore: "true"
+          disk-cache-save: "true"
+          repository-cache-restore: "true"
+          repository-cache-save: "true"
 
       - name: Verify failed-job additions
         shell: bash

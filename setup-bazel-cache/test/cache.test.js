@@ -63,19 +63,35 @@ test('failed jobs may save only when every selected cache restore was additive',
     disk: RESTORE_RESULT.PARTIAL,
     repository: RESTORE_RESULT.PARTIAL,
   };
-  assert.equal(canSaveAfterFailure(additive, true), true);
+  assert.equal(canSaveAfterFailure(additive, { disk: true, repository: true }), true);
 
-  assert.equal(canSaveAfterFailure({ ...additive, disk: RESTORE_RESULT.FALSE }, true), false);
-  assert.equal(canSaveAfterFailure({ ...additive, disk: RESTORE_RESULT.SKIPPED }, true), false);
-  assert.equal(canSaveAfterFailure({ ...additive, disk: RESTORE_RESULT.UNKNOWN }, true), false);
   assert.equal(
-    canSaveAfterFailure({ ...additive, bazelisk: RESTORE_RESULT.PARTIAL }, true),
+    canSaveAfterFailure({ ...additive, disk: RESTORE_RESULT.FALSE }, { disk: true, repository: true }),
     false,
   );
   assert.equal(
-    canSaveAfterFailure({ ...additive, repository: RESTORE_RESULT.FALSE }, false),
-    true,
+    canSaveAfterFailure({ ...additive, disk: RESTORE_RESULT.SKIPPED }, { disk: true, repository: true }),
+    false,
   );
+  assert.equal(
+    canSaveAfterFailure({ ...additive, disk: RESTORE_RESULT.UNKNOWN }, { disk: true, repository: true }),
+    false,
+  );
+  assert.equal(
+    canSaveAfterFailure(
+      { ...additive, bazelisk: RESTORE_RESULT.PARTIAL },
+      { disk: true, repository: true },
+    ),
+    false,
+  );
+  assert.equal(canSaveAfterFailure({ ...additive, repository: RESTORE_RESULT.FALSE }, {
+    disk: true,
+    repository: false,
+  }), true);
+  assert.equal(canSaveAfterFailure({ ...additive, disk: RESTORE_RESULT.FALSE }, {
+    disk: false,
+    repository: true,
+  }), true);
 });
 
 test('content-based cache keys do not restore snapshots for other content', async (context) => {

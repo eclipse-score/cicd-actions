@@ -15,7 +15,7 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { createConfiguration, validateDiskCacheName } from '../src/config.js';
+import { createConfiguration, validateDiskCacheKey } from '../src/config.js';
 
 test('configuration uses readable Linux cache names and a temporary bazelrc', () => {
   const configuration = createConfiguration('/workspace', 'build-debug');
@@ -40,10 +40,10 @@ test('configuration uses readable Linux cache names and a temporary bazelrc', ()
   );
 });
 
-test('disk cache names are constrained to safe cache-key components', () => {
-  assert.equal(validateDiskCacheName('linux-debug'), 'linux-debug');
-  assert.throws(() => validateDiskCacheName(''), /printable characters without commas/);
-  assert.throws(() => validateDiskCacheName('a'.repeat(401)), /printable characters without commas/);
-  assert.throws(() => validateDiskCacheName('debug\nrelease'), /printable characters without commas/);
-  assert.throws(() => validateDiskCacheName('debug,release'), /printable characters without commas/);
+test('disk cache keys are constrained to safe cache-key components', () => {
+  assert.equal(validateDiskCacheKey('linux-debug'), 'linux-debug');
+  assert.throws(() => validateDiskCacheKey(''), /printable characters without commas/);
+  assert.throws(() => validateDiskCacheKey('a'.repeat(401)), /printable characters without commas/);
+  assert.throws(() => validateDiskCacheKey('debug\nrelease'), /printable characters without commas/);
+  assert.throws(() => validateDiskCacheKey('debug,release'), /printable characters without commas/);
 });

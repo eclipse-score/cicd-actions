@@ -201,7 +201,7 @@ jobs:
       - name: Configure Bazel with repository cache enabled
         uses: ./setup-bazel-cache
         with:
-          unique-cache-name: ${{ github.workflow }}-${{ github.job }}-refresh
+          disk-cache-key: ${{ github.workflow }}-${{ github.job }}-refresh
 
       - name: Clear repository cache before action
         shell: bash

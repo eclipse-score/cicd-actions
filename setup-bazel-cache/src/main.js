@@ -25,8 +25,8 @@ import {
   isCacheSaveRef,
   needsLockFileCheck,
   parseCacheSaveBranches,
-  parseRepositoryCacheSave,
-  parseRestoreConfiguration,
+  parseCacheConfiguration,
+  resolveCacheSaveConfiguration,
   resolveRestoreConfiguration,
 } from './inputs.js';
 
@@ -46,38 +46,37 @@ async function run() {
     const workspace = process.env.GITHUB_WORKSPACE;
     if (!workspace) throw new Error('GITHUB_WORKSPACE is not set.');
 
-    const diskCacheName = core.getInput('disk-cache-name', { required: true });
+    const diskCacheKey = core.getInput('disk-cache-key', { required: true });
     const rawCacheSaveBranches = core.getInput('cache-save-branches');
     const cacheSaveBranches = parseCacheSaveBranches(
       rawCacheSaveBranches,
       rawCacheSaveBranches.trim() ? undefined : resolveDefaultBranch(),
     );
-    const repositoryCacheSaveRequested = parseRepositoryCacheSave(
-      core.getInput('save-repository-cache'),
-    );
-    const restoreConfiguration = parseRestoreConfiguration({
-      skipDiskCacheRestore: core.getInput('skip-disk-cache-restore'),
-      skipRepositoryCacheRestore: core.getInput('skip-repository-cache-restore'),
+    const cacheConfiguration = parseCacheConfiguration({
+      diskCacheRestore: core.getInput('disk-cache-restore'),
+      diskCacheSave: core.getInput('disk-cache-save'),
+      repositoryCacheRestore: core.getInput('repository-cache-restore'),
+      repositoryCacheSave: core.getInput('repository-cache-save'),
     });
 
-    const configuration = createConfiguration(workspace, diskCacheName);
+    const configuration = createConfiguration(workspace, diskCacheKey);
 
     const cacheSave = isCacheSaveRef(process.env.GITHUB_REF || '', cacheSaveBranches);
-    const repositoryCacheSave = cacheSave && repositoryCacheSaveRequested;
+    const cacheSaves = resolveCacheSaveConfiguration(cacheConfiguration, cacheSave);
     let checkoutHistory = 'skipped';
     let changed = null;
-    if (needsLockFileCheck(restoreConfiguration, cacheSave)) {
+    if (needsLockFileCheck(cacheConfiguration, cacheSave)) {
       const comparisonBase = resolveComparisonBase();
       checkoutHistory = ensureComparisonHistory(workspace, comparisonBase);
       changed = lockFileChanged(workspace, comparisonBase);
     }
-    const restoreModes = resolveRestoreConfiguration(restoreConfiguration, cacheSave, changed === true);
+    const restoreModes = resolveRestoreConfiguration(cacheConfiguration, cacheSave, changed === true);
 
     setDecisionOutputs({
       cacheSave,
       checkoutHistory,
       changed,
-      repositoryCacheSave,
+      cacheSaves,
       restoreModes,
     });
 
@@ -97,10 +96,7 @@ async function run() {
     };
     setRestoreOutputs(restoreResults);
 
-    const failedJobCacheSave = cacheSave && canSaveAfterFailure(
-      restoreResults,
-      repositoryCacheSave,
-    );
+    const failedJobCacheSave = cacheSave && canSaveAfterFailure(restoreResults, cacheSaves);
     core.setOutput('failed-job-cache-save', failedJobCacheSave.toString());
     core.exportVariable(
       configuration.additiveCacheSaveEnvironment,
@@ -108,7 +104,7 @@ async function run() {
     );
     core.saveState(
       configuration.cacheSaveState,
-      JSON.stringify({ cacheSave, repositoryCacheSave, diskCacheName, workspace }),
+      JSON.stringify({ cacheSave, cacheSaves, diskCacheKey, workspace }),
     );
   } catch (error) {
     core.setFailed(error.stack || error.message);
@@ -127,14 +123,17 @@ function setDecisionOutputs({
   cacheSave,
   checkoutHistory,
   changed,
-  repositoryCacheSave,
+  cacheSaves,
   restoreModes,
 }) {
   core.setOutput('cache-save', cacheSave.toString());
-  core.setOutput('repository-cache-save', repositoryCacheSave.toString());
+  core.setOutput('disk-cache-save', cacheSaves.disk.toString());
+  core.setOutput('repository-cache-save', cacheSaves.repository.toString());
   core.setOutput('skip-bazelisk-cache-restore', restoreModes.skipBazelisk.toString());
   core.setOutput('skip-disk-cache-restore', restoreModes.skipDisk.toString());
   core.setOutput('skip-repository-cache-restore', restoreModes.skipRepository.toString());
+  core.setOutput('disk-cache-restore', (!restoreModes.skipDisk).toString());
+  core.setOutput('repository-cache-restore', (!restoreModes.skipRepository).toString());
   core.setOutput('checkout-history', checkoutHistory);
   core.setOutput('lock-file-changed', changed === null ? 'unknown' : changed.toString());
 }

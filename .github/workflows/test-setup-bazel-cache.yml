@@ -44,7 +44,7 @@ jobs:
         continue-on-error: true
         uses: ./setup-bazel-cache
         with:
-          disk-cache-name: ${{ github.workflow }}-${{ github.job }}
+          disk-cache-key: ${{ github.workflow }}-${{ github.job }}
 
       - name: Verify auto mode refused unavailable history
         shell: bash
@@ -76,7 +76,7 @@ jobs:
         id: setup-bazel-cache
         uses: ./setup-bazel-cache
         with:
-          disk-cache-name: ${{ github.workflow }}-${{ github.job }}-${{ matrix.history-method }}
+          disk-cache-key: ${{ github.workflow }}-${{ github.job }}-${{ matrix.history-method }}
 
       - name: Verify history was ${{ matrix.history-method }}
         shell: bash
@@ -115,7 +115,7 @@ jobs:
         continue-on-error: true
         uses: ./setup-bazel-cache
         with:
-          disk-cache-name: ${{ github.workflow }}-${{ github.job }}
+          disk-cache-key: ${{ github.workflow }}-${{ github.job }}
 
       - name: Verify auto mode refused missing checkout history
         shell: bash
@@ -136,20 +136,20 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - skip-disk-cache-restore: false
-            skip-repository-cache-restore: false
+          - disk-cache-restore: true
+            repository-cache-restore: true
             expected-skip-disk-cache-restore: false
             expected-skip-repository-cache-restore: false
-          - skip-disk-cache-restore: true
-            skip-repository-cache-restore: false
+          - disk-cache-restore: false
+            repository-cache-restore: true
             expected-skip-disk-cache-restore: true
             expected-skip-repository-cache-restore: false
-          - skip-disk-cache-restore: auto
-            skip-repository-cache-restore: false
+          - disk-cache-restore: auto
+            repository-cache-restore: true
             expected-skip-disk-cache-restore: false
             expected-skip-repository-cache-restore: false
-          - skip-disk-cache-restore: false
-            skip-repository-cache-restore: true
+          - disk-cache-restore: true
+            repository-cache-restore: false
             expected-skip-disk-cache-restore: false
             expected-skip-repository-cache-restore: true
     steps:
@@ -164,10 +164,10 @@ jobs:
         id: setup-bazel-cache
         uses: ./setup-bazel-cache
         with:
-          disk-cache-name: ${{ github.workflow }}-${{ github.job }}
+          disk-cache-key: ${{ github.workflow }}-${{ github.job }}
           cache-save-branches: no-cache-save-branch
-          skip-disk-cache-restore: ${{ matrix.skip-disk-cache-restore }}
-          skip-repository-cache-restore: ${{ matrix.skip-repository-cache-restore }}
+          disk-cache-restore: ${{ matrix.disk-cache-restore }}
+          repository-cache-restore: ${{ matrix.repository-cache-restore }}
 
       - name: Verify history and lockfile checks were skipped
         shell: bash
@@ -211,7 +211,7 @@ jobs:
         id: setup-bazel-cache
         uses: ./setup-bazel-cache
         with:
-          disk-cache-name: ${{ github.workflow }}-${{ github.job }}
+          disk-cache-key: ${{ github.workflow }}-${{ github.job }}
 
       - name: Verify the user and generated bazelrc files
         shell: bash
@@ -250,7 +250,7 @@ jobs:
         id: setup-bazel-cache
         uses: ./setup-bazel-cache
         with:
-          disk-cache-name: ${{ github.workflow }}-${{ github.job }}
+          disk-cache-key: ${{ github.workflow }}-${{ github.job }}
 
       - name: Verify cache decision and restore outputs
         shell: bash

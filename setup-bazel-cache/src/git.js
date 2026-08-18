@@ -107,7 +107,7 @@ function ensureComparisonHistory(workspace, comparisonBase, git = runGit) {
 
   throw new Error(
     `Automatic disk-cache restore detection could not obtain ${comparisonBase}. ` +
-    "Run actions/checkout with fetch-depth: 0 or set 'skip-disk-cache-restore' explicitly."
+    "Run actions/checkout with fetch-depth: 0 or set 'disk-cache-restore' explicitly."
   );
 }
 

@@ -18,16 +18,18 @@ import {
   needsLockFileCheck,
   parseBranchPattern,
   parseCacheSaveBranches,
-  parseRepositoryCacheSave,
-  parseRestoreConfiguration,
+  parseCacheConfiguration,
+  resolveCacheSaveConfiguration,
   resolveRestoreConfiguration,
 } from '../src/inputs.js';
 
 /** Supply every optional raw input so individual tests only override relevant values. */
 function raw(overrides = {}) {
   return {
-    skipDiskCacheRestore: '',
-    skipRepositoryCacheRestore: '',
+    diskCacheRestore: '',
+    repositoryCacheRestore: '',
+    diskCacheSave: '',
+    repositoryCacheSave: '',
     ...overrides,
   };
 }
@@ -39,13 +41,6 @@ test('only configured branch patterns can save caches', () => {
   assert.equal(isCacheSaveRef('refs/heads/release/1.0/hotfix', ['release/*']), false);
   assert.equal(isCacheSaveRef('refs/heads/release/1.0/hotfix', ['release/**']), true);
   assert.equal(isCacheSaveRef('refs/pull/123/merge', ['**']), false);
-});
-
-test('repository cache publishing defaults to enabled and accepts explicit booleans', () => {
-  assert.equal(parseRepositoryCacheSave(''), true);
-  assert.equal(parseRepositoryCacheSave('true'), true);
-  assert.equal(parseRepositoryCacheSave('false'), false);
-  assert.throws(() => parseRepositoryCacheSave('auto'), /Invalid save-repository-cache/);
 });
 
 test('cache save patterns default to the repository default branch', () => {
@@ -66,31 +61,41 @@ test('branch patterns must not be Git refs or unsafe path-like values', () => {
   assert.throws(() => parseBranchPattern('release/../*'), /Invalid cache-save-branches/);
 });
 
-test('new API has auto disk and restoring repository defaults', () => {
-  const configuration = parseRestoreConfiguration(raw());
+test('new cache API uses the requested defaults', () => {
+  const configuration = parseCacheConfiguration(raw());
   assert.deepEqual(configuration, {
-    disk: 'auto',
-    repository: 'false',
+    diskRestore: 'auto',
+    repositoryRestore: 'auto',
+    diskSave: 'false',
+    repositorySave: 'auto',
     bazelisk: 'false',
   });
   assert.equal(needsLockFileCheck(configuration, true), true);
   assert.deepEqual(resolveRestoreConfiguration(configuration, true, true), {
     skipBazelisk: false,
     skipDisk: true,
+    skipRepository: true,
+  });
+  assert.deepEqual(resolveCacheSaveConfiguration(configuration, true), {
+    disk: false,
+    repository: true,
+  });
+});
+
+test('auto restore mode restores outside the cache-writing branch', () => {
+  const configuration = parseCacheConfiguration(raw());
+  assert.equal(needsLockFileCheck(configuration, false), false);
+  assert.deepEqual(resolveRestoreConfiguration(configuration, false, true), {
+    skipBazelisk: false,
+    skipDisk: false,
     skipRepository: false,
   });
 });
 
-test('auto disk mode restores outside the cache-writing branch', () => {
-  const configuration = parseRestoreConfiguration(raw());
-  assert.equal(needsLockFileCheck(configuration, false), false);
-  assert.equal(resolveRestoreConfiguration(configuration, false, true).skipDisk, false);
-});
-
 test('explicit modes do not need the lock-file comparison', () => {
-  const configuration = parseRestoreConfiguration(raw({
-    skipDiskCacheRestore: 'true',
-    skipRepositoryCacheRestore: 'true',
+  const configuration = parseCacheConfiguration(raw({
+    diskCacheRestore: 'false',
+    repositoryCacheRestore: 'false',
   }));
   assert.equal(needsLockFileCheck(configuration, true), false);
   assert.deepEqual(resolveRestoreConfiguration(configuration, true, false), {
@@ -102,11 +107,11 @@ test('explicit modes do not need the lock-file comparison', () => {
 
 test('invalid modes are rejected', () => {
   assert.throws(
-    () => parseRestoreConfiguration(raw({ skipDiskCacheRestore: 'yes' })),
-    /Invalid skip-disk-cache-restore/
+    () => parseCacheConfiguration(raw({ diskCacheRestore: 'yes' })),
+    /Invalid disk-cache-restore/
   );
   assert.throws(
-    () => parseRestoreConfiguration(raw({ skipRepositoryCacheRestore: 'auto' })),
-    /Invalid skip-repository-cache-restore/
+    () => parseCacheConfiguration(raw({ repositoryCacheSave: 'yes' })),
+    /Invalid repository-cache-save/
   );
 });

@@ -13,7 +13,6 @@
 
 import { minimatch } from 'minimatch';
 
-const BOOLEAN_MODES = new Set(['true', 'false']);
 const AUTOMATIC_MODES = new Set(['true', 'false', 'auto']);
 const INVALID_BRANCH_PATTERN_CHARACTERS = /[\s~^:\\]/;
 
@@ -24,23 +23,24 @@ function validateMode(name, value, allowed) {
   }
 }
 
-/** Resolve the public restore inputs without applying the lock-file decision yet. */
-function parseRestoreConfiguration(raw) {
-  const disk = raw.skipDiskCacheRestore.trim();
-  const repository = raw.skipRepositoryCacheRestore.trim();
+/** Resolve the public cache modes without applying branch or lock-file policy yet. */
+function parseCacheConfiguration(raw) {
+  const diskRestore = raw.diskCacheRestore.trim() || 'auto';
+  const repositoryRestore = raw.repositoryCacheRestore.trim() || 'auto';
+  const diskSave = raw.diskCacheSave.trim() || 'false';
+  const repositorySave = raw.repositoryCacheSave.trim() || 'auto';
 
-  const resolvedDisk = disk || 'auto';
-  const resolvedRepository = repository || 'false';
-  validateMode('skip-disk-cache-restore', resolvedDisk, AUTOMATIC_MODES);
-  validateMode('skip-repository-cache-restore', resolvedRepository, BOOLEAN_MODES);
-  return { disk: resolvedDisk, repository: resolvedRepository, bazelisk: 'false' };
-}
-
-/** Resolve whether this job is a publisher for the shared repository cache. */
-function parseRepositoryCacheSave(value) {
-  const resolved = value.trim() || 'true';
-  validateMode('save-repository-cache', resolved, BOOLEAN_MODES);
-  return resolved === 'true';
+  validateMode('disk-cache-restore', diskRestore, AUTOMATIC_MODES);
+  validateMode('repository-cache-restore', repositoryRestore, AUTOMATIC_MODES);
+  validateMode('disk-cache-save', diskSave, AUTOMATIC_MODES);
+  validateMode('repository-cache-save', repositorySave, AUTOMATIC_MODES);
+  return {
+    diskRestore,
+    repositoryRestore,
+    diskSave,
+    repositorySave,
+    bazelisk: 'false',
+  };
 }
 
 /** Ensure a branch name or glob pattern can be safely matched against a head ref. */
@@ -83,16 +83,28 @@ function parseCacheSaveBranches(value, defaultBranch) {
 }
 
 /** Convert one configured mode into the boolean needed by the cache layer. */
-function resolveMode(mode, cacheSave, lockFileChanged) {
-  return mode === 'true' || (mode === 'auto' && cacheSave && lockFileChanged);
+function resolveRestoreMode(mode, cacheSave, lockFileChanged) {
+  return mode === 'false' || (mode === 'auto' && cacheSave && lockFileChanged);
 }
 
 /** Resolve every cache independently so the cache layer contains no input policy. */
 function resolveRestoreConfiguration(configuration, cacheSave, lockFileChanged) {
   return {
-    skipBazelisk: resolveMode(configuration.bazelisk, cacheSave, lockFileChanged),
-    skipDisk: resolveMode(configuration.disk, cacheSave, lockFileChanged),
-    skipRepository: resolveMode(configuration.repository, cacheSave, lockFileChanged),
+    skipBazelisk: false,
+    skipDisk: resolveRestoreMode(configuration.diskRestore, cacheSave, lockFileChanged),
+    skipRepository: resolveRestoreMode(
+      configuration.repositoryRestore,
+      cacheSave,
+      lockFileChanged,
+    ),
+  };
+}
+
+/** Resolve which cache families may be published on this cache-saving ref. */
+function resolveCacheSaveConfiguration(configuration, cacheSave) {
+  return {
+    disk: cacheSave && configuration.diskSave !== 'false',
+    repository: cacheSave && configuration.repositorySave !== 'false',
   };
 }
 
@@ -114,8 +126,8 @@ function isCacheSaveRef(ref, branchPatterns) {
  */
 function needsLockFileCheck(configuration, cacheSave) {
   return cacheSave && (
-    configuration.disk === 'auto' ||
-    configuration.repository === 'auto' ||
+    configuration.diskRestore === 'auto' ||
+    configuration.repositoryRestore === 'auto' ||
     configuration.bazelisk === 'auto'
   );
 }
@@ -125,7 +137,7 @@ export {
   needsLockFileCheck,
   parseBranchPattern,
   parseCacheSaveBranches,
-  parseRepositoryCacheSave,
-  parseRestoreConfiguration,
+  parseCacheConfiguration,
+  resolveCacheSaveConfiguration,
   resolveRestoreConfiguration,
 };
