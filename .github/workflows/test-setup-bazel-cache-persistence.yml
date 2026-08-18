@@ -33,7 +33,7 @@
 # failure-sensitive post condition. The third job proves that the disk and
 # repository additions survived.
 
-name: Test Setup Bazel Cache Experimental Persistence
+name: Test Setup Bazel Cache Persistence
 
 on:
   workflow_call:
@@ -46,8 +46,8 @@ on:
     branches-ignore:
       - main
     paths:
-      - .github/workflows/test-setup-bazel-cache-experimental-persistence.yml
-      - setup-bazel-cache-experimental/**
+      - .github/workflows/test-setup-bazel-cache-persistence.yml
+      - setup-bazel-cache/**
   workflow_dispatch:
     inputs:
       exercise-failed-job:
@@ -59,7 +59,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: setup-bazel-cache-experimental-persistence-${{ github.ref }}
+  group: setup-bazel-cache-persistence-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -80,7 +80,7 @@ jobs:
 
       - name: Configure writable branch caches
         id: setup
-        uses: ./setup-bazel-cache-experimental
+        uses: ./setup-bazel-cache
         with:
           disk-cache-name: persistence-${{ github.run_id }}-${{ github.run_attempt }}
           cache-save-branches: ${{ github.ref_name }}
@@ -122,7 +122,7 @@ jobs:
 
       - name: Restore seeded caches
         id: restore
-        uses: ./setup-bazel-cache-experimental
+        uses: ./setup-bazel-cache
         with:
           disk-cache-name: persistence-${{ github.run_id }}-${{ github.run_attempt }}
           cache-save-branches: ${{ github.ref_name }}
@@ -177,7 +177,7 @@ jobs:
 
       - name: Restore caches extended by the failed job
         id: restore
-        uses: ./setup-bazel-cache-experimental
+        uses: ./setup-bazel-cache
         with:
           disk-cache-name: persistence-${{ github.run_id }}-${{ github.run_attempt }}
           cache-save-branches: ${{ github.ref_name }}

@@ -44,18 +44,18 @@ function createConfiguration(workspace, diskCacheName) {
   const home = os.homedir();
   const cacheRoot = path.join(home, '.cache');
   const runnerTemp = process.env.RUNNER_TEMP || os.tmpdir();
-  const baseKey = `setup-bazel-cache-experimental-v1-linux-${os.arch()}`;
+  const baseKey = `setup-bazel-cache-v1-linux-${os.arch()}`;
 
   return {
     additiveCacheSaveEnvironment:
-      'SETUP_BAZEL_CACHE_EXPERIMENTAL_ADDITIVE_SAVE',
-    bazelrc: path.join(runnerTemp, 'setup-bazel-cache-experimental.bazelrc'),
+      'SETUP_BAZEL_CACHE_ADDITIVE_SAVE',
+    bazelrc: path.join(runnerTemp, 'setup-bazel-cache.bazelrc'),
     bazelrcContents: [
       `build --disk_cache=${path.join(cacheRoot, 'bazel-disk')}`,
       `common --repository_cache=${path.join(cacheRoot, 'bazel-repo')}`,
       '',
     ].join('\n'),
-    cacheSaveState: 'setup-bazel-cache-experimental-configuration',
+    cacheSaveState: 'setup-bazel-cache-configuration',
     caches: {
       bazelisk: {
         name: 'bazelisk',

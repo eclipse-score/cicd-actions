@@ -39,7 +39,7 @@ async function run() {
   try {
     if (process.platform !== 'linux') {
       throw new Error(
-        `setup-bazel-cache-experimental supports Linux runners only, not '${process.platform}'.`,
+        `setup-bazel-cache supports Linux runners only, not '${process.platform}'.`,
       );
     }
 

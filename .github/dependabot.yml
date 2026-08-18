@@ -44,14 +44,14 @@ updates:
           - "patch"
 
   - package-ecosystem: npm
-    directory: /setup-bazel-cache-experimental
+    directory: /setup-bazel-cache
     schedule:
       interval: daily
     commit-message:
       prefix: chore
       include: scope
     groups:
-      setup-bazel-cache-experimental:
+      setup-bazel-cache:
         patterns:
           - "*"
         update-types:

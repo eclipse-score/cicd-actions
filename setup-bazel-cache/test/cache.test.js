@@ -80,7 +80,7 @@ test('failed jobs may save only when every selected cache restore was additive',
 
 test('content-based cache keys do not restore snapshots for other content', async (context) => {
   const workspace = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'setup-bazel-cache-experimental-test-'),
+    path.join(os.tmpdir(), 'setup-bazel-cache-test-'),
   );
   context.after(() => fs.rmSync(workspace, { recursive: true, force: true }));
   fs.writeFileSync(path.join(workspace, '.bazelversion'), '8.6.0\n');

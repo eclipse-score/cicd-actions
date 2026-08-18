@@ -11,8 +11,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # *******************************************************************************
 
-name: Setup Bazel Cache Experimental
-description: Experimental Bazel 8.6+ cache design. Its API and cache format may change without compatibility.
+name: Setup Bazel Cache
+description: Configures Bazel 8.6+ caching with opinionated defaults.
 
 inputs:
   disk-cache-name:
@@ -62,4 +62,4 @@ runs:
   using: node24
   main: dst/main/index.js
   post: dst/post/index.js
-  post-if: success() || (failure() && env.SETUP_BAZEL_CACHE_EXPERIMENTAL_ADDITIVE_SAVE == 'true')
+  post-if: success() || (failure() && env.SETUP_BAZEL_CACHE_ADDITIVE_SAVE == 'true')

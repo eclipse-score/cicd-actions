@@ -1,8 +1,8 @@
 {
-  "name": "setup-bazel-cache-experimental",
+  "name": "setup-bazel-cache",
   "version": "1.0.0",
   "private": true,
-  "description": "Experimental opinionated Bazel cache setup GitHub Action",
+  "description": "Opinionated Bazel cache setup GitHub Action",
   "type": "module",
   "engines": {
     "node": ">=24"

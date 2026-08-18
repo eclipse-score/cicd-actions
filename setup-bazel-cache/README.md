@@ -1,18 +1,10 @@
-# Setup Bazel Cache Experimental
-
-> [!WARNING]
-> This is a separate experimental action, not version 2 of
-> [`setup-bazel-cache`](../setup-bazel-cache/README.md). Its inputs, behavior,
-> cache format, and cache keys may change without a compatibility period.
-> Evaluate it explicitly and pin usages to a commit SHA.
+# Setup Bazel Cache
 
 This Linux-only action configures Bazelisk, Bazel disk, and Bazel repository
 caches with opinionated defaults for Bazel 8.6 or newer. Branch and
 pull-request jobs restore caches; only configured cache-saving branches save
 them. If no save branches are configured, the repository's default branch is
 used automatically.
-Its cache namespace is isolated from the stable action, so evaluating it cannot
-replace or restore stable-action cache entries.
 
 ## Usage
 
@@ -20,7 +12,7 @@ replace or restore stable-action cache entries.
 steps:
   - uses: actions/checkout@<sha>
 
-  - uses: eclipse-score/cicd-actions/setup-bazel-cache-experimental@<sha>
+  - uses: eclipse-score/cicd-actions/setup-bazel-cache@<sha>
     with:
       disk-cache-name: ${{ github.workflow }}-${{ github.job }}
       # Optional:
@@ -104,7 +96,7 @@ permissions:
 ## Cache lifecycle
 
 Cache keys use the prefix
-`setup-bazel-cache-experimental-v1-linux-<architecture>`.
+`setup-bazel-cache-v1-linux-<architecture>`.
 Bazelisk uses an exact `.bazelversion` content hash and does not restore
 snapshots created for another version. The repository cache uses one rolling
 timestamped generation family for the repository and runner architecture.
@@ -163,7 +155,7 @@ giving candidate code access to the default branch's caches.
 
 | Context | Validation | Cache scope |
 | --- | --- | --- |
-| Same-repository branch push that changes `setup-bazel-cache-experimental/**` | Automatic save and restore test | That feature branch |
+| Same-repository branch push that changes `setup-bazel-cache/**` | Automatic save and restore test | That feature branch |
 | Fork pull request | Restore-only action tests | Pull-request/default-branch caches allowed by GitHub |
 | Approved pull request in the merge queue | Automatic save and restore test | Temporary `merge_group` ref |
 | `workflow_dispatch` | Optional diagnostic rerun | The explicitly selected branch |

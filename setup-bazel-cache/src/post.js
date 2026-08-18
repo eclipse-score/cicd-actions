@@ -21,7 +21,7 @@ import { createConfiguration } from './config.js';
  */
 async function run() {
   try {
-    const state = core.getState('setup-bazel-cache-experimental-configuration');
+    const state = core.getState('setup-bazel-cache-configuration');
     if (!state) {
       core.info('Setup did not complete; caches will not be saved');
       return;

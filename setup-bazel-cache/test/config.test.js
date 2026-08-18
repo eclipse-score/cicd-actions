@@ -21,12 +21,12 @@ test('configuration uses readable Linux cache names and a temporary bazelrc', ()
   const configuration = createConfiguration('/workspace', 'build-debug');
   assert.equal(
     configuration.baseKey,
-    `setup-bazel-cache-experimental-v1-linux-${os.arch()}`,
+    `setup-bazel-cache-v1-linux-${os.arch()}`,
   );
   assert.equal(configuration.caches.disk.name, 'disk-11-build-debug');
   assert.equal(
     configuration.bazelrc,
-    path.join(process.env.RUNNER_TEMP || os.tmpdir(), 'setup-bazel-cache-experimental.bazelrc'),
+    path.join(process.env.RUNNER_TEMP || os.tmpdir(), 'setup-bazel-cache.bazelrc'),
   );
   assert.match(configuration.bazelrcContents, /^build --disk_cache=.*bazel-disk$/m);
   assert.match(configuration.bazelrcContents, /^common --repository_cache=.*bazel-repo$/m);
@@ -36,7 +36,7 @@ test('configuration uses readable Linux cache names and a temporary bazelrc', ()
   assert.deepEqual(configuration.caches.repository.files, []);
   assert.equal(
     configuration.additiveCacheSaveEnvironment,
-    'SETUP_BAZEL_CACHE_EXPERIMENTAL_ADDITIVE_SAVE',
+    'SETUP_BAZEL_CACHE_ADDITIVE_SAVE',
   );
 });
 

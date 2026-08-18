@@ -70100,16 +70100,16 @@ function createConfiguration(workspace, diskCacheName) {
   const home = import_node_os3.default.homedir();
   const cacheRoot = import_node_path.default.join(home, ".cache");
   const runnerTemp = process.env.RUNNER_TEMP || import_node_os3.default.tmpdir();
-  const baseKey = `setup-bazel-cache-experimental-v1-linux-${import_node_os3.default.arch()}`;
+  const baseKey = `setup-bazel-cache-v1-linux-${import_node_os3.default.arch()}`;
   return {
-    additiveCacheSaveEnvironment: "SETUP_BAZEL_CACHE_EXPERIMENTAL_ADDITIVE_SAVE",
-    bazelrc: import_node_path.default.join(runnerTemp, "setup-bazel-cache-experimental.bazelrc"),
+    additiveCacheSaveEnvironment: "SETUP_BAZEL_CACHE_ADDITIVE_SAVE",
+    bazelrc: import_node_path.default.join(runnerTemp, "setup-bazel-cache.bazelrc"),
     bazelrcContents: [
       `build --disk_cache=${import_node_path.default.join(cacheRoot, "bazel-disk")}`,
       `common --repository_cache=${import_node_path.default.join(cacheRoot, "bazel-repo")}`,
       ""
     ].join("\n"),
-    cacheSaveState: "setup-bazel-cache-experimental-configuration",
+    cacheSaveState: "setup-bazel-cache-configuration",
     caches: {
       bazelisk: {
         name: "bazelisk",
@@ -70137,7 +70137,7 @@ function createConfiguration(workspace, diskCacheName) {
 // src/post.js
 async function run() {
   try {
-    const state3 = getState("setup-bazel-cache-experimental-configuration");
+    const state3 = getState("setup-bazel-cache-configuration");
     if (!state3) {
       info("Setup did not complete; caches will not be saved");
       return;
