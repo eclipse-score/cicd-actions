@@ -11,9 +11,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // *******************************************************************************
 
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+const MAX_BAZELISK_VERSION_LENGTH = 400;
 const MAX_DISK_CACHE_KEY_LENGTH = 400;
 
 /** Reject malformed key components before cache APIs can fail late in the job. */
@@ -38,9 +40,33 @@ function hasControlCharacter(value) {
   });
 }
 
+/** Read the human-readable Bazelisk version used as the exact cache key suffix. */
+function readBazeliskVersion(workspace) {
+  const versionFile = path.join(workspace, '.bazelversion');
+  let version;
+  try {
+    version = fs.readFileSync(versionFile, 'utf8').trim();
+  } catch (error) {
+    if (error.code === 'ENOENT') return 'default';
+    throw error;
+  }
+  if (
+    !version ||
+    version.length > MAX_BAZELISK_VERSION_LENGTH ||
+    hasControlCharacter(version) ||
+    version.includes(',')
+  ) {
+    throw new Error(
+      '.bazelversion must contain 1 to 400 printable characters without commas.',
+    );
+  }
+  return version;
+}
+
 /** Build the complete Linux cache configuration in one place. */
 function createConfiguration(workspace, diskCacheKey) {
   validateDiskCacheKey(diskCacheKey);
+  const bazeliskVersion = readBazeliskVersion(workspace);
   const home = os.homedir();
   const cacheRoot = path.join(home, '.cache');
   const runnerTemp = process.env.RUNNER_TEMP || os.tmpdir();
@@ -59,7 +85,8 @@ function createConfiguration(workspace, diskCacheKey) {
     caches: {
       bazelisk: {
         name: 'bazelisk',
-        files: [path.join(workspace, '.bazelversion')],
+        files: [],
+        keySuffix: bazeliskVersion,
         paths: [path.join(cacheRoot, 'bazelisk')],
       },
       disk: {
@@ -80,4 +107,4 @@ function createConfiguration(workspace, diskCacheKey) {
   };
 }
 
-export { createConfiguration, validateDiskCacheKey };
+export { createConfiguration, readBazeliskVersion, validateDiskCacheKey };

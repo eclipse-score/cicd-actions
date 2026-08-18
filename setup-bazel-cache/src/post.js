@@ -34,7 +34,11 @@ async function run() {
     }
 
     const configuration = createConfiguration(workspace, diskCacheKey);
-    await save(configuration, configuration.caches.bazelisk);
+    if (saves.bazelisk) {
+      await save(configuration, configuration.caches.bazelisk);
+    } else {
+      core.info('Bazelisk cache saving is disabled for this job');
+    }
     if (saves.disk) {
       await save(configuration, configuration.caches.disk);
     } else {

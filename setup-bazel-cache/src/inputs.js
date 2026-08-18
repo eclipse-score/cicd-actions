@@ -14,6 +14,7 @@
 import { minimatch } from 'minimatch';
 
 const AUTOMATIC_MODES = new Set(['true', 'false', 'auto']);
+const BOOLEAN_MODES = new Set(['true', 'false']);
 const INVALID_BRANCH_PATTERN_CHARACTERS = /[\s~^:\\]/;
 
 /** Reject unknown modes early because GitHub Action inputs are untyped strings. */
@@ -26,14 +27,18 @@ function validateMode(name, value, allowed) {
 /** Resolve the public cache modes without applying branch or lock-file policy yet. */
 function parseCacheConfiguration(raw) {
   const restore = {
+    bazelisk: raw.bazeliskCacheRestore.trim() || 'true',
     disk: raw.diskCacheRestore.trim() || 'auto',
     repository: raw.repositoryCacheRestore.trim() || 'auto',
   };
   const save = {
+    bazelisk: raw.bazeliskCacheSave.trim() || 'true',
     disk: raw.diskCacheSave.trim() || 'false',
     repository: raw.repositoryCacheSave.trim() || 'auto',
   };
 
+  validateMode('bazelisk-cache-restore', restore.bazelisk, BOOLEAN_MODES);
+  validateMode('bazelisk-cache-save', save.bazelisk, BOOLEAN_MODES);
   validateMode('disk-cache-restore', restore.disk, AUTOMATIC_MODES);
   validateMode('repository-cache-restore', restore.repository, AUTOMATIC_MODES);
   validateMode('disk-cache-save', save.disk, AUTOMATIC_MODES);
@@ -91,7 +96,7 @@ function resolveRestoreMode(mode, cacheSaveAllowed, lockFileChanged) {
 /** Resolve every cache independently so the cache layer contains no input policy. */
 function resolveRestoreModes(configuration, cacheSaveAllowed, lockFileChanged) {
   return {
-    bazelisk: true,
+    bazelisk: configuration.bazelisk === 'true',
     disk: resolveRestoreMode(configuration.disk, cacheSaveAllowed, lockFileChanged),
     repository: resolveRestoreMode(configuration.repository, cacheSaveAllowed, lockFileChanged),
   };
@@ -100,6 +105,7 @@ function resolveRestoreModes(configuration, cacheSaveAllowed, lockFileChanged) {
 /** Resolve which cache families may be published on this cache-saving ref. */
 function resolveSaveModes(configuration, cacheSaveAllowed) {
   return {
+    bazelisk: cacheSaveAllowed && configuration.bazelisk === 'true',
     disk: cacheSaveAllowed && configuration.disk !== 'false',
     repository: cacheSaveAllowed && configuration.repository !== 'false',
   };

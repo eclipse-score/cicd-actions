@@ -16,6 +16,8 @@ steps:
     with:
       disk-cache-key: ${{ github.workflow }}-${{ github.job }}
       # Optional:
+      bazelisk-cache-restore: true
+      bazelisk-cache-save: true
       cache-save-branch-patterns: |
         main
         release/*
@@ -35,11 +37,16 @@ steps:
   Pull-request refs never save caches, even when a pattern would match them.
   When multiple patterns are configured, they replace the default-branch
   fallback; include it explicitly if needed.
-- `repository-cache-restore`, `repository-cache-save`, `disk-cache-restore`, and
-  `disk-cache-save` accept `true`, `false`, or `auto`. Restore inputs are positive:
-  `false` skips the restore, while `auto` starts a fresh cache on a cache-saving
-  branch when `MODULE.bazel.lock` changed. Other refs restore the latest available
-  cache. Save inputs only take effect on configured cache-saving branches; `false`
+- `bazelisk-cache-restore` and `bazelisk-cache-save` accept `true` or `false`.
+  Both default to `true`; saving is still limited to configured cache-saving
+  branches. `repository-cache-restore`, `repository-cache-save`,
+  `disk-cache-restore`, and `disk-cache-save` accept `true`, `false`, or `auto`.
+  Bazelisk uses the readable `.bazelversion` value in its exact cache key, so
+  its cache is independent of `MODULE.bazel.lock`. For the disk and repository
+  caches, restore `false` skips
+  the restore, while `auto` starts a fresh cache on a cache-saving branch when
+  `MODULE.bazel.lock` changed. Other refs restore the latest available cache.
+  Save inputs only take effect on configured cache-saving branches; `false`
   disables saving for that cache.
 
 The action creates a temporary bazelrc with `--disk_cache` and
@@ -81,9 +88,9 @@ permissions:
 - `disk-cache-restore`: resolved disk-cache restore decision
 - `disk-cache-save`: resolved disk-cache save decision
 - `bazelisk-cache-restore`: resolved Bazelisk-cache restore decision
-- `failed-job-cache-save-allowed`: whether Bazelisk was restored exactly and every
-  generational cache selected for saving was restored exactly or by prefix,
-  allowing an additive save if a later step fails
+- `bazelisk-cache-save`: resolved Bazelisk-cache save decision
+- `failed-job-cache-save-allowed`: whether every selected cache was restored
+  sufficiently to allow an additive save if a later step fails
 - `bazelisk-cache-restored`, `disk-cache-restored`, and
   `repository-cache-restored`: restore result for each cache (`true` for an
   exact key, `partial` for a prefix match, `false` for a miss, `skipped`, or
@@ -95,8 +102,10 @@ permissions:
 
 Cache keys use the prefix
 `setup-bazel-cache-v1-linux-<architecture>`.
-Bazelisk uses an exact `.bazelversion` content hash and does not restore
-snapshots created for another version. The repository cache uses one rolling
+Bazelisk uses the readable `.bazelversion` value in an exact cache key such as
+`...-bazelisk-8.6.0` and does not restore snapshots created for another version.
+Its restore and save can be disabled with `bazelisk-cache-restore` and
+`bazelisk-cache-save`. The repository cache uses one rolling
 timestamped generation family for the repository and runner architecture.
 Bazel repository-cache entries are content-addressed, so
 `MODULE.bazel.lock` and individual Bazel configs are not correctness boundaries
@@ -106,10 +115,10 @@ augment the same snapshot. Disk caches use timestamped generations and include
 cache outage does not fail the build.
 
 Successful jobs may publish new cache baselines. A failed job publishes only
-when Bazelisk was restored with an exact `true` result and every generational
-cache selected for saving was restored with result `true` or `partial`. Requiring
-an exact Bazelisk hit prevents a failed job from publishing an old binary under
-a new `.bazelversion` content key. The generational-cache results prove that
+when every selected cache was restored with an exact `true` result or, for
+generational caches, a `partial` result. When the Bazelisk cache is selected,
+requiring an exact Bazelisk hit prevents a failed job from publishing an old
+binary under a new Bazelisk version key. The generational-cache results prove that
 their snapshots extend existing caches. A restore result of `false`, `skipped`,
 or `unknown` suppresses the entire failed-job save because the incomplete
 snapshot would likely be worse than the existing generation. When

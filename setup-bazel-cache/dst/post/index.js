@@ -70037,7 +70037,9 @@ function cachePrefix(configuration, cacheConfiguration) {
 async function keyPlan(configuration, cacheConfiguration) {
   const prefix2 = cachePrefix(configuration, cacheConfiguration);
   let contentPrefix = prefix2;
-  if (cacheConfiguration.files.length > 0) {
+  if (cacheConfiguration.keySuffix) {
+    contentPrefix = `${prefix2}${cacheConfiguration.keySuffix}`;
+  } else if (cacheConfiguration.files.length > 0) {
     const hash = await hashFiles3(
       cacheConfiguration.files.join("\n"),
       configuration.workspace,
@@ -70078,8 +70080,10 @@ async function save(configuration, cacheConfiguration) {
 }
 
 // src/config.js
+var import_node_fs2 = __toESM(require("node:fs"), 1);
 var import_node_os3 = __toESM(require("node:os"), 1);
 var import_node_path = __toESM(require("node:path"), 1);
+var MAX_BAZELISK_VERSION_LENGTH = 400;
 var MAX_DISK_CACHE_KEY_LENGTH = 400;
 function validateDiskCacheKey(value) {
   if (!value || value.length > MAX_DISK_CACHE_KEY_LENGTH || hasControlCharacter(value) || value.includes(",")) {
@@ -70095,8 +70099,25 @@ function hasControlCharacter(value) {
     return codePoint < 32 || codePoint === 127;
   });
 }
+function readBazeliskVersion(workspace) {
+  const versionFile = import_node_path.default.join(workspace, ".bazelversion");
+  let version3;
+  try {
+    version3 = import_node_fs2.default.readFileSync(versionFile, "utf8").trim();
+  } catch (error2) {
+    if (error2.code === "ENOENT") return "default";
+    throw error2;
+  }
+  if (!version3 || version3.length > MAX_BAZELISK_VERSION_LENGTH || hasControlCharacter(version3) || version3.includes(",")) {
+    throw new Error(
+      ".bazelversion must contain 1 to 400 printable characters without commas."
+    );
+  }
+  return version3;
+}
 function createConfiguration(workspace, diskCacheKey) {
   validateDiskCacheKey(diskCacheKey);
+  const bazeliskVersion = readBazeliskVersion(workspace);
   const home = import_node_os3.default.homedir();
   const cacheRoot = import_node_path.default.join(home, ".cache");
   const runnerTemp = process.env.RUNNER_TEMP || import_node_os3.default.tmpdir();
@@ -70113,7 +70134,8 @@ function createConfiguration(workspace, diskCacheKey) {
     caches: {
       bazelisk: {
         name: "bazelisk",
-        files: [import_node_path.default.join(workspace, ".bazelversion")],
+        files: [],
+        keySuffix: bazeliskVersion,
         paths: [import_node_path.default.join(cacheRoot, "bazelisk")]
       },
       disk: {
@@ -70148,7 +70170,11 @@ async function run() {
       return;
     }
     const configuration = createConfiguration(workspace, diskCacheKey);
-    await save(configuration, configuration.caches.bazelisk);
+    if (saves.bazelisk) {
+      await save(configuration, configuration.caches.bazelisk);
+    } else {
+      info("Bazelisk cache saving is disabled for this job");
+    }
     if (saves.disk) {
       await save(configuration, configuration.caches.disk);
     } else {

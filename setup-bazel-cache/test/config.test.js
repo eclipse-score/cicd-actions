@@ -12,10 +12,15 @@
 // *******************************************************************************
 
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { createConfiguration, validateDiskCacheKey } from '../src/config.js';
+import {
+  createConfiguration,
+  readBazeliskVersion,
+  validateDiskCacheKey,
+} from '../src/config.js';
 
 test('configuration uses readable Linux cache names and a temporary bazelrc', () => {
   const configuration = createConfiguration('/workspace', 'build-debug');
@@ -33,11 +38,21 @@ test('configuration uses readable Linux cache names and a temporary bazelrc', ()
   assert.doesNotMatch(configuration.bazelrcContents, /output_base/);
   assert.equal(configuration.caches.disk.generational, true);
   assert.equal(configuration.caches.repository.generational, true);
+  assert.equal(configuration.caches.bazelisk.keySuffix, 'default');
   assert.deepEqual(configuration.caches.repository.files, []);
   assert.equal(
     configuration.additiveCacheSaveEnvironment,
     'SETUP_BAZEL_CACHE_ADDITIVE_SAVE',
   );
+});
+
+test('Bazelisk version is read as a readable cache-key component', (context) => {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'setup-bazel-cache-config-'));
+  context.after(() => fs.rmSync(workspace, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(workspace, '.bazelversion'), '8.6.0\n');
+
+  assert.equal(readBazeliskVersion(workspace), '8.6.0');
+  assert.equal(createConfiguration(workspace, 'test').caches.bazelisk.keySuffix, '8.6.0');
 });
 
 test('disk cache keys are constrained to safe cache-key components', () => {

@@ -26,6 +26,8 @@ import {
 /** Supply every optional raw input so individual tests only override relevant values. */
 function raw(overrides = {}) {
   return {
+    bazeliskCacheRestore: '',
+    bazeliskCacheSave: '',
     diskCacheRestore: '',
     repositoryCacheRestore: '',
     diskCacheSave: '',
@@ -65,10 +67,12 @@ test('new cache API uses the requested defaults', () => {
   const configuration = parseCacheConfiguration(raw());
   assert.deepEqual(configuration, {
     restore: {
+      bazelisk: 'true',
       disk: 'auto',
       repository: 'auto',
     },
     save: {
+      bazelisk: 'true',
       disk: 'false',
       repository: 'auto',
     },
@@ -80,6 +84,7 @@ test('new cache API uses the requested defaults', () => {
     repository: false,
   });
   assert.deepEqual(resolveSaveModes(configuration.save, true), {
+    bazelisk: true,
     disk: false,
     repository: true,
   });
@@ -116,5 +121,39 @@ test('invalid modes are rejected', () => {
   assert.throws(
     () => parseCacheConfiguration(raw({ repositoryCacheSave: 'yes' })),
     /Invalid repository-cache-save/
+  );
+  assert.throws(
+    () => parseCacheConfiguration(raw({ bazeliskCacheRestore: 'yes' })),
+    /Invalid bazelisk-cache-restore/
+  );
+  assert.throws(
+    () => parseCacheConfiguration(raw({ bazeliskCacheSave: 'yes' })),
+    /Invalid bazelisk-cache-save/
+  );
+});
+
+test('Bazelisk uses boolean modes independently of lock-file policy', () => {
+  const configuration = parseCacheConfiguration(raw({
+    bazeliskCacheRestore: 'true',
+    bazeliskCacheSave: 'false',
+  }));
+  assert.deepEqual(resolveRestoreModes(configuration.restore, true, true), {
+    bazelisk: true,
+    disk: false,
+    repository: false,
+  });
+  assert.deepEqual(resolveSaveModes(configuration.save, true), {
+    bazelisk: false,
+    disk: false,
+    repository: true,
+  });
+  assert.deepEqual(resolveRestoreModes({ ...configuration.restore, bazelisk: 'false' }, true, false), {
+    bazelisk: false,
+    disk: true,
+    repository: true,
+  });
+  assert.throws(
+    () => parseCacheConfiguration(raw({ bazeliskCacheRestore: 'auto' })),
+    /Invalid bazelisk-cache-restore/
   );
 });

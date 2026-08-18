@@ -53,6 +53,8 @@ async function run() {
       rawCacheSaveBranchPatterns.trim() ? undefined : resolveDefaultBranch(),
     );
     const cacheModes = parseCacheConfiguration({
+      bazeliskCacheRestore: core.getInput('bazelisk-cache-restore'),
+      bazeliskCacheSave: core.getInput('bazelisk-cache-save'),
       diskCacheRestore: core.getInput('disk-cache-restore'),
       diskCacheSave: core.getInput('disk-cache-save'),
       repositoryCacheRestore: core.getInput('repository-cache-restore'),
@@ -138,6 +140,7 @@ function setDecisionOutputs({
   restores,
 }) {
   core.setOutput('cache-save-allowed', cacheSaveAllowed.toString());
+  core.setOutput('bazelisk-cache-save', saves.bazelisk.toString());
   core.setOutput('disk-cache-save', saves.disk.toString());
   core.setOutput('repository-cache-save', saves.repository.toString());
   core.setOutput('bazelisk-cache-restore', restores.bazelisk.toString());

@@ -29449,7 +29449,7 @@ function saveState(name, value) {
 }
 
 // src/main.js
-var import_node_fs3 = __toESM(require("node:fs"), 1);
+var import_node_fs4 = __toESM(require("node:fs"), 1);
 
 // node_modules/@actions/cache/lib/cache.js
 var path6 = __toESM(require("path"), 1);
@@ -69512,18 +69512,20 @@ function cachePrefix(configuration, cacheConfiguration) {
   return `${configuration.baseKey}-${cacheConfiguration.name}-`;
 }
 function canSaveAfterFailure(restoreResults, saves) {
-  if (restoreResults.bazelisk !== RESTORE_RESULT.TRUE) return false;
+  if (saves.bazelisk && restoreResults.bazelisk !== RESTORE_RESULT.TRUE) return false;
   const selected = [];
   if (saves.disk) selected.push(restoreResults.disk);
   if (saves.repository) selected.push(restoreResults.repository);
-  return selected.every(
+  return selected.length > 0 && selected.every(
     (result) => result === RESTORE_RESULT.TRUE || result === RESTORE_RESULT.PARTIAL
   );
 }
 async function keyPlan(configuration, cacheConfiguration) {
   const prefix2 = cachePrefix(configuration, cacheConfiguration);
   let contentPrefix = prefix2;
-  if (cacheConfiguration.files.length > 0) {
+  if (cacheConfiguration.keySuffix) {
+    contentPrefix = `${prefix2}${cacheConfiguration.keySuffix}`;
+  } else if (cacheConfiguration.files.length > 0) {
     const hash = await hashFiles3(
       cacheConfiguration.files.join("\n"),
       configuration.workspace,
@@ -69571,8 +69573,10 @@ async function restore(configuration, cacheConfiguration) {
 }
 
 // src/config.js
+var import_node_fs2 = __toESM(require("node:fs"), 1);
 var import_node_os3 = __toESM(require("node:os"), 1);
 var import_node_path = __toESM(require("node:path"), 1);
+var MAX_BAZELISK_VERSION_LENGTH = 400;
 var MAX_DISK_CACHE_KEY_LENGTH = 400;
 function validateDiskCacheKey(value) {
   if (!value || value.length > MAX_DISK_CACHE_KEY_LENGTH || hasControlCharacter(value) || value.includes(",")) {
@@ -69588,8 +69592,25 @@ function hasControlCharacter(value) {
     return codePoint < 32 || codePoint === 127;
   });
 }
+function readBazeliskVersion(workspace) {
+  const versionFile = import_node_path.default.join(workspace, ".bazelversion");
+  let version3;
+  try {
+    version3 = import_node_fs2.default.readFileSync(versionFile, "utf8").trim();
+  } catch (error2) {
+    if (error2.code === "ENOENT") return "default";
+    throw error2;
+  }
+  if (!version3 || version3.length > MAX_BAZELISK_VERSION_LENGTH || hasControlCharacter(version3) || version3.includes(",")) {
+    throw new Error(
+      ".bazelversion must contain 1 to 400 printable characters without commas."
+    );
+  }
+  return version3;
+}
 function createConfiguration(workspace, diskCacheKey) {
   validateDiskCacheKey(diskCacheKey);
+  const bazeliskVersion = readBazeliskVersion(workspace);
   const home = import_node_os3.default.homedir();
   const cacheRoot = import_node_path.default.join(home, ".cache");
   const runnerTemp = process.env.RUNNER_TEMP || import_node_os3.default.tmpdir();
@@ -69606,7 +69627,8 @@ function createConfiguration(workspace, diskCacheKey) {
     caches: {
       bazelisk: {
         name: "bazelisk",
-        files: [import_node_path.default.join(workspace, ".bazelversion")],
+        files: [],
+        keySuffix: bazeliskVersion,
         paths: [import_node_path.default.join(cacheRoot, "bazelisk")]
       },
       disk: {
@@ -69629,7 +69651,7 @@ function createConfiguration(workspace, diskCacheKey) {
 
 // src/git.js
 var childProcess = __toESM(require("node:child_process"), 1);
-var import_node_fs2 = __toESM(require("node:fs"), 1);
+var import_node_fs3 = __toESM(require("node:fs"), 1);
 var FALLBACK_COMPARISON_BASE = "HEAD^";
 var NULL_SHA = "0".repeat(40);
 var SHA_PATTERN = /^[0-9a-f]{40}$/;
@@ -69643,7 +69665,7 @@ function runGit(workspace, args, options = {}) {
 function succeeds(result) {
   return result.status === 0;
 }
-function resolveDefaultBranch(eventPath = process.env.GITHUB_EVENT_PATH, readFile = import_node_fs2.default.readFileSync) {
+function resolveDefaultBranch(eventPath = process.env.GITHUB_EVENT_PATH, readFile = import_node_fs3.default.readFileSync) {
   if (!eventPath) {
     throw new Error(
       "GITHUB_EVENT_PATH is not set; set cache-save-branch-patterns explicitly when running outside GitHub Actions."
@@ -69658,7 +69680,7 @@ function resolveDefaultBranch(eventPath = process.env.GITHUB_EVENT_PATH, readFil
   }
   return defaultBranch;
 }
-function resolveComparisonBase(eventName = process.env.GITHUB_EVENT_NAME, eventPath = process.env.GITHUB_EVENT_PATH, readFile = import_node_fs2.default.readFileSync) {
+function resolveComparisonBase(eventName = process.env.GITHUB_EVENT_NAME, eventPath = process.env.GITHUB_EVENT_PATH, readFile = import_node_fs3.default.readFileSync) {
   if (eventName !== "push") return FALLBACK_COMPARISON_BASE;
   if (!eventPath) {
     throw new Error("GITHUB_EVENT_PATH is not set for this push event.");
@@ -69710,6 +69732,7 @@ function lockFileChanged(workspace, comparisonBase, git = runGit) {
 
 // src/inputs.js
 var AUTOMATIC_MODES = /* @__PURE__ */ new Set(["true", "false", "auto"]);
+var BOOLEAN_MODES = /* @__PURE__ */ new Set(["true", "false"]);
 var INVALID_BRANCH_PATTERN_CHARACTERS = /[\s~^:\\]/;
 function validateMode(name, value, allowed) {
   if (!allowed.has(value)) {
@@ -69718,13 +69741,17 @@ function validateMode(name, value, allowed) {
 }
 function parseCacheConfiguration(raw) {
   const restore2 = {
+    bazelisk: raw.bazeliskCacheRestore.trim() || "true",
     disk: raw.diskCacheRestore.trim() || "auto",
     repository: raw.repositoryCacheRestore.trim() || "auto"
   };
   const save = {
+    bazelisk: raw.bazeliskCacheSave.trim() || "true",
     disk: raw.diskCacheSave.trim() || "false",
     repository: raw.repositoryCacheSave.trim() || "auto"
   };
+  validateMode("bazelisk-cache-restore", restore2.bazelisk, BOOLEAN_MODES);
+  validateMode("bazelisk-cache-save", save.bazelisk, BOOLEAN_MODES);
   validateMode("disk-cache-restore", restore2.disk, AUTOMATIC_MODES);
   validateMode("repository-cache-restore", restore2.repository, AUTOMATIC_MODES);
   validateMode("disk-cache-save", save.disk, AUTOMATIC_MODES);
@@ -69760,13 +69787,14 @@ function resolveRestoreMode(mode, cacheSaveAllowed, lockFileChanged2) {
 }
 function resolveRestoreModes(configuration, cacheSaveAllowed, lockFileChanged2) {
   return {
-    bazelisk: true,
+    bazelisk: configuration.bazelisk === "true",
     disk: resolveRestoreMode(configuration.disk, cacheSaveAllowed, lockFileChanged2),
     repository: resolveRestoreMode(configuration.repository, cacheSaveAllowed, lockFileChanged2)
   };
 }
 function resolveSaveModes(configuration, cacheSaveAllowed) {
   return {
+    bazelisk: cacheSaveAllowed && configuration.bazelisk === "true",
     disk: cacheSaveAllowed && configuration.disk !== "false",
     repository: cacheSaveAllowed && configuration.repository !== "false"
   };
@@ -69802,6 +69830,8 @@ async function run() {
       rawCacheSaveBranchPatterns.trim() ? void 0 : resolveDefaultBranch()
     );
     const cacheModes = parseCacheConfiguration({
+      bazeliskCacheRestore: getInput("bazelisk-cache-restore"),
+      bazeliskCacheSave: getInput("bazelisk-cache-save"),
       diskCacheRestore: getInput("disk-cache-restore"),
       diskCacheSave: getInput("disk-cache-save"),
       repositoryCacheRestore: getInput("repository-cache-restore"),
@@ -69832,7 +69862,7 @@ async function run() {
       saves,
       restores
     });
-    import_node_fs3.default.writeFileSync(configuration.bazelrc, configuration.bazelrcContents, { flag: "wx" });
+    import_node_fs4.default.writeFileSync(configuration.bazelrc, configuration.bazelrcContents, { flag: "wx" });
     info(`Created ${configuration.bazelrc}`);
     const bazelrcFiles = [process.env.BAZELRC, configuration.bazelrc].filter(Boolean);
     exportVariable("BAZELRC", bazelrcFiles.join(","));
@@ -69878,6 +69908,7 @@ function setDecisionOutputs({
   restores
 }) {
   setOutput("cache-save-allowed", cacheSaveAllowed.toString());
+  setOutput("bazelisk-cache-save", saves.bazelisk.toString());
   setOutput("disk-cache-save", saves.disk.toString());
   setOutput("repository-cache-save", saves.repository.toString());
   setOutput("bazelisk-cache-restore", restores.bazelisk.toString());

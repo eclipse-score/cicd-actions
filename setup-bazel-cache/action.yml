@@ -15,6 +15,21 @@ name: Setup Bazel Cache
 description: Configures Bazel 8.6+ caching with opinionated defaults.
 
 inputs:
+  bazelisk-cache-restore:
+    description: >
+      Restore the Bazelisk cache.
+      Accepts true or false.
+    required: false
+    default: "true"
+
+  bazelisk-cache-save:
+    description: >
+      Save the Bazelisk cache.
+      Accepts true or false. Saving is still limited to configured
+      cache-saving branches.
+    required: false
+    default: "true"
+
   repository-cache-restore:
     description: >
       Restore the shared repository cache.
@@ -77,6 +92,9 @@ outputs:
   disk-cache-restore:
     description: Resolved disk-cache restore decision.
 
+  bazelisk-cache-save:
+    description: Resolved Bazelisk-cache save decision.
+
   disk-cache-save:
     description: Resolved disk-cache save decision.
 
@@ -85,8 +103,8 @@ outputs:
 
   failed-job-cache-save-allowed:
     description: >
-      Whether Bazelisk was restored exactly and generational caches may be
-      saved after a later workflow step fails.
+      Whether every selected cache was restored sufficiently for an additive
+      save after a later workflow step fails.
 
   bazelisk-cache-restored:
     description: >

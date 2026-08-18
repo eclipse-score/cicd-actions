@@ -28,14 +28,14 @@ function cachePrefix(configuration, cacheConfiguration) {
   return `${configuration.baseKey}-${cacheConfiguration.name}-`;
 }
 
-/** A failed job may publish only snapshots that extend successfully restored caches. */
+/** A failed job may publish only caches that extend successfully restored snapshots. */
 function canSaveAfterFailure(restoreResults, saves) {
-  if (restoreResults.bazelisk !== RESTORE_RESULT.TRUE) return false;
+  if (saves.bazelisk && restoreResults.bazelisk !== RESTORE_RESULT.TRUE) return false;
 
   const selected = [];
   if (saves.disk) selected.push(restoreResults.disk);
   if (saves.repository) selected.push(restoreResults.repository);
-  return selected.every(
+  return selected.length > 0 && selected.every(
     (result) => result === RESTORE_RESULT.TRUE || result === RESTORE_RESULT.PARTIAL,
   );
 }
@@ -44,7 +44,9 @@ function canSaveAfterFailure(restoreResults, saves) {
 async function keyPlan(configuration, cacheConfiguration) {
   const prefix = cachePrefix(configuration, cacheConfiguration);
   let contentPrefix = prefix;
-  if (cacheConfiguration.files.length > 0) {
+  if (cacheConfiguration.keySuffix) {
+    contentPrefix = `${prefix}${cacheConfiguration.keySuffix}`;
+  } else if (cacheConfiguration.files.length > 0) {
     const hash = await glob.hashFiles(
       cacheConfiguration.files.join('\n'),
       configuration.workspace,

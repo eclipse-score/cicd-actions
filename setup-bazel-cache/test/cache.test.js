@@ -63,35 +63,47 @@ test('failed jobs may save only when every selected cache restore was additive',
     disk: RESTORE_RESULT.PARTIAL,
     repository: RESTORE_RESULT.PARTIAL,
   };
-  assert.equal(canSaveAfterFailure(additive, { disk: true, repository: true }), true);
+  assert.equal(canSaveAfterFailure(additive, { bazelisk: true, disk: true, repository: true }), true);
 
   assert.equal(
-    canSaveAfterFailure({ ...additive, disk: RESTORE_RESULT.FALSE }, { disk: true, repository: true }),
+    canSaveAfterFailure({ ...additive, disk: RESTORE_RESULT.FALSE }, { bazelisk: true, disk: true, repository: true }),
     false,
   );
   assert.equal(
-    canSaveAfterFailure({ ...additive, disk: RESTORE_RESULT.SKIPPED }, { disk: true, repository: true }),
+    canSaveAfterFailure({ ...additive, disk: RESTORE_RESULT.SKIPPED }, { bazelisk: true, disk: true, repository: true }),
     false,
   );
   assert.equal(
-    canSaveAfterFailure({ ...additive, disk: RESTORE_RESULT.UNKNOWN }, { disk: true, repository: true }),
+    canSaveAfterFailure({ ...additive, disk: RESTORE_RESULT.UNKNOWN }, { bazelisk: true, disk: true, repository: true }),
     false,
   );
   assert.equal(
     canSaveAfterFailure(
       { ...additive, bazelisk: RESTORE_RESULT.PARTIAL },
-      { disk: true, repository: true },
+      { bazelisk: true, disk: true, repository: true },
     ),
     false,
   );
   assert.equal(canSaveAfterFailure({ ...additive, repository: RESTORE_RESULT.FALSE }, {
+    bazelisk: true,
     disk: true,
     repository: false,
   }), true);
   assert.equal(canSaveAfterFailure({ ...additive, disk: RESTORE_RESULT.FALSE }, {
+    bazelisk: true,
     disk: false,
     repository: true,
   }), true);
+  assert.equal(canSaveAfterFailure({ ...additive, bazelisk: RESTORE_RESULT.FALSE }, {
+    bazelisk: false,
+    disk: true,
+    repository: true,
+  }), true);
+  assert.equal(canSaveAfterFailure(additive, {
+    bazelisk: false,
+    disk: false,
+    repository: false,
+  }), false);
 });
 
 test('content-based cache keys do not restore snapshots for other content', async (context) => {
@@ -105,7 +117,7 @@ test('content-based cache keys do not restore snapshots for other content', asyn
   const plan = await keyPlan(configuration, configuration.caches.bazelisk);
   assert.match(
     plan.key,
-    new RegExp(`^${configuration.baseKey}-bazelisk-[a-f0-9]{64}$`),
+    new RegExp(`^${configuration.baseKey}-bazelisk-8\\.6\\.0$`),
   );
   assert.deepEqual(plan.restoreKeys, []);
 });
