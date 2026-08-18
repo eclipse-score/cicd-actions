@@ -69511,11 +69511,11 @@ var RESTORE_RESULT = Object.freeze({
 function cachePrefix(configuration, cacheConfiguration) {
   return `${configuration.baseKey}-${cacheConfiguration.name}-`;
 }
-function canSaveAfterFailure(restoreResults, cacheSaves) {
+function canSaveAfterFailure(restoreResults, saves) {
   if (restoreResults.bazelisk !== RESTORE_RESULT.TRUE) return false;
   const selected = [];
-  if (cacheSaves.disk) selected.push(restoreResults.disk);
-  if (cacheSaves.repository) selected.push(restoreResults.repository);
+  if (saves.disk) selected.push(restoreResults.disk);
+  if (saves.repository) selected.push(restoreResults.repository);
   return selected.every(
     (result) => result === RESTORE_RESULT.TRUE || result === RESTORE_RESULT.PARTIAL
   );
@@ -69717,20 +69717,21 @@ function validateMode(name, value, allowed) {
   }
 }
 function parseCacheConfiguration(raw) {
-  const diskRestore = raw.diskCacheRestore.trim() || "auto";
-  const repositoryRestore = raw.repositoryCacheRestore.trim() || "auto";
-  const diskSave = raw.diskCacheSave.trim() || "false";
-  const repositorySave = raw.repositoryCacheSave.trim() || "auto";
-  validateMode("disk-cache-restore", diskRestore, AUTOMATIC_MODES);
-  validateMode("repository-cache-restore", repositoryRestore, AUTOMATIC_MODES);
-  validateMode("disk-cache-save", diskSave, AUTOMATIC_MODES);
-  validateMode("repository-cache-save", repositorySave, AUTOMATIC_MODES);
+  const restore2 = {
+    disk: raw.diskCacheRestore.trim() || "auto",
+    repository: raw.repositoryCacheRestore.trim() || "auto"
+  };
+  const save = {
+    disk: raw.diskCacheSave.trim() || "false",
+    repository: raw.repositoryCacheSave.trim() || "auto"
+  };
+  validateMode("disk-cache-restore", restore2.disk, AUTOMATIC_MODES);
+  validateMode("repository-cache-restore", restore2.repository, AUTOMATIC_MODES);
+  validateMode("disk-cache-save", save.disk, AUTOMATIC_MODES);
+  validateMode("repository-cache-save", save.repository, AUTOMATIC_MODES);
   return {
-    diskRestore,
-    repositoryRestore,
-    diskSave,
-    repositorySave,
-    bazelisk: "false"
+    restore: restore2,
+    save
   };
 }
 function parseBranchPattern(value, name = "cache-save-branches") {
@@ -69755,23 +69756,19 @@ function parseCacheSaveBranches(value, defaultBranch) {
   return patterns.map((pattern) => parseBranchPattern(pattern));
 }
 function resolveRestoreMode(mode, cacheSave, lockFileChanged2) {
-  return mode === "false" || mode === "auto" && cacheSave && lockFileChanged2;
+  return mode !== "false" && !(mode === "auto" && cacheSave && lockFileChanged2);
 }
-function resolveRestoreConfiguration(configuration, cacheSave, lockFileChanged2) {
+function resolveRestoreModes(configuration, cacheSave, lockFileChanged2) {
   return {
-    skipBazelisk: false,
-    skipDisk: resolveRestoreMode(configuration.diskRestore, cacheSave, lockFileChanged2),
-    skipRepository: resolveRestoreMode(
-      configuration.repositoryRestore,
-      cacheSave,
-      lockFileChanged2
-    )
+    bazelisk: true,
+    disk: resolveRestoreMode(configuration.disk, cacheSave, lockFileChanged2),
+    repository: resolveRestoreMode(configuration.repository, cacheSave, lockFileChanged2)
   };
 }
-function resolveCacheSaveConfiguration(configuration, cacheSave) {
+function resolveSaveModes(configuration, cacheSave) {
   return {
-    disk: cacheSave && configuration.diskSave !== "false",
-    repository: cacheSave && configuration.repositorySave !== "false"
+    disk: cacheSave && configuration.disk !== "false",
+    repository: cacheSave && configuration.repository !== "false"
   };
 }
 function isCacheSaveRef(ref, branchPatterns) {
@@ -69785,7 +69782,7 @@ function isCacheSaveRef(ref, branchPatterns) {
   }));
 }
 function needsLockFileCheck(configuration, cacheSave) {
-  return cacheSave && (configuration.diskRestore === "auto" || configuration.repositoryRestore === "auto" || configuration.bazelisk === "auto");
+  return cacheSave && (configuration.disk === "auto" || configuration.repository === "auto");
 }
 
 // src/main.js
@@ -69804,7 +69801,7 @@ async function run() {
       rawCacheSaveBranches,
       rawCacheSaveBranches.trim() ? void 0 : resolveDefaultBranch()
     );
-    const cacheConfiguration = parseCacheConfiguration({
+    const cacheModes = parseCacheConfiguration({
       diskCacheRestore: getInput("disk-cache-restore"),
       diskCacheSave: getInput("disk-cache-save"),
       repositoryCacheRestore: getInput("repository-cache-restore"),
@@ -69812,37 +69809,37 @@ async function run() {
     });
     const configuration = createConfiguration(workspace, diskCacheKey);
     const cacheSave = isCacheSaveRef(process.env.GITHUB_REF || "", cacheSaveBranches);
-    const cacheSaves = resolveCacheSaveConfiguration(cacheConfiguration, cacheSave);
+    const saves = resolveSaveModes(cacheModes.save, cacheSave);
     let checkoutHistory = "skipped";
     let changed = null;
-    if (needsLockFileCheck(cacheConfiguration, cacheSave)) {
+    if (needsLockFileCheck(cacheModes.restore, cacheSave)) {
       const comparisonBase = resolveComparisonBase();
       checkoutHistory = ensureComparisonHistory(workspace, comparisonBase);
       changed = lockFileChanged(workspace, comparisonBase);
     }
-    const restoreModes = resolveRestoreConfiguration(cacheConfiguration, cacheSave, changed === true);
+    const restores = resolveRestoreModes(cacheModes.restore, cacheSave, changed === true);
     setDecisionOutputs({
       cacheSave,
       checkoutHistory,
       changed,
-      cacheSaves,
-      restoreModes
+      saves,
+      restores
     });
     import_node_fs3.default.writeFileSync(configuration.bazelrc, configuration.bazelrcContents, { flag: "wx" });
     info(`Created ${configuration.bazelrc}`);
     const bazelrcFiles = [process.env.BAZELRC, configuration.bazelrc].filter(Boolean);
     exportVariable("BAZELRC", bazelrcFiles.join(","));
     const restoreResults = {
-      bazelisk: await restoreCache2(configuration, configuration.caches.bazelisk, restoreModes.skipBazelisk),
-      disk: await restoreCache2(configuration, configuration.caches.disk, restoreModes.skipDisk),
+      bazelisk: await restoreCache2(configuration, configuration.caches.bazelisk, restores.bazelisk),
+      disk: await restoreCache2(configuration, configuration.caches.disk, restores.disk),
       repository: await restoreCache2(
         configuration,
         configuration.caches.repository,
-        restoreModes.skipRepository
+        restores.repository
       )
     };
     setRestoreOutputs(restoreResults);
-    const failedJobCacheSave = cacheSave && canSaveAfterFailure(restoreResults, cacheSaves);
+    const failedJobCacheSave = cacheSave && canSaveAfterFailure(restoreResults, saves);
     setOutput("failed-job-cache-save", failedJobCacheSave.toString());
     exportVariable(
       configuration.additiveCacheSaveEnvironment,
@@ -69850,14 +69847,14 @@ async function run() {
     );
     saveState(
       configuration.cacheSaveState,
-      JSON.stringify({ cacheSave, cacheSaves, diskCacheKey, workspace })
+      JSON.stringify({ cacheSave, saves, diskCacheKey, workspace })
     );
   } catch (error2) {
     setFailed(error2.stack || error2.message);
   }
 }
-async function restoreCache2(configuration, cacheConfiguration, skip) {
-  if (skip) {
+async function restoreCache2(configuration, cacheConfiguration, shouldRestore) {
+  if (!shouldRestore) {
     info(`Skipping ${cacheConfiguration.name} cache restore`);
     return RESTORE_RESULT.SKIPPED;
   }
@@ -69867,17 +69864,15 @@ function setDecisionOutputs({
   cacheSave,
   checkoutHistory,
   changed,
-  cacheSaves,
-  restoreModes
+  saves,
+  restores
 }) {
   setOutput("cache-save", cacheSave.toString());
-  setOutput("disk-cache-save", cacheSaves.disk.toString());
-  setOutput("repository-cache-save", cacheSaves.repository.toString());
-  setOutput("skip-bazelisk-cache-restore", restoreModes.skipBazelisk.toString());
-  setOutput("skip-disk-cache-restore", restoreModes.skipDisk.toString());
-  setOutput("skip-repository-cache-restore", restoreModes.skipRepository.toString());
-  setOutput("disk-cache-restore", (!restoreModes.skipDisk).toString());
-  setOutput("repository-cache-restore", (!restoreModes.skipRepository).toString());
+  setOutput("disk-cache-save", saves.disk.toString());
+  setOutput("repository-cache-save", saves.repository.toString());
+  setOutput("bazelisk-cache-restore", restores.bazelisk.toString());
+  setOutput("disk-cache-restore", restores.disk.toString());
+  setOutput("repository-cache-restore", restores.repository.toString());
   setOutput("checkout-history", checkoutHistory);
   setOutput("lock-file-changed", changed === null ? "unknown" : changed.toString());
 }

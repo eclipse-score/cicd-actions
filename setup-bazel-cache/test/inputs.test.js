@@ -19,8 +19,8 @@ import {
   parseBranchPattern,
   parseCacheSaveBranches,
   parseCacheConfiguration,
-  resolveCacheSaveConfiguration,
-  resolveRestoreConfiguration,
+  resolveRestoreModes,
+  resolveSaveModes,
 } from '../src/inputs.js';
 
 /** Supply every optional raw input so individual tests only override relevant values. */
@@ -64,19 +64,22 @@ test('branch patterns must not be Git refs or unsafe path-like values', () => {
 test('new cache API uses the requested defaults', () => {
   const configuration = parseCacheConfiguration(raw());
   assert.deepEqual(configuration, {
-    diskRestore: 'auto',
-    repositoryRestore: 'auto',
-    diskSave: 'false',
-    repositorySave: 'auto',
-    bazelisk: 'false',
+    restore: {
+      disk: 'auto',
+      repository: 'auto',
+    },
+    save: {
+      disk: 'false',
+      repository: 'auto',
+    },
   });
-  assert.equal(needsLockFileCheck(configuration, true), true);
-  assert.deepEqual(resolveRestoreConfiguration(configuration, true, true), {
-    skipBazelisk: false,
-    skipDisk: true,
-    skipRepository: true,
+  assert.equal(needsLockFileCheck(configuration.restore, true), true);
+  assert.deepEqual(resolveRestoreModes(configuration.restore, true, true), {
+    bazelisk: true,
+    disk: false,
+    repository: false,
   });
-  assert.deepEqual(resolveCacheSaveConfiguration(configuration, true), {
+  assert.deepEqual(resolveSaveModes(configuration.save, true), {
     disk: false,
     repository: true,
   });
@@ -84,11 +87,11 @@ test('new cache API uses the requested defaults', () => {
 
 test('auto restore mode restores outside the cache-writing branch', () => {
   const configuration = parseCacheConfiguration(raw());
-  assert.equal(needsLockFileCheck(configuration, false), false);
-  assert.deepEqual(resolveRestoreConfiguration(configuration, false, true), {
-    skipBazelisk: false,
-    skipDisk: false,
-    skipRepository: false,
+  assert.equal(needsLockFileCheck(configuration.restore, false), false);
+  assert.deepEqual(resolveRestoreModes(configuration.restore, false, true), {
+    bazelisk: true,
+    disk: true,
+    repository: true,
   });
 });
 
@@ -97,11 +100,11 @@ test('explicit modes do not need the lock-file comparison', () => {
     diskCacheRestore: 'false',
     repositoryCacheRestore: 'false',
   }));
-  assert.equal(needsLockFileCheck(configuration, true), false);
-  assert.deepEqual(resolveRestoreConfiguration(configuration, true, false), {
-    skipBazelisk: false,
-    skipDisk: true,
-    skipRepository: true,
+  assert.equal(needsLockFileCheck(configuration.restore, true), false);
+  assert.deepEqual(resolveRestoreModes(configuration.restore, true, false), {
+    bazelisk: true,
+    disk: false,
+    repository: false,
   });
 });
 

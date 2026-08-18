@@ -25,21 +25,22 @@ function validateMode(name, value, allowed) {
 
 /** Resolve the public cache modes without applying branch or lock-file policy yet. */
 function parseCacheConfiguration(raw) {
-  const diskRestore = raw.diskCacheRestore.trim() || 'auto';
-  const repositoryRestore = raw.repositoryCacheRestore.trim() || 'auto';
-  const diskSave = raw.diskCacheSave.trim() || 'false';
-  const repositorySave = raw.repositoryCacheSave.trim() || 'auto';
+  const restore = {
+    disk: raw.diskCacheRestore.trim() || 'auto',
+    repository: raw.repositoryCacheRestore.trim() || 'auto',
+  };
+  const save = {
+    disk: raw.diskCacheSave.trim() || 'false',
+    repository: raw.repositoryCacheSave.trim() || 'auto',
+  };
 
-  validateMode('disk-cache-restore', diskRestore, AUTOMATIC_MODES);
-  validateMode('repository-cache-restore', repositoryRestore, AUTOMATIC_MODES);
-  validateMode('disk-cache-save', diskSave, AUTOMATIC_MODES);
-  validateMode('repository-cache-save', repositorySave, AUTOMATIC_MODES);
+  validateMode('disk-cache-restore', restore.disk, AUTOMATIC_MODES);
+  validateMode('repository-cache-restore', restore.repository, AUTOMATIC_MODES);
+  validateMode('disk-cache-save', save.disk, AUTOMATIC_MODES);
+  validateMode('repository-cache-save', save.repository, AUTOMATIC_MODES);
   return {
-    diskRestore,
-    repositoryRestore,
-    diskSave,
-    repositorySave,
-    bazelisk: 'false',
+    restore,
+    save,
   };
 }
 
@@ -82,29 +83,25 @@ function parseCacheSaveBranches(value, defaultBranch) {
   return patterns.map((pattern) => parseBranchPattern(pattern));
 }
 
-/** Convert one configured mode into the boolean needed by the cache layer. */
+/** Resolve one positive restore mode into the decision used by the cache layer. */
 function resolveRestoreMode(mode, cacheSave, lockFileChanged) {
-  return mode === 'false' || (mode === 'auto' && cacheSave && lockFileChanged);
+  return mode !== 'false' && !(mode === 'auto' && cacheSave && lockFileChanged);
 }
 
 /** Resolve every cache independently so the cache layer contains no input policy. */
-function resolveRestoreConfiguration(configuration, cacheSave, lockFileChanged) {
+function resolveRestoreModes(configuration, cacheSave, lockFileChanged) {
   return {
-    skipBazelisk: false,
-    skipDisk: resolveRestoreMode(configuration.diskRestore, cacheSave, lockFileChanged),
-    skipRepository: resolveRestoreMode(
-      configuration.repositoryRestore,
-      cacheSave,
-      lockFileChanged,
-    ),
+    bazelisk: true,
+    disk: resolveRestoreMode(configuration.disk, cacheSave, lockFileChanged),
+    repository: resolveRestoreMode(configuration.repository, cacheSave, lockFileChanged),
   };
 }
 
 /** Resolve which cache families may be published on this cache-saving ref. */
-function resolveCacheSaveConfiguration(configuration, cacheSave) {
+function resolveSaveModes(configuration, cacheSave) {
   return {
-    disk: cacheSave && configuration.diskSave !== 'false',
-    repository: cacheSave && configuration.repositorySave !== 'false',
+    disk: cacheSave && configuration.disk !== 'false',
+    repository: cacheSave && configuration.repository !== 'false',
   };
 }
 
@@ -126,9 +123,8 @@ function isCacheSaveRef(ref, branchPatterns) {
  */
 function needsLockFileCheck(configuration, cacheSave) {
   return cacheSave && (
-    configuration.diskRestore === 'auto' ||
-    configuration.repositoryRestore === 'auto' ||
-    configuration.bazelisk === 'auto'
+    configuration.disk === 'auto' ||
+    configuration.repository === 'auto'
   );
 }
 
@@ -138,6 +134,6 @@ export {
   parseBranchPattern,
   parseCacheSaveBranches,
   parseCacheConfiguration,
-  resolveCacheSaveConfiguration,
-  resolveRestoreConfiguration,
+  resolveRestoreModes,
+  resolveSaveModes,
 };

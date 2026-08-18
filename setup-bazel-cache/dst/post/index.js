@@ -70142,19 +70142,19 @@ async function run() {
       info("Setup did not complete; caches will not be saved");
       return;
     }
-    const { cacheSave, cacheSaves, diskCacheKey, workspace } = JSON.parse(state3);
+    const { cacheSave, saves, diskCacheKey, workspace } = JSON.parse(state3);
     if (!cacheSave) {
       info("Cache saving is disabled on this ref");
       return;
     }
     const configuration = createConfiguration(workspace, diskCacheKey);
     await save(configuration, configuration.caches.bazelisk);
-    if (cacheSaves.disk) {
+    if (saves.disk) {
       await save(configuration, configuration.caches.disk);
     } else {
       info("Disk cache saving is disabled for this job");
     }
-    if (cacheSaves.repository) {
+    if (saves.repository) {
       await save(configuration, configuration.caches.repository);
     } else {
       info("Repository cache saving is disabled for this job");

@@ -47,12 +47,8 @@ outputs:
     description: Resolved repository-cache restore decision.
   disk-cache-save:
     description: Whether this run will save the Bazel disk cache.
-  skip-bazelisk-cache-restore:
+  bazelisk-cache-restore:
     description: Resolved Bazelisk-cache restore decision.
-  skip-disk-cache-restore:
-    description: Resolved disk-cache restore decision.
-  skip-repository-cache-restore:
-    description: Resolved repository-cache restore decision.
   repository-cache-save:
     description: Whether this run will save the shared repository cache.
   failed-job-cache-save:

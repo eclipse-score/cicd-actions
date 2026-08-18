@@ -26,8 +26,8 @@ import {
   needsLockFileCheck,
   parseCacheSaveBranches,
   parseCacheConfiguration,
-  resolveCacheSaveConfiguration,
-  resolveRestoreConfiguration,
+  resolveRestoreModes,
+  resolveSaveModes,
 } from './inputs.js';
 
 /**
@@ -52,7 +52,7 @@ async function run() {
       rawCacheSaveBranches,
       rawCacheSaveBranches.trim() ? undefined : resolveDefaultBranch(),
     );
-    const cacheConfiguration = parseCacheConfiguration({
+    const cacheModes = parseCacheConfiguration({
       diskCacheRestore: core.getInput('disk-cache-restore'),
       diskCacheSave: core.getInput('disk-cache-save'),
       repositoryCacheRestore: core.getInput('repository-cache-restore'),
@@ -62,22 +62,22 @@ async function run() {
     const configuration = createConfiguration(workspace, diskCacheKey);
 
     const cacheSave = isCacheSaveRef(process.env.GITHUB_REF || '', cacheSaveBranches);
-    const cacheSaves = resolveCacheSaveConfiguration(cacheConfiguration, cacheSave);
+    const saves = resolveSaveModes(cacheModes.save, cacheSave);
     let checkoutHistory = 'skipped';
     let changed = null;
-    if (needsLockFileCheck(cacheConfiguration, cacheSave)) {
+    if (needsLockFileCheck(cacheModes.restore, cacheSave)) {
       const comparisonBase = resolveComparisonBase();
       checkoutHistory = ensureComparisonHistory(workspace, comparisonBase);
       changed = lockFileChanged(workspace, comparisonBase);
     }
-    const restoreModes = resolveRestoreConfiguration(cacheConfiguration, cacheSave, changed === true);
+    const restores = resolveRestoreModes(cacheModes.restore, cacheSave, changed === true);
 
     setDecisionOutputs({
       cacheSave,
       checkoutHistory,
       changed,
-      cacheSaves,
-      restoreModes,
+      saves,
+      restores,
     });
 
     fs.writeFileSync(configuration.bazelrc, configuration.bazelrcContents, { flag: 'wx' });
@@ -86,17 +86,17 @@ async function run() {
     core.exportVariable('BAZELRC', bazelrcFiles.join(','));
 
     const restoreResults = {
-      bazelisk: await restoreCache(configuration, configuration.caches.bazelisk, restoreModes.skipBazelisk),
-      disk: await restoreCache(configuration, configuration.caches.disk, restoreModes.skipDisk),
+      bazelisk: await restoreCache(configuration, configuration.caches.bazelisk, restores.bazelisk),
+      disk: await restoreCache(configuration, configuration.caches.disk, restores.disk),
       repository: await restoreCache(
         configuration,
         configuration.caches.repository,
-        restoreModes.skipRepository,
+        restores.repository,
       ),
     };
     setRestoreOutputs(restoreResults);
 
-    const failedJobCacheSave = cacheSave && canSaveAfterFailure(restoreResults, cacheSaves);
+    const failedJobCacheSave = cacheSave && canSaveAfterFailure(restoreResults, saves);
     core.setOutput('failed-job-cache-save', failedJobCacheSave.toString());
     core.exportVariable(
       configuration.additiveCacheSaveEnvironment,
@@ -104,15 +104,15 @@ async function run() {
     );
     core.saveState(
       configuration.cacheSaveState,
-      JSON.stringify({ cacheSave, cacheSaves, diskCacheKey, workspace }),
+      JSON.stringify({ cacheSave, saves, diskCacheKey, workspace }),
     );
   } catch (error) {
     core.setFailed(error.stack || error.message);
   }
 }
 
-async function restoreCache(configuration, cacheConfiguration, skip) {
-  if (skip) {
+async function restoreCache(configuration, cacheConfiguration, shouldRestore) {
+  if (!shouldRestore) {
     core.info(`Skipping ${cacheConfiguration.name} cache restore`);
     return RESTORE_RESULT.SKIPPED;
   }
@@ -123,17 +123,15 @@ function setDecisionOutputs({
   cacheSave,
   checkoutHistory,
   changed,
-  cacheSaves,
-  restoreModes,
+  saves,
+  restores,
 }) {
   core.setOutput('cache-save', cacheSave.toString());
-  core.setOutput('disk-cache-save', cacheSaves.disk.toString());
-  core.setOutput('repository-cache-save', cacheSaves.repository.toString());
-  core.setOutput('skip-bazelisk-cache-restore', restoreModes.skipBazelisk.toString());
-  core.setOutput('skip-disk-cache-restore', restoreModes.skipDisk.toString());
-  core.setOutput('skip-repository-cache-restore', restoreModes.skipRepository.toString());
-  core.setOutput('disk-cache-restore', (!restoreModes.skipDisk).toString());
-  core.setOutput('repository-cache-restore', (!restoreModes.skipRepository).toString());
+  core.setOutput('disk-cache-save', saves.disk.toString());
+  core.setOutput('repository-cache-save', saves.repository.toString());
+  core.setOutput('bazelisk-cache-restore', restores.bazelisk.toString());
+  core.setOutput('disk-cache-restore', restores.disk.toString());
+  core.setOutput('repository-cache-restore', restores.repository.toString());
   core.setOutput('checkout-history', checkoutHistory);
   core.setOutput('lock-file-changed', changed === null ? 'unknown' : changed.toString());
 }

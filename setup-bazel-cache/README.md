@@ -80,8 +80,7 @@ permissions:
 - `repository-cache-save`: whether this run will publish the shared repository cache
 - `disk-cache-restore`: resolved disk-cache restore decision
 - `disk-cache-save`: whether this run will publish the Bazel disk cache
-- `skip-bazelisk-cache-restore`: resolved Bazelisk-cache restore decision
-- `skip-disk-cache-restore`: resolved disk-cache restore decision (`true` or `false`)
+- `bazelisk-cache-restore`: resolved Bazelisk-cache restore decision
 - `failed-job-cache-save`: whether Bazelisk was restored exactly and every
   generational cache selected for saving was restored exactly or by prefix,
   allowing an additive save if a later step fails

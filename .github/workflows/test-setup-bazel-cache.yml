@@ -129,7 +129,7 @@ jobs:
             exit 1
           fi
 
-  modes-skip-history-check:
+  modes-without-history-check:
     name: Explicit cache modes skip history check
     runs-on: ubuntu-latest
     strategy:
@@ -138,20 +138,20 @@ jobs:
         include:
           - disk-cache-restore: true
             repository-cache-restore: true
-            expected-skip-disk-cache-restore: false
-            expected-skip-repository-cache-restore: false
+            expected-disk-cache-restore: true
+            expected-repository-cache-restore: true
           - disk-cache-restore: false
             repository-cache-restore: true
-            expected-skip-disk-cache-restore: true
-            expected-skip-repository-cache-restore: false
+            expected-disk-cache-restore: false
+            expected-repository-cache-restore: true
           - disk-cache-restore: auto
             repository-cache-restore: true
-            expected-skip-disk-cache-restore: false
-            expected-skip-repository-cache-restore: false
+            expected-disk-cache-restore: true
+            expected-repository-cache-restore: true
           - disk-cache-restore: true
             repository-cache-restore: false
-            expected-skip-disk-cache-restore: false
-            expected-skip-repository-cache-restore: true
+            expected-disk-cache-restore: true
+            expected-repository-cache-restore: false
     steps:
       - name: Check out action source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
@@ -184,12 +184,12 @@ jobs:
             echo "ERROR: expected unknown lockfile result, got '${{ steps.setup-bazel-cache.outputs.lock-file-changed }}'"
             exit 1
           fi
-          if [[ "${{ steps.setup-bazel-cache.outputs.skip-disk-cache-restore }}" != "${{ matrix.expected-skip-disk-cache-restore }}" ]]; then
-            echo "ERROR: expected skip-disk-cache-restore=${{ matrix.expected-skip-disk-cache-restore }}, got '${{ steps.setup-bazel-cache.outputs.skip-disk-cache-restore }}'"
+          if [[ "${{ steps.setup-bazel-cache.outputs.disk-cache-restore }}" != "${{ matrix.expected-disk-cache-restore }}" ]]; then
+            echo "ERROR: expected disk-cache-restore=${{ matrix.expected-disk-cache-restore }}, got '${{ steps.setup-bazel-cache.outputs.disk-cache-restore }}'"
             exit 1
           fi
-          if [[ "${{ steps.setup-bazel-cache.outputs.skip-repository-cache-restore }}" != "${{ matrix.expected-skip-repository-cache-restore }}" ]]; then
-            echo "ERROR: expected skip-repository-cache-restore=${{ matrix.expected-skip-repository-cache-restore }}, got '${{ steps.setup-bazel-cache.outputs.skip-repository-cache-restore }}'"
+          if [[ "${{ steps.setup-bazel-cache.outputs.repository-cache-restore }}" != "${{ matrix.expected-repository-cache-restore }}" ]]; then
+            echo "ERROR: expected repository-cache-restore=${{ matrix.expected-repository-cache-restore }}, got '${{ steps.setup-bazel-cache.outputs.repository-cache-restore }}'"
             exit 1
           fi
 
