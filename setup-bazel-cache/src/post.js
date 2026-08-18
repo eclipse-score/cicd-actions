@@ -27,8 +27,8 @@ async function run() {
       return;
     }
 
-    const { cacheSave, saves, diskCacheKey, workspace } = JSON.parse(state);
-    if (!cacheSave) {
+    const { cacheSaveAllowed, saves, diskCacheKey, workspace } = JSON.parse(state);
+    if (!cacheSaveAllowed) {
       core.info('Cache saving is disabled on this ref');
       return;
     }

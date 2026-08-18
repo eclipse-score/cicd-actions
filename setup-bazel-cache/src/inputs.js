@@ -45,7 +45,7 @@ function parseCacheConfiguration(raw) {
 }
 
 /** Ensure a branch name or glob pattern can be safely matched against a head ref. */
-function parseBranchPattern(value, name = 'cache-save-branches') {
+function parseBranchPattern(value, name = 'cache-save-branch-patterns') {
   const pattern = value.trim();
   if (
     !pattern ||
@@ -66,8 +66,8 @@ function parseBranchPattern(value, name = 'cache-save-branches') {
   return pattern;
 }
 
-/** Resolve the configured save branches, defaulting to the repository default branch. */
-function parseCacheSaveBranches(value, defaultBranch) {
+/** Resolve the configured save branch patterns, defaulting to the repository default branch. */
+function parseCacheSaveBranchPatterns(value, defaultBranch) {
   const patterns = value
     .split(/\r?\n/)
     .map((pattern) => pattern.trim())
@@ -75,7 +75,7 @@ function parseCacheSaveBranches(value, defaultBranch) {
   if (patterns.length === 0) {
     if (!defaultBranch) {
       throw new Error(
-        'Cannot determine the repository default branch. Set cache-save-branches explicitly.',
+        'Cannot determine the repository default branch. Set cache-save-branch-patterns explicitly.',
       );
     }
     return [parseBranchPattern(defaultBranch, 'repository.default_branch')];
@@ -84,24 +84,24 @@ function parseCacheSaveBranches(value, defaultBranch) {
 }
 
 /** Resolve one positive restore mode into the decision used by the cache layer. */
-function resolveRestoreMode(mode, cacheSave, lockFileChanged) {
-  return mode !== 'false' && !(mode === 'auto' && cacheSave && lockFileChanged);
+function resolveRestoreMode(mode, cacheSaveAllowed, lockFileChanged) {
+  return mode !== 'false' && !(mode === 'auto' && cacheSaveAllowed && lockFileChanged);
 }
 
 /** Resolve every cache independently so the cache layer contains no input policy. */
-function resolveRestoreModes(configuration, cacheSave, lockFileChanged) {
+function resolveRestoreModes(configuration, cacheSaveAllowed, lockFileChanged) {
   return {
     bazelisk: true,
-    disk: resolveRestoreMode(configuration.disk, cacheSave, lockFileChanged),
-    repository: resolveRestoreMode(configuration.repository, cacheSave, lockFileChanged),
+    disk: resolveRestoreMode(configuration.disk, cacheSaveAllowed, lockFileChanged),
+    repository: resolveRestoreMode(configuration.repository, cacheSaveAllowed, lockFileChanged),
   };
 }
 
 /** Resolve which cache families may be published on this cache-saving ref. */
-function resolveSaveModes(configuration, cacheSave) {
+function resolveSaveModes(configuration, cacheSaveAllowed) {
   return {
-    disk: cacheSave && configuration.disk !== 'false',
-    repository: cacheSave && configuration.repository !== 'false',
+    disk: cacheSaveAllowed && configuration.disk !== 'false',
+    repository: cacheSaveAllowed && configuration.repository !== 'false',
   };
 }
 
@@ -121,8 +121,8 @@ function isCacheSaveRef(ref, branchPatterns) {
  * Avoid Git inspection unless an automatic decision can affect this run.
  * Non-writing refs always restore and therefore do not need a parent commit.
  */
-function needsLockFileCheck(configuration, cacheSave) {
-  return cacheSave && (
+function needsLockFileCheck(configuration, cacheSaveAllowed) {
+  return cacheSaveAllowed && (
     configuration.disk === 'auto' ||
     configuration.repository === 'auto'
   );
@@ -132,7 +132,7 @@ export {
   isCacheSaveRef,
   needsLockFileCheck,
   parseBranchPattern,
-  parseCacheSaveBranches,
+  parseCacheSaveBranchPatterns,
   parseCacheConfiguration,
   resolveRestoreModes,
   resolveSaveModes,

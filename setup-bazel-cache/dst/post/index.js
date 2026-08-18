@@ -70142,8 +70142,8 @@ async function run() {
       info("Setup did not complete; caches will not be saved");
       return;
     }
-    const { cacheSave, saves, diskCacheKey, workspace } = JSON.parse(state3);
-    if (!cacheSave) {
+    const { cacheSaveAllowed, saves, diskCacheKey, workspace } = JSON.parse(state3);
+    if (!cacheSaveAllowed) {
       info("Cache saving is disabled on this ref");
       return;
     }

@@ -24,7 +24,7 @@ import {
 import {
   isCacheSaveRef,
   needsLockFileCheck,
-  parseCacheSaveBranches,
+  parseCacheSaveBranchPatterns,
   parseCacheConfiguration,
   resolveRestoreModes,
   resolveSaveModes,
@@ -47,10 +47,10 @@ async function run() {
     if (!workspace) throw new Error('GITHUB_WORKSPACE is not set.');
 
     const diskCacheKey = core.getInput('disk-cache-key', { required: true });
-    const rawCacheSaveBranches = core.getInput('cache-save-branches');
-    const cacheSaveBranches = parseCacheSaveBranches(
-      rawCacheSaveBranches,
-      rawCacheSaveBranches.trim() ? undefined : resolveDefaultBranch(),
+    const rawCacheSaveBranchPatterns = core.getInput('cache-save-branch-patterns');
+    const cacheSaveBranchPatterns = parseCacheSaveBranchPatterns(
+      rawCacheSaveBranchPatterns,
+      rawCacheSaveBranchPatterns.trim() ? undefined : resolveDefaultBranch(),
     );
     const cacheModes = parseCacheConfiguration({
       diskCacheRestore: core.getInput('disk-cache-restore'),
@@ -61,19 +61,26 @@ async function run() {
 
     const configuration = createConfiguration(workspace, diskCacheKey);
 
-    const cacheSave = isCacheSaveRef(process.env.GITHUB_REF || '', cacheSaveBranches);
-    const saves = resolveSaveModes(cacheModes.save, cacheSave);
+    const cacheSaveAllowed = isCacheSaveRef(
+      process.env.GITHUB_REF || '',
+      cacheSaveBranchPatterns,
+    );
+    const saves = resolveSaveModes(cacheModes.save, cacheSaveAllowed);
     let checkoutHistory = 'skipped';
     let changed = null;
-    if (needsLockFileCheck(cacheModes.restore, cacheSave)) {
+    if (needsLockFileCheck(cacheModes.restore, cacheSaveAllowed)) {
       const comparisonBase = resolveComparisonBase();
       checkoutHistory = ensureComparisonHistory(workspace, comparisonBase);
       changed = lockFileChanged(workspace, comparisonBase);
     }
-    const restores = resolveRestoreModes(cacheModes.restore, cacheSave, changed === true);
+    const restores = resolveRestoreModes(
+      cacheModes.restore,
+      cacheSaveAllowed,
+      changed === true,
+    );
 
     setDecisionOutputs({
-      cacheSave,
+      cacheSaveAllowed,
       checkoutHistory,
       changed,
       saves,
@@ -96,15 +103,19 @@ async function run() {
     };
     setRestoreOutputs(restoreResults);
 
-    const failedJobCacheSave = cacheSave && canSaveAfterFailure(restoreResults, saves);
-    core.setOutput('failed-job-cache-save', failedJobCacheSave.toString());
+    const failedJobCacheSaveAllowed =
+      cacheSaveAllowed && canSaveAfterFailure(restoreResults, saves);
+    core.setOutput(
+      'failed-job-cache-save-allowed',
+      failedJobCacheSaveAllowed.toString(),
+    );
     core.exportVariable(
       configuration.additiveCacheSaveEnvironment,
-      failedJobCacheSave.toString(),
+      failedJobCacheSaveAllowed.toString(),
     );
     core.saveState(
       configuration.cacheSaveState,
-      JSON.stringify({ cacheSave, saves, diskCacheKey, workspace }),
+      JSON.stringify({ cacheSaveAllowed, saves, diskCacheKey, workspace }),
     );
   } catch (error) {
     core.setFailed(error.stack || error.message);
@@ -120,13 +131,13 @@ async function restoreCache(configuration, cacheConfiguration, shouldRestore) {
 }
 
 function setDecisionOutputs({
-  cacheSave,
+  cacheSaveAllowed,
   checkoutHistory,
   changed,
   saves,
   restores,
 }) {
-  core.setOutput('cache-save', cacheSave.toString());
+  core.setOutput('cache-save-allowed', cacheSaveAllowed.toString());
   core.setOutput('disk-cache-save', saves.disk.toString());
   core.setOutput('repository-cache-save', saves.repository.toString());
   core.setOutput('bazelisk-cache-restore', restores.bazelisk.toString());

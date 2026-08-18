@@ -69646,7 +69646,7 @@ function succeeds(result) {
 function resolveDefaultBranch(eventPath = process.env.GITHUB_EVENT_PATH, readFile = import_node_fs2.default.readFileSync) {
   if (!eventPath) {
     throw new Error(
-      "GITHUB_EVENT_PATH is not set; set cache-save-branches explicitly when running outside GitHub Actions."
+      "GITHUB_EVENT_PATH is not set; set cache-save-branch-patterns explicitly when running outside GitHub Actions."
     );
   }
   const event = JSON.parse(readFile(eventPath, "utf8"));
@@ -69734,7 +69734,7 @@ function parseCacheConfiguration(raw) {
     save
   };
 }
-function parseBranchPattern(value, name = "cache-save-branches") {
+function parseBranchPattern(value, name = "cache-save-branch-patterns") {
   const pattern = value.trim();
   if (!pattern || pattern.startsWith("refs/") || pattern.startsWith(".") || pattern.endsWith(".") || pattern.endsWith(".lock") || pattern.startsWith("/") || pattern.endsWith("/") || pattern.includes("..") || pattern.includes("//") || INVALID_BRANCH_PATTERN_CHARACTERS.test(pattern)) {
     throw new Error(
@@ -69743,32 +69743,32 @@ function parseBranchPattern(value, name = "cache-save-branches") {
   }
   return pattern;
 }
-function parseCacheSaveBranches(value, defaultBranch) {
+function parseCacheSaveBranchPatterns(value, defaultBranch) {
   const patterns = value.split(/\r?\n/).map((pattern) => pattern.trim()).filter(Boolean);
   if (patterns.length === 0) {
     if (!defaultBranch) {
       throw new Error(
-        "Cannot determine the repository default branch. Set cache-save-branches explicitly."
+        "Cannot determine the repository default branch. Set cache-save-branch-patterns explicitly."
       );
     }
     return [parseBranchPattern(defaultBranch, "repository.default_branch")];
   }
   return patterns.map((pattern) => parseBranchPattern(pattern));
 }
-function resolveRestoreMode(mode, cacheSave, lockFileChanged2) {
-  return mode !== "false" && !(mode === "auto" && cacheSave && lockFileChanged2);
+function resolveRestoreMode(mode, cacheSaveAllowed, lockFileChanged2) {
+  return mode !== "false" && !(mode === "auto" && cacheSaveAllowed && lockFileChanged2);
 }
-function resolveRestoreModes(configuration, cacheSave, lockFileChanged2) {
+function resolveRestoreModes(configuration, cacheSaveAllowed, lockFileChanged2) {
   return {
     bazelisk: true,
-    disk: resolveRestoreMode(configuration.disk, cacheSave, lockFileChanged2),
-    repository: resolveRestoreMode(configuration.repository, cacheSave, lockFileChanged2)
+    disk: resolveRestoreMode(configuration.disk, cacheSaveAllowed, lockFileChanged2),
+    repository: resolveRestoreMode(configuration.repository, cacheSaveAllowed, lockFileChanged2)
   };
 }
-function resolveSaveModes(configuration, cacheSave) {
+function resolveSaveModes(configuration, cacheSaveAllowed) {
   return {
-    disk: cacheSave && configuration.disk !== "false",
-    repository: cacheSave && configuration.repository !== "false"
+    disk: cacheSaveAllowed && configuration.disk !== "false",
+    repository: cacheSaveAllowed && configuration.repository !== "false"
   };
 }
 function isCacheSaveRef(ref, branchPatterns) {
@@ -69781,8 +69781,8 @@ function isCacheSaveRef(ref, branchPatterns) {
     nonegate: true
   }));
 }
-function needsLockFileCheck(configuration, cacheSave) {
-  return cacheSave && (configuration.disk === "auto" || configuration.repository === "auto");
+function needsLockFileCheck(configuration, cacheSaveAllowed) {
+  return cacheSaveAllowed && (configuration.disk === "auto" || configuration.repository === "auto");
 }
 
 // src/main.js
@@ -69796,10 +69796,10 @@ async function run() {
     const workspace = process.env.GITHUB_WORKSPACE;
     if (!workspace) throw new Error("GITHUB_WORKSPACE is not set.");
     const diskCacheKey = getInput("disk-cache-key", { required: true });
-    const rawCacheSaveBranches = getInput("cache-save-branches");
-    const cacheSaveBranches = parseCacheSaveBranches(
-      rawCacheSaveBranches,
-      rawCacheSaveBranches.trim() ? void 0 : resolveDefaultBranch()
+    const rawCacheSaveBranchPatterns = getInput("cache-save-branch-patterns");
+    const cacheSaveBranchPatterns = parseCacheSaveBranchPatterns(
+      rawCacheSaveBranchPatterns,
+      rawCacheSaveBranchPatterns.trim() ? void 0 : resolveDefaultBranch()
     );
     const cacheModes = parseCacheConfiguration({
       diskCacheRestore: getInput("disk-cache-restore"),
@@ -69808,18 +69808,25 @@ async function run() {
       repositoryCacheSave: getInput("repository-cache-save")
     });
     const configuration = createConfiguration(workspace, diskCacheKey);
-    const cacheSave = isCacheSaveRef(process.env.GITHUB_REF || "", cacheSaveBranches);
-    const saves = resolveSaveModes(cacheModes.save, cacheSave);
+    const cacheSaveAllowed = isCacheSaveRef(
+      process.env.GITHUB_REF || "",
+      cacheSaveBranchPatterns
+    );
+    const saves = resolveSaveModes(cacheModes.save, cacheSaveAllowed);
     let checkoutHistory = "skipped";
     let changed = null;
-    if (needsLockFileCheck(cacheModes.restore, cacheSave)) {
+    if (needsLockFileCheck(cacheModes.restore, cacheSaveAllowed)) {
       const comparisonBase = resolveComparisonBase();
       checkoutHistory = ensureComparisonHistory(workspace, comparisonBase);
       changed = lockFileChanged(workspace, comparisonBase);
     }
-    const restores = resolveRestoreModes(cacheModes.restore, cacheSave, changed === true);
+    const restores = resolveRestoreModes(
+      cacheModes.restore,
+      cacheSaveAllowed,
+      changed === true
+    );
     setDecisionOutputs({
-      cacheSave,
+      cacheSaveAllowed,
       checkoutHistory,
       changed,
       saves,
@@ -69839,15 +69846,18 @@ async function run() {
       )
     };
     setRestoreOutputs(restoreResults);
-    const failedJobCacheSave = cacheSave && canSaveAfterFailure(restoreResults, saves);
-    setOutput("failed-job-cache-save", failedJobCacheSave.toString());
+    const failedJobCacheSaveAllowed = cacheSaveAllowed && canSaveAfterFailure(restoreResults, saves);
+    setOutput(
+      "failed-job-cache-save-allowed",
+      failedJobCacheSaveAllowed.toString()
+    );
     exportVariable(
       configuration.additiveCacheSaveEnvironment,
-      failedJobCacheSave.toString()
+      failedJobCacheSaveAllowed.toString()
     );
     saveState(
       configuration.cacheSaveState,
-      JSON.stringify({ cacheSave, saves, diskCacheKey, workspace })
+      JSON.stringify({ cacheSaveAllowed, saves, diskCacheKey, workspace })
     );
   } catch (error2) {
     setFailed(error2.stack || error2.message);
@@ -69861,13 +69871,13 @@ async function restoreCache2(configuration, cacheConfiguration, shouldRestore) {
   return restore(configuration, cacheConfiguration);
 }
 function setDecisionOutputs({
-  cacheSave,
+  cacheSaveAllowed,
   checkoutHistory,
   changed,
   saves,
   restores
 }) {
-  setOutput("cache-save", cacheSave.toString());
+  setOutput("cache-save-allowed", cacheSaveAllowed.toString());
   setOutput("disk-cache-save", saves.disk.toString());
   setOutput("repository-cache-save", saves.repository.toString());
   setOutput("bazelisk-cache-restore", restores.bazelisk.toString());

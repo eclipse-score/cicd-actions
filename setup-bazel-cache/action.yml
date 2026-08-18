@@ -16,53 +16,98 @@ description: Configures Bazel 8.6+ caching with opinionated defaults.
 
 inputs:
   repository-cache-restore:
-    description: Restore the shared repository cache. Accepts true, false, or auto; auto rebuilds it on a cache-saving branch when MODULE.bazel.lock changed.
+    description: >
+      Restore the shared repository cache.
+      Accepts true, false, or auto.
+      With auto, the cache is restored unless it should be rebuilt on a
+      cache-saving branch because MODULE.bazel.lock changed.
     required: false
     default: "auto"
+
   repository-cache-save:
-    description: Save the shared repository cache on a configured cache-saving branch. Accepts true, false, or auto.
+    description: >
+      Save the shared repository cache.
+      Accepts true, false, or auto.
+      With auto, the cache is saved only on a configured cache-saving branch
+      when saving is required by the resolved cache policy.
     required: false
     default: "auto"
+
   disk-cache-restore:
-    description: Restore the Bazel disk cache. Accepts true, false, or auto; auto rebuilds it on a cache-saving branch when MODULE.bazel.lock changed.
+    description: >
+      Restore the Bazel disk cache.
+      Accepts true, false, or auto.
+      With auto, the cache is restored unless it should be rebuilt on a
+      cache-saving branch because MODULE.bazel.lock changed.
     required: false
     default: "auto"
+
   disk-cache-save:
-    description: Save the Bazel disk cache on a configured cache-saving branch. Accepts true, false, or auto.
+    description: >
+      Save the Bazel disk cache.
+      Accepts true, false, or auto.
+      With auto, the cache is saved only on a configured cache-saving branch
+      when saving is required by the resolved cache policy.
     required: false
     default: "false"
+
   disk-cache-key:
-    description: Stable disk-cache key for this workflow job and matrix configuration (1-400 printable characters, no commas).
+    description: >
+      Stable disk-cache key for this workflow job and matrix configuration
+      (1-400 printable characters, no commas).
     required: true
-  cache-save-branches:
-    description: Newline-separated branch glob patterns allowed to save caches. Empty uses the repository default branch.
+
+  cache-save-branch-patterns:
+    description: |
+      Newline-separated branch glob patterns allowed to save caches.
+      If empty, only the repository default branch may save caches.
     required: false
     default: ""
+
 outputs:
-  cache-save:
+  cache-save-allowed:
     description: Whether this ref is allowed to save caches in the post action.
-  disk-cache-restore:
-    description: Resolved disk-cache restore decision.
+
   repository-cache-restore:
     description: Resolved repository-cache restore decision.
+
+  repository-cache-save:
+    description: Resolved repository-cache save decision.
+
+  disk-cache-restore:
+    description: Resolved disk-cache restore decision.
+
   disk-cache-save:
-    description: Whether this run will save the Bazel disk cache.
+    description: Resolved disk-cache save decision.
+
   bazelisk-cache-restore:
     description: Resolved Bazelisk-cache restore decision.
-  repository-cache-save:
-    description: Whether this run will save the shared repository cache.
-  failed-job-cache-save:
-    description: Whether Bazelisk was restored exactly and all generational caches may be saved after a later step fails.
+
+  failed-job-cache-save-allowed:
+    description: >
+      Whether Bazelisk was restored exactly and generational caches may be
+      saved after a later workflow step fails.
+
   bazelisk-cache-restored:
-    description: "Bazelisk restore result: true, false, partial, skipped, or unknown."
+    description: >
+      Bazelisk cache restore result: true, false, partial, skipped, or unknown.
+
   disk-cache-restored:
-    description: "Disk-cache restore result: true, false, partial, skipped, or unknown."
+    description: >
+      Disk-cache restore result: true, false, partial, skipped, or unknown.
+
   repository-cache-restored:
-    description: "Repository-cache restore result: true, false, partial, skipped, or unknown."
+    description: >
+      Repository-cache restore result: true, false, partial, skipped, or unknown.
+
   checkout-history:
-    description: "How history for automatic detection was obtained: skipped, existing, deepened, or fetched."
+    description: >
+      How history for automatic detection was obtained:
+      skipped, existing, deepened, or fetched.
+
   lock-file-changed:
-    description: "Whether MODULE.bazel.lock changed: true, false, or unknown."
+    description: >
+      Whether MODULE.bazel.lock changed: true, false, or unknown.
 
 runs:
   using: node24

@@ -83,7 +83,7 @@ jobs:
         uses: ./setup-bazel-cache
         with:
           disk-cache-key: persistence-${{ github.run_id }}-${{ github.run_attempt }}
-          cache-save-branches: ${{ github.ref_name }}
+          cache-save-branch-patterns: ${{ github.ref_name }}
           disk-cache-restore: "true"
           disk-cache-save: "true"
           repository-cache-restore: "true"
@@ -92,12 +92,12 @@ jobs:
       - name: Add baseline cache markers
         shell: bash
         env:
-          CACHE_SAVE: ${{ steps.setup.outputs.cache-save }}
-          FAILED_JOB_CACHE_SAVE: ${{ steps.setup.outputs.failed-job-cache-save }}
+          CACHE_SAVE_ALLOWED: ${{ steps.setup.outputs.cache-save-allowed }}
+          FAILED_JOB_CACHE_SAVE_ALLOWED: ${{ steps.setup.outputs.failed-job-cache-save-allowed }}
         run: |
           set -euo pipefail
-          [[ "$CACHE_SAVE" == "true" ]]
-          [[ "$FAILED_JOB_CACHE_SAVE" == "false" ]]
+          [[ "$CACHE_SAVE_ALLOWED" == "true" ]]
+          [[ "$FAILED_JOB_CACHE_SAVE_ALLOWED" == "false" ]]
 
           marker="baseline-${{ github.run_id }}-${{ github.run_attempt }}"
           for cache in bazelisk bazel-disk bazel-repo; do
@@ -127,7 +127,7 @@ jobs:
         uses: ./setup-bazel-cache
         with:
           disk-cache-key: persistence-${{ github.run_id }}-${{ github.run_attempt }}
-          cache-save-branches: ${{ github.ref_name }}
+          cache-save-branch-patterns: ${{ github.ref_name }}
           disk-cache-restore: "true"
           disk-cache-save: "true"
           repository-cache-restore: "true"
@@ -138,14 +138,14 @@ jobs:
         env:
           BAZELISK_RESTORE: ${{ steps.restore.outputs.bazelisk-cache-restored }}
           DISK_RESTORE: ${{ steps.restore.outputs.disk-cache-restored }}
-          FAILED_JOB_CACHE_SAVE: ${{ steps.restore.outputs.failed-job-cache-save }}
+          FAILED_JOB_CACHE_SAVE_ALLOWED: ${{ steps.restore.outputs.failed-job-cache-save-allowed }}
           REPOSITORY_RESTORE: ${{ steps.restore.outputs.repository-cache-restored }}
         run: |
           set -euo pipefail
           [[ "$BAZELISK_RESTORE" == "true" ]]
           [[ "$DISK_RESTORE" == "partial" ]]
           [[ "$REPOSITORY_RESTORE" == "partial" ]]
-          [[ "$FAILED_JOB_CACHE_SAVE" == "true" ]]
+          [[ "$FAILED_JOB_CACHE_SAVE_ALLOWED" == "true" ]]
 
           marker="baseline-${{ github.run_id }}-${{ github.run_attempt }}"
           for cache in bazelisk bazel-disk bazel-repo; do
@@ -184,7 +184,7 @@ jobs:
         uses: ./setup-bazel-cache
         with:
           disk-cache-key: persistence-${{ github.run_id }}-${{ github.run_attempt }}
-          cache-save-branches: ${{ github.ref_name }}
+          cache-save-branch-patterns: ${{ github.ref_name }}
           disk-cache-restore: "true"
           disk-cache-save: "true"
           repository-cache-restore: "true"

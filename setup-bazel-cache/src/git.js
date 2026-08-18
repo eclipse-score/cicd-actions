@@ -39,7 +39,7 @@ function resolveDefaultBranch(
 ) {
   if (!eventPath) {
     throw new Error(
-      'GITHUB_EVENT_PATH is not set; set cache-save-branches explicitly when running outside GitHub Actions.',
+      'GITHUB_EVENT_PATH is not set; set cache-save-branch-patterns explicitly when running outside GitHub Actions.',
     );
   }
 

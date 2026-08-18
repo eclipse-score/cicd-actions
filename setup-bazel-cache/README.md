@@ -3,8 +3,8 @@
 This Linux-only action configures Bazelisk, Bazel disk, and Bazel repository
 caches with opinionated defaults for Bazel 8.6 or newer. Branch and
 pull-request jobs restore caches; only configured cache-saving branches save
-them. If no save branches are configured, the repository's default branch is
-used automatically.
+them. If no cache-save branch patterns are configured, the repository's default
+branch is used automatically.
 
 ## Usage
 
@@ -16,7 +16,7 @@ steps:
     with:
       disk-cache-key: ${{ github.workflow }}-${{ github.job }}
       # Optional:
-      cache-save-branches: |
+      cache-save-branch-patterns: |
         main
         release/*
       repository-cache-restore: auto
@@ -28,8 +28,8 @@ steps:
 - `disk-cache-key` separates disk caches belonging to different jobs or
   matrix configurations. It must be a stable, printable value up to 400
   characters long and must not contain commas.
-- `cache-save-branches` is an optional newline-separated list of branch glob
-  patterns allowed to save caches. An empty input uses the repository's GitHub
+- `cache-save-branch-patterns` is an optional newline-separated list of branch
+  glob patterns allowed to save caches. An empty input uses the repository's GitHub
   default branch from the workflow event. `*` matches within one branch path
   component and `**` also crosses `/`, so `release/*` matches `release/1.0`.
   Pull-request refs never save caches, even when a pattern would match them.
@@ -75,13 +75,13 @@ permissions:
 
 ## Outputs
 
-- `cache-save`: whether this ref can save caches in the post action
+- `cache-save-allowed`: whether this ref can save caches in the post action
 - `repository-cache-restore`: resolved repository-cache restore decision
-- `repository-cache-save`: whether this run will publish the shared repository cache
+- `repository-cache-save`: resolved repository-cache save decision
 - `disk-cache-restore`: resolved disk-cache restore decision
-- `disk-cache-save`: whether this run will publish the Bazel disk cache
+- `disk-cache-save`: resolved disk-cache save decision
 - `bazelisk-cache-restore`: resolved Bazelisk-cache restore decision
-- `failed-job-cache-save`: whether Bazelisk was restored exactly and every
+- `failed-job-cache-save-allowed`: whether Bazelisk was restored exactly and every
   generational cache selected for saving was restored exactly or by prefix,
   allowing an additive save if a later step fails
 - `bazelisk-cache-restored`, `disk-cache-restored`, and
@@ -145,7 +145,7 @@ normal save behavior.
 ## Validation model in this repository
 
 GitHub scopes every cache to the workflow run's actual Git ref. The
-`cache-save-branches` input only decides whether this action attempts a save; it
+The `cache-save-branch-patterns` input only decides whether this action attempts a save; it
 cannot move a cache into another ref's scope. A cache written on a release
 branch is therefore not automatically shared with `main` or another release
 branch. The repository uses that distinction to test cache writes without
@@ -163,14 +163,14 @@ action's post step only after its job has finished:
 
 1. A successful job seeds a baseline for all three caches.
 2. A second job restores that baseline, verifies
-   `failed-job-cache-save: "true"`, and adds disk and repository markers.
+   `failed-job-cache-save-allowed: "true"`, and adds disk and repository markers.
    Automatic runs complete successfully. A manual run can enable
    `exercise-failed-job` to fail intentionally and exercise the
    failure-sensitive post condition.
 3. A final job restores the next generation and verifies the added markers.
 
 Unit tests separately verify that misses, skipped restores, and cache API
-failures produce `failed-job-cache-save: "false"`. The action exports that
+failures produce `failed-job-cache-save-allowed: "false"`. The action exports that
 decision for its failure-sensitive `post-if` condition; the pull-request action
 test verifies that the exported value matches the public output.
 
