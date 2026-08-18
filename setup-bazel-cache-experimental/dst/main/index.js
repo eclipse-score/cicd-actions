@@ -69572,11 +69572,11 @@ async function restore(configuration, cacheConfiguration) {
 // src/config.js
 var import_node_os3 = __toESM(require("node:os"), 1);
 var import_node_path = __toESM(require("node:path"), 1);
-var MAX_UNIQUE_CACHE_NAME_LENGTH = 400;
-function validateUniqueCacheName(value) {
-  if (!value || value.length > MAX_UNIQUE_CACHE_NAME_LENGTH || hasControlCharacter(value) || value.includes(",")) {
+var MAX_DISK_CACHE_NAME_LENGTH = 400;
+function validateDiskCacheName(value) {
+  if (!value || value.length > MAX_DISK_CACHE_NAME_LENGTH || hasControlCharacter(value) || value.includes(",")) {
     throw new Error(
-      "unique-cache-name must contain 1 to 400 printable characters without commas."
+      "disk-cache-name must contain 1 to 400 printable characters without commas."
     );
   }
   return value;
@@ -69587,8 +69587,8 @@ function hasControlCharacter(value) {
     return codePoint < 32 || codePoint === 127;
   });
 }
-function createConfiguration(workspace, uniqueCacheName) {
-  validateUniqueCacheName(uniqueCacheName);
+function createConfiguration(workspace, diskCacheName) {
+  validateDiskCacheName(diskCacheName);
   const home = import_node_os3.default.homedir();
   const cacheRoot = import_node_path.default.join(home, ".cache");
   const runnerTemp = process.env.RUNNER_TEMP || import_node_os3.default.tmpdir();
@@ -69609,7 +69609,7 @@ function createConfiguration(workspace, uniqueCacheName) {
         paths: [import_node_path.default.join(cacheRoot, "bazelisk")]
       },
       disk: {
-        name: `disk-${uniqueCacheName.length}-${uniqueCacheName}`,
+        name: `disk-${diskCacheName.length}-${diskCacheName}`,
         generational: true,
         files: [],
         paths: [import_node_path.default.join(cacheRoot, "bazel-disk")]
@@ -69751,7 +69751,7 @@ async function run() {
     }
     const workspace = process.env.GITHUB_WORKSPACE;
     if (!workspace) throw new Error("GITHUB_WORKSPACE is not set.");
-    const uniqueCacheName = getInput("unique-cache-name", { required: true });
+    const diskCacheName = getInput("disk-cache-name", { required: true });
     const mainBranch = parseMainBranch(getInput("main-branch", { required: true }));
     const repositoryCacheSaveRequested = parseRepositoryCacheSave(
       getInput("save-repository-cache")
@@ -69760,7 +69760,7 @@ async function run() {
       skipDiskCacheRestore: getInput("skip-disk-cache-restore"),
       skipRepositoryCacheRestore: getInput("skip-repository-cache-restore")
     });
-    const configuration = createConfiguration(workspace, uniqueCacheName);
+    const configuration = createConfiguration(workspace, diskCacheName);
     const cacheSave = isCacheSaveRef(process.env.GITHUB_REF, mainBranch);
     const repositoryCacheSave = cacheSave && repositoryCacheSaveRequested;
     let checkoutHistory = "skipped";
@@ -69803,7 +69803,7 @@ async function run() {
     );
     saveState(
       configuration.cacheSaveState,
-      JSON.stringify({ cacheSave, repositoryCacheSave, uniqueCacheName, workspace })
+      JSON.stringify({ cacheSave, repositoryCacheSave, diskCacheName, workspace })
     );
   } catch (error2) {
     setFailed(error2.stack || error2.message);

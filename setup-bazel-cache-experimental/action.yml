@@ -15,7 +15,7 @@ name: Setup Bazel Cache Experimental
 description: Experimental Bazel 8.6+ cache design. Its API and cache format may change without compatibility.
 
 inputs:
-  unique-cache-name:
+  disk-cache-name:
     description: Stable disk-cache name for this workflow job and matrix configuration (1-400 printable characters, no commas).
     required: true
   main-branch:

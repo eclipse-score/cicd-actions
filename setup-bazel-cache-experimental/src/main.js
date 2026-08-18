@@ -45,7 +45,7 @@ async function run() {
     const workspace = process.env.GITHUB_WORKSPACE;
     if (!workspace) throw new Error('GITHUB_WORKSPACE is not set.');
 
-    const uniqueCacheName = core.getInput('unique-cache-name', { required: true });
+    const diskCacheName = core.getInput('disk-cache-name', { required: true });
     const mainBranch = parseMainBranch(core.getInput('main-branch', { required: true }));
     const repositoryCacheSaveRequested = parseRepositoryCacheSave(
       core.getInput('save-repository-cache'),
@@ -55,7 +55,7 @@ async function run() {
       skipRepositoryCacheRestore: core.getInput('skip-repository-cache-restore'),
     });
 
-    const configuration = createConfiguration(workspace, uniqueCacheName);
+    const configuration = createConfiguration(workspace, diskCacheName);
 
     const cacheSave = isCacheSaveRef(process.env.GITHUB_REF, mainBranch);
     const repositoryCacheSave = cacheSave && repositoryCacheSaveRequested;
@@ -103,7 +103,7 @@ async function run() {
     );
     core.saveState(
       configuration.cacheSaveState,
-      JSON.stringify({ cacheSave, repositoryCacheSave, uniqueCacheName, workspace }),
+      JSON.stringify({ cacheSave, repositoryCacheSave, diskCacheName, workspace }),
     );
   } catch (error) {
     core.setFailed(error.stack || error.message);

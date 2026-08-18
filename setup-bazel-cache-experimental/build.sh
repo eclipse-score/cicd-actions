@@ -30,7 +30,3 @@ npm ci
 npm run lint
 npm test
 npm run build
-
-# Some bundled dependencies contain trailing whitespace. Keep the committed
-# distribution clean without changing or patching third-party source packages.
-sed -i 's/[[:blank:]]\+$//' dst/main/index.js dst/post/index.js

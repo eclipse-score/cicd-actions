@@ -20,7 +20,7 @@ steps:
 
   - uses: eclipse-score/cicd-actions/setup-bazel-cache-experimental@<sha>
     with:
-      unique-cache-name: ${{ github.workflow }}-${{ github.job }}
+      disk-cache-name: ${{ github.workflow }}-${{ github.job }}
       # Optional:
       main-branch: main
       skip-disk-cache-restore: auto
@@ -28,7 +28,7 @@ steps:
       save-repository-cache: true
 ```
 
-- `unique-cache-name` separates disk caches belonging to different jobs or
+- `disk-cache-name` separates disk caches belonging to different jobs or
   matrix configurations. It must be a stable, printable value up to 400
   characters long and must not contain commas.
 - `main-branch` selects the only branch allowed to save caches. It must be the
@@ -105,7 +105,7 @@ Bazel repository-cache entries are content-addressed, so
 `MODULE.bazel.lock` and individual Bazel configs are not correctness boundaries
 for this cache. Builds, fetch jobs, platforms, and configs all restore and
 augment the same snapshot. Disk caches use timestamped generations and include
-`unique-cache-name`. Cache API failures are reported as warnings so a transient
+`disk-cache-name`. Cache API failures are reported as warnings so a transient
 cache outage does not fail the build.
 
 Successful jobs may publish new cache baselines. A failed job publishes only

@@ -14,18 +14,18 @@
 import os from 'node:os';
 import path from 'node:path';
 
-const MAX_UNIQUE_CACHE_NAME_LENGTH = 400;
+const MAX_DISK_CACHE_NAME_LENGTH = 400;
 
 /** Reject malformed key components before cache APIs can fail late in the job. */
-function validateUniqueCacheName(value) {
+function validateDiskCacheName(value) {
   if (
     !value ||
-    value.length > MAX_UNIQUE_CACHE_NAME_LENGTH ||
+    value.length > MAX_DISK_CACHE_NAME_LENGTH ||
     hasControlCharacter(value) ||
     value.includes(',')
   ) {
     throw new Error(
-      'unique-cache-name must contain 1 to 400 printable characters without commas.',
+      'disk-cache-name must contain 1 to 400 printable characters without commas.',
     );
   }
   return value;
@@ -39,8 +39,8 @@ function hasControlCharacter(value) {
 }
 
 /** Build the complete Linux cache configuration in one place. */
-function createConfiguration(workspace, uniqueCacheName) {
-  validateUniqueCacheName(uniqueCacheName);
+function createConfiguration(workspace, diskCacheName) {
+  validateDiskCacheName(diskCacheName);
   const home = os.homedir();
   const cacheRoot = path.join(home, '.cache');
   const runnerTemp = process.env.RUNNER_TEMP || os.tmpdir();
@@ -63,7 +63,7 @@ function createConfiguration(workspace, uniqueCacheName) {
         paths: [path.join(cacheRoot, 'bazelisk')],
       },
       disk: {
-        name: `disk-${uniqueCacheName.length}-${uniqueCacheName}`,
+        name: `disk-${diskCacheName.length}-${diskCacheName}`,
         generational: true,
         files: [],
         paths: [path.join(cacheRoot, 'bazel-disk')],
@@ -80,4 +80,4 @@ function createConfiguration(workspace, uniqueCacheName) {
   };
 }
 
-export { createConfiguration, validateUniqueCacheName };
+export { createConfiguration, validateDiskCacheName };

@@ -27,13 +27,13 @@ async function run() {
       return;
     }
 
-    const { cacheSave, repositoryCacheSave, uniqueCacheName, workspace } = JSON.parse(state);
+    const { cacheSave, repositoryCacheSave, diskCacheName, workspace } = JSON.parse(state);
     if (!cacheSave) {
       core.info('Cache saving is disabled on this ref');
       return;
     }
 
-    const configuration = createConfiguration(workspace, uniqueCacheName);
+    const configuration = createConfiguration(workspace, diskCacheName);
     await save(configuration, configuration.caches.bazelisk);
     await save(configuration, configuration.caches.disk);
     if (repositoryCacheSave) {
