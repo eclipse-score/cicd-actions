@@ -16,7 +16,8 @@ import test from 'node:test';
 import {
   isCacheSaveRef,
   needsLockFileCheck,
-  parseMainBranch,
+  parseBranchPattern,
+  parseCacheSaveBranches,
   parseRepositoryCacheSave,
   parseRestoreConfiguration,
   resolveRestoreConfiguration,
@@ -31,11 +32,13 @@ function raw(overrides = {}) {
   };
 }
 
-test('only the configured main branch can save caches', () => {
-  assert.equal(isCacheSaveRef('refs/heads/main', 'main'), true);
-  assert.equal(isCacheSaveRef('refs/heads/feature', 'main'), false);
-  assert.equal(isCacheSaveRef('refs/pull/123/merge', 'main'), false);
-  assert.equal(isCacheSaveRef('refs/heads/trunk', 'trunk'), true);
+test('only configured branch patterns can save caches', () => {
+  assert.equal(isCacheSaveRef('refs/heads/main', ['main']), true);
+  assert.equal(isCacheSaveRef('refs/heads/feature', ['main']), false);
+  assert.equal(isCacheSaveRef('refs/heads/release/1.0', ['master', 'release/*']), true);
+  assert.equal(isCacheSaveRef('refs/heads/release/1.0/hotfix', ['release/*']), false);
+  assert.equal(isCacheSaveRef('refs/heads/release/1.0/hotfix', ['release/**']), true);
+  assert.equal(isCacheSaveRef('refs/pull/123/merge', ['**']), false);
 });
 
 test('repository cache publishing defaults to enabled and accepts explicit booleans', () => {
@@ -45,11 +48,22 @@ test('repository cache publishing defaults to enabled and accepts explicit boole
   assert.throws(() => parseRepositoryCacheSave('auto'), /Invalid save-repository-cache/);
 });
 
-test('main branch must be a branch name rather than a Git ref', () => {
-  assert.equal(parseMainBranch('release/1.0'), 'release/1.0');
-  assert.throws(() => parseMainBranch(''), /Invalid main-branch/);
-  assert.throws(() => parseMainBranch('refs/heads/main'), /without a refs\/ prefix/);
-  assert.throws(() => parseMainBranch('main branch'), /Invalid main-branch/);
+test('cache save patterns default to the repository default branch', () => {
+  assert.deepEqual(parseCacheSaveBranches('', 'main'), ['main']);
+  assert.deepEqual(
+    parseCacheSaveBranches('\nmaster\nrelease/*\n', undefined),
+    ['master', 'release/*'],
+  );
+});
+
+test('branch patterns must not be Git refs or unsafe path-like values', () => {
+  assert.equal(parseBranchPattern('release/1.0'), 'release/1.0');
+  assert.equal(parseBranchPattern('release/*'), 'release/*');
+  assert.throws(() => parseCacheSaveBranches('', undefined), /Cannot determine/);
+  assert.throws(() => parseBranchPattern(''), /Invalid cache-save-branches pattern/);
+  assert.throws(() => parseBranchPattern('refs/heads/main'), /without a refs\/ prefix/);
+  assert.throws(() => parseBranchPattern('main branch'), /Invalid cache-save-branches/);
+  assert.throws(() => parseBranchPattern('release/../*'), /Invalid cache-save-branches/);
 });
 
 test('new API has auto disk and restoring repository defaults', () => {

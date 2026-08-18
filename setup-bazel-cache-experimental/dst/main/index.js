@@ -30437,7 +30437,7 @@ var RestError = class _RestError extends Error {
     } : void 0;
     Object.defineProperty(this, custom, {
       value: () => {
-        return `RestError: ${this.message}
+        return `RestError: ${this.message} 
  ${errorSanitizer.sanitize({
           ...this,
           request: { ...this.request, agent },
@@ -38491,9 +38491,9 @@ var XMLParser = class {
     this.options = buildOptions(options);
   }
   /**
-   * Parse XML dats to JS object
-   * @param {string|Uint8Array} xmlData
-   * @param {boolean|Object} validationOption
+   * Parse XML dats to JS object 
+   * @param {string|Uint8Array} xmlData 
+   * @param {boolean|Object} validationOption 
    */
   parse(xmlData, validationOption) {
     if (typeof xmlData !== "string" && xmlData.toString) {
@@ -38515,8 +38515,8 @@ var XMLParser = class {
   }
   /**
    * Add Entity which is not by default supported by this library
-   * @param {string} key
-   * @param {string} value
+   * @param {string} key 
+   * @param {string} value 
    */
   addEntity(key, value) {
     if (value.indexOf("&") !== -1) {
@@ -38532,10 +38532,10 @@ var XMLParser = class {
   /**
    * Returns a Symbol that can be used to access the metadata
    * property on a node.
-   *
+   * 
    * If Symbol is not available in the environment, an ordinary property is used
    * and the name of the property is here returned.
-   *
+   * 
    * The XMLMetaData property is only present when `captureMetaData`
    * is true in the options.
    */
@@ -65538,7 +65538,7 @@ function printCachesListForDiagnostics(key, httpClient, version3) {
       const cacheListResult = response.result;
       const totalCount = cacheListResult === null || cacheListResult === void 0 ? void 0 : cacheListResult.totalCount;
       if (totalCount && totalCount > 0) {
-        debug(`No matching cache found for cache key '${key}', version '${version3} and scope ${process.env["GITHUB_REF"]}. There exist one or more cache(s) with similar key but they have different version or scope. See more info on cache matching here: https://docs.github.com/en/actions/using-workflows/caching-dependencies-to-speed-up-workflows#matching-a-cache-key
+        debug(`No matching cache found for cache key '${key}', version '${version3} and scope ${process.env["GITHUB_REF"]}. There exist one or more cache(s) with similar key but they have different version or scope. See more info on cache matching here: https://docs.github.com/en/actions/using-workflows/caching-dependencies-to-speed-up-workflows#matching-a-cache-key 
 Other caches with similar key:`);
         for (const cacheEntry of (cacheListResult === null || cacheListResult === void 0 ? void 0 : cacheListResult.artifactCaches) || []) {
           debug(`Cache Key: ${cacheEntry === null || cacheEntry === void 0 ? void 0 : cacheEntry.cacheKey}, Cache Version: ${cacheEntry === null || cacheEntry === void 0 ? void 0 : cacheEntry.cacheVersion}, Cache Scope: ${cacheEntry === null || cacheEntry === void 0 ? void 0 : cacheEntry.scope}, Cache Created: ${cacheEntry === null || cacheEntry === void 0 ? void 0 : cacheEntry.creationTime}`);
@@ -69642,6 +69642,21 @@ function runGit(workspace, args, options = {}) {
 function succeeds(result) {
   return result.status === 0;
 }
+function resolveDefaultBranch(eventPath = process.env.GITHUB_EVENT_PATH, readFile = import_node_fs2.default.readFileSync) {
+  if (!eventPath) {
+    throw new Error(
+      "GITHUB_EVENT_PATH is not set; set cache-save-branches explicitly when running outside GitHub Actions."
+    );
+  }
+  const event = JSON.parse(readFile(eventPath, "utf8"));
+  const defaultBranch = event?.repository?.default_branch;
+  if (typeof defaultBranch !== "string" || !defaultBranch) {
+    throw new Error(
+      "The workflow event's 'repository.default_branch' value is missing or invalid."
+    );
+  }
+  return defaultBranch;
+}
 function resolveComparisonBase(eventName = process.env.GITHUB_EVENT_NAME, eventPath = process.env.GITHUB_EVENT_PATH, readFile = import_node_fs2.default.readFileSync) {
   if (eventName !== "push") return FALLBACK_COMPARISON_BASE;
   if (!eventPath) {
@@ -69695,7 +69710,7 @@ function lockFileChanged(workspace, comparisonBase, git = runGit) {
 // src/inputs.js
 var BOOLEAN_MODES = /* @__PURE__ */ new Set(["true", "false"]);
 var AUTOMATIC_MODES = /* @__PURE__ */ new Set(["true", "false", "auto"]);
-var INVALID_BRANCH_CHARACTERS = /[\s~^:?*[\]\\]/;
+var INVALID_BRANCH_PATTERN_CHARACTERS = /[\s~^:\\]/;
 function validateMode(name, value, allowed) {
   if (!allowed.has(value)) {
     throw new Error(`Invalid ${name} value '${value}'. Expected ${[...allowed].join(", ")}.`);
@@ -69715,14 +69730,26 @@ function parseRepositoryCacheSave(value) {
   validateMode("save-repository-cache", resolved, BOOLEAN_MODES);
   return resolved === "true";
 }
-function parseMainBranch(value) {
-  const branch = value.trim();
-  if (!branch || branch.startsWith("refs/") || branch.startsWith(".") || branch.endsWith(".") || branch.endsWith(".lock") || branch.startsWith("/") || branch.endsWith("/") || branch.includes("..") || branch.includes("//") || INVALID_BRANCH_CHARACTERS.test(branch)) {
+function parseBranchPattern(value, name = "cache-save-branches") {
+  const pattern = value.trim();
+  if (!pattern || pattern.startsWith("refs/") || pattern.startsWith(".") || pattern.endsWith(".") || pattern.endsWith(".lock") || pattern.startsWith("/") || pattern.endsWith("/") || pattern.includes("..") || pattern.includes("//") || INVALID_BRANCH_PATTERN_CHARACTERS.test(pattern)) {
     throw new Error(
-      `Invalid main-branch value '${value}'. Expected a Git branch name without a refs/ prefix.`
+      `Invalid ${name} pattern '${value}'. Expected a branch name or glob pattern without a refs/ prefix.`
     );
   }
-  return branch;
+  return pattern;
+}
+function parseCacheSaveBranches(value, defaultBranch) {
+  const patterns = value.split(/\r?\n/).map((pattern) => pattern.trim()).filter(Boolean);
+  if (patterns.length === 0) {
+    if (!defaultBranch) {
+      throw new Error(
+        "Cannot determine the repository default branch. Set cache-save-branches explicitly."
+      );
+    }
+    return [parseBranchPattern(defaultBranch, "repository.default_branch")];
+  }
+  return patterns.map((pattern) => parseBranchPattern(pattern));
 }
 function resolveMode(mode, cacheSave, lockFileChanged2) {
   return mode === "true" || mode === "auto" && cacheSave && lockFileChanged2;
@@ -69734,8 +69761,15 @@ function resolveRestoreConfiguration(configuration, cacheSave, lockFileChanged2)
     skipRepository: resolveMode(configuration.repository, cacheSave, lockFileChanged2)
   };
 }
-function isCacheSaveRef(ref, mainBranch) {
-  return ref === `refs/heads/${mainBranch}`;
+function isCacheSaveRef(ref, branchPatterns) {
+  if (!ref.startsWith("refs/heads/")) return false;
+  const branch = ref.slice("refs/heads/".length);
+  return branchPatterns.some((pattern) => minimatch2(branch, pattern, {
+    dot: true,
+    nocomment: true,
+    noext: true,
+    nonegate: true
+  }));
 }
 function needsLockFileCheck(configuration, cacheSave) {
   return cacheSave && (configuration.disk === "auto" || configuration.repository === "auto" || configuration.bazelisk === "auto");
@@ -69752,7 +69786,11 @@ async function run() {
     const workspace = process.env.GITHUB_WORKSPACE;
     if (!workspace) throw new Error("GITHUB_WORKSPACE is not set.");
     const diskCacheName = getInput("disk-cache-name", { required: true });
-    const mainBranch = parseMainBranch(getInput("main-branch", { required: true }));
+    const rawCacheSaveBranches = getInput("cache-save-branches");
+    const cacheSaveBranches = parseCacheSaveBranches(
+      rawCacheSaveBranches,
+      rawCacheSaveBranches.trim() ? void 0 : resolveDefaultBranch()
+    );
     const repositoryCacheSaveRequested = parseRepositoryCacheSave(
       getInput("save-repository-cache")
     );
@@ -69761,7 +69799,7 @@ async function run() {
       skipRepositoryCacheRestore: getInput("skip-repository-cache-restore")
     });
     const configuration = createConfiguration(workspace, diskCacheName);
-    const cacheSave = isCacheSaveRef(process.env.GITHUB_REF, mainBranch);
+    const cacheSave = isCacheSaveRef(process.env.GITHUB_REF || "", cacheSaveBranches);
     const repositoryCacheSave = cacheSave && repositoryCacheSaveRequested;
     let checkoutHistory = "skipped";
     let changed = null;

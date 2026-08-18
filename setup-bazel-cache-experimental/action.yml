@@ -18,12 +18,12 @@ inputs:
   disk-cache-name:
     description: Stable disk-cache name for this workflow job and matrix configuration (1-400 printable characters, no commas).
     required: true
-  main-branch:
-    description: Default branch allowed to save shared caches. Use a branch name, not a refs/heads/ ref.
+  cache-save-branches:
+    description: Newline-separated branch glob patterns allowed to save caches. Empty uses the repository default branch.
     required: false
-    default: main
+    default: ""
   skip-disk-cache-restore:
-    description: Skip the disk-cache restore. Empty uses auto, which rebuilds it on main when MODULE.bazel.lock changed.
+    description: Skip the disk-cache restore. Empty uses auto, which rebuilds it on a cache-saving branch when MODULE.bazel.lock changed.
     required: false
     default: ""
   skip-repository-cache-restore:
@@ -31,7 +31,7 @@ inputs:
     required: false
     default: ""
   save-repository-cache:
-    description: Save the shared repository cache on the configured default branch.
+    description: Save the shared repository cache on a configured cache-saving branch.
     required: false
     default: "true"
 outputs:

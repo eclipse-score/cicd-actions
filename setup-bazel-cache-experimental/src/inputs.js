@@ -11,9 +11,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // *******************************************************************************
 
+import { minimatch } from 'minimatch';
+
 const BOOLEAN_MODES = new Set(['true', 'false']);
 const AUTOMATIC_MODES = new Set(['true', 'false', 'auto']);
-const INVALID_BRANCH_CHARACTERS = /[\s~^:?*[\]\\]/;
+const INVALID_BRANCH_PATTERN_CHARACTERS = /[\s~^:\\]/;
 
 /** Reject unknown modes early because GitHub Action inputs are untyped strings. */
 function validateMode(name, value, allowed) {
@@ -41,26 +43,43 @@ function parseRepositoryCacheSave(value) {
   return resolved === 'true';
 }
 
-/** Ensure the configured branch can be unambiguously converted to a head ref. */
-function parseMainBranch(value) {
-  const branch = value.trim();
+/** Ensure a branch name or glob pattern can be safely matched against a head ref. */
+function parseBranchPattern(value, name = 'cache-save-branches') {
+  const pattern = value.trim();
   if (
-    !branch ||
-    branch.startsWith('refs/') ||
-    branch.startsWith('.') ||
-    branch.endsWith('.') ||
-    branch.endsWith('.lock') ||
-    branch.startsWith('/') ||
-    branch.endsWith('/') ||
-    branch.includes('..') ||
-    branch.includes('//') ||
-    INVALID_BRANCH_CHARACTERS.test(branch)
+    !pattern ||
+    pattern.startsWith('refs/') ||
+    pattern.startsWith('.') ||
+    pattern.endsWith('.') ||
+    pattern.endsWith('.lock') ||
+    pattern.startsWith('/') ||
+    pattern.endsWith('/') ||
+    pattern.includes('..') ||
+    pattern.includes('//') ||
+    INVALID_BRANCH_PATTERN_CHARACTERS.test(pattern)
   ) {
     throw new Error(
-      `Invalid main-branch value '${value}'. Expected a Git branch name without a refs/ prefix.`,
+      `Invalid ${name} pattern '${value}'. Expected a branch name or glob pattern without a refs/ prefix.`,
     );
   }
-  return branch;
+  return pattern;
+}
+
+/** Resolve the configured save branches, defaulting to the repository default branch. */
+function parseCacheSaveBranches(value, defaultBranch) {
+  const patterns = value
+    .split(/\r?\n/)
+    .map((pattern) => pattern.trim())
+    .filter(Boolean);
+  if (patterns.length === 0) {
+    if (!defaultBranch) {
+      throw new Error(
+        'Cannot determine the repository default branch. Set cache-save-branches explicitly.',
+      );
+    }
+    return [parseBranchPattern(defaultBranch, 'repository.default_branch')];
+  }
+  return patterns.map((pattern) => parseBranchPattern(pattern));
 }
 
 /** Convert one configured mode into the boolean needed by the cache layer. */
@@ -77,9 +96,16 @@ function resolveRestoreConfiguration(configuration, cacheSave, lockFileChanged) 
   };
 }
 
-/** Restrict cache writes to the configured branch's canonical Git ref. */
-function isCacheSaveRef(ref, mainBranch) {
-  return ref === `refs/heads/${mainBranch}`;
+/** Restrict cache writes to configured branch patterns and never to pull-request refs. */
+function isCacheSaveRef(ref, branchPatterns) {
+  if (!ref.startsWith('refs/heads/')) return false;
+  const branch = ref.slice('refs/heads/'.length);
+  return branchPatterns.some((pattern) => minimatch(branch, pattern, {
+    dot: true,
+    nocomment: true,
+    noext: true,
+    nonegate: true,
+  }));
 }
 
 /**
@@ -97,7 +123,8 @@ function needsLockFileCheck(configuration, cacheSave) {
 export {
   isCacheSaveRef,
   needsLockFileCheck,
-  parseMainBranch,
+  parseBranchPattern,
+  parseCacheSaveBranches,
   parseRepositoryCacheSave,
   parseRestoreConfiguration,
   resolveRestoreConfiguration,

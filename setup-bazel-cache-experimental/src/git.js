@@ -32,6 +32,27 @@ function succeeds(result) {
   return result.status === 0;
 }
 
+/** Resolve the repository's default branch from the GitHub event payload. */
+function resolveDefaultBranch(
+  eventPath = process.env.GITHUB_EVENT_PATH,
+  readFile = fs.readFileSync,
+) {
+  if (!eventPath) {
+    throw new Error(
+      'GITHUB_EVENT_PATH is not set; set cache-save-branches explicitly when running outside GitHub Actions.',
+    );
+  }
+
+  const event = JSON.parse(readFile(eventPath, 'utf8'));
+  const defaultBranch = event?.repository?.default_branch;
+  if (typeof defaultBranch !== 'string' || !defaultBranch) {
+    throw new Error(
+      "The workflow event's 'repository.default_branch' value is missing or invalid.",
+    );
+  }
+  return defaultBranch;
+}
+
 /** Resolve the start of a push, falling back to the previous commit for other events. */
 function resolveComparisonBase(
   eventName = process.env.GITHUB_EVENT_NAME,
@@ -101,4 +122,9 @@ function lockFileChanged(workspace, comparisonBase, git = runGit) {
   throw new Error(`Could not compare MODULE.bazel.lock: ${result.stderr || 'git diff failed'}`);
 }
 
-export { ensureComparisonHistory, lockFileChanged, resolveComparisonBase };
+export {
+  ensureComparisonHistory,
+  lockFileChanged,
+  resolveComparisonBase,
+  resolveDefaultBranch,
+};

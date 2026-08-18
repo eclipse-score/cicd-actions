@@ -17,12 +17,26 @@ import {
   ensureComparisonHistory,
   lockFileChanged,
   resolveComparisonBase,
+  resolveDefaultBranch,
 } from '../src/git.js';
 
 /** Create the minimal spawnSync-like result needed by Git policy tests. */
 function result(status, stderr = '') {
   return { status, stderr };
 }
+
+test('default branch is read from the repository event payload', () => {
+  const readFile = () => JSON.stringify({ repository: { default_branch: 'trunk' } });
+  assert.equal(resolveDefaultBranch('/event.json', readFile), 'trunk');
+});
+
+test('missing default branch metadata is rejected', () => {
+  const readFile = () => JSON.stringify({ repository: {} });
+  assert.throws(
+    () => resolveDefaultBranch('/event.json', readFile),
+    /repository\.default_branch.*missing or invalid/,
+  );
+});
 
 test('existing parent commit is reused', () => {
   const calls = [];

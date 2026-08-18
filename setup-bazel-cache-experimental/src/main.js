@@ -19,11 +19,12 @@ import {
   ensureComparisonHistory,
   lockFileChanged,
   resolveComparisonBase,
+  resolveDefaultBranch,
 } from './git.js';
 import {
   isCacheSaveRef,
   needsLockFileCheck,
-  parseMainBranch,
+  parseCacheSaveBranches,
   parseRepositoryCacheSave,
   parseRestoreConfiguration,
   resolveRestoreConfiguration,
@@ -46,7 +47,11 @@ async function run() {
     if (!workspace) throw new Error('GITHUB_WORKSPACE is not set.');
 
     const diskCacheName = core.getInput('disk-cache-name', { required: true });
-    const mainBranch = parseMainBranch(core.getInput('main-branch', { required: true }));
+    const rawCacheSaveBranches = core.getInput('cache-save-branches');
+    const cacheSaveBranches = parseCacheSaveBranches(
+      rawCacheSaveBranches,
+      rawCacheSaveBranches.trim() ? undefined : resolveDefaultBranch(),
+    );
     const repositoryCacheSaveRequested = parseRepositoryCacheSave(
       core.getInput('save-repository-cache'),
     );
@@ -57,7 +62,7 @@ async function run() {
 
     const configuration = createConfiguration(workspace, diskCacheName);
 
-    const cacheSave = isCacheSaveRef(process.env.GITHUB_REF, mainBranch);
+    const cacheSave = isCacheSaveRef(process.env.GITHUB_REF || '', cacheSaveBranches);
     const repositoryCacheSave = cacheSave && repositoryCacheSaveRequested;
     let checkoutHistory = 'skipped';
     let changed = null;

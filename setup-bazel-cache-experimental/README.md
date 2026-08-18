@@ -8,7 +8,9 @@
 
 This Linux-only action configures Bazelisk, Bazel disk, and Bazel repository
 caches with opinionated defaults for Bazel 8.6 or newer. Branch and
-pull-request jobs restore caches; only the configured main branch saves them.
+pull-request jobs restore caches; only configured cache-saving branches save
+them. If no save branches are configured, the repository's default branch is
+used automatically.
 Its cache namespace is isolated from the stable action, so evaluating it cannot
 replace or restore stable-action cache entries.
 
@@ -22,7 +24,9 @@ steps:
     with:
       disk-cache-name: ${{ github.workflow }}-${{ github.job }}
       # Optional:
-      main-branch: main
+      cache-save-branches: |
+        main
+        release/*
       skip-disk-cache-restore: auto
       skip-repository-cache-restore: false
       save-repository-cache: true
@@ -31,13 +35,16 @@ steps:
 - `disk-cache-name` separates disk caches belonging to different jobs or
   matrix configurations. It must be a stable, printable value up to 400
   characters long and must not contain commas.
-- `main-branch` selects the only branch allowed to save caches. It must be the
-  repository's GitHub default branch if other branches and pull requests need
-  to restore those caches. GitHub does not make caches from an arbitrary
-  non-default branch available to sibling branches.
+- `cache-save-branches` is an optional newline-separated list of branch glob
+  patterns allowed to save caches. An empty input uses the repository's GitHub
+  default branch from the workflow event. `*` matches within one branch path
+  component and `**` also crosses `/`, so `release/*` matches `release/1.0`.
+  Pull-request refs never save caches, even when a pattern would match them.
+  When multiple patterns are configured, they replace the default-branch
+  fallback; include it explicitly if needed.
 - `skip-disk-cache-restore` accepts `true`, `false`, or `auto`. In the default `auto`
-  mode, a main-branch run starts a fresh disk cache when `MODULE.bazel.lock`
-  changed. Other refs restore the latest main-branch cache.
+  mode, a cache-saving branch run starts a fresh disk cache when
+  `MODULE.bazel.lock` changed. Other refs restore the latest available cache.
 - `skip-repository-cache-restore` accepts `true` or `false` and defaults to `false`.
 - `save-repository-cache` accepts `true` or `false` and defaults to `true`.
   Set it to `false` in parallel build jobs when a dedicated warm-cache job is
@@ -61,11 +68,11 @@ that pull-request authors must not be able to read.
 
 ## Automatic mode and checkout history
 
-On the main branch, `skip-disk-cache-restore: auto` compares `MODULE.bazel.lock`
-with the commit preceding the current push, covering every commit in a
-multi-commit push. For events without a push base, it compares the previous
-commit. An ordinary shallow checkout fetches the comparison commit when
-necessary. If that is impossible, use `actions/checkout` with
+On a cache-saving branch, `skip-disk-cache-restore: auto` compares
+`MODULE.bazel.lock` with the commit preceding the current push, covering every
+commit in a multi-commit push. For events without a push base, it compares the
+previous commit. An ordinary shallow checkout fetches the comparison commit
+when necessary. If that is impossible, use `actions/checkout` with
 `fetch-depth: 0`, or set `skip-disk-cache-restore` explicitly.
 
 The job needs `contents: read` for automatic history deepening:
@@ -82,7 +89,7 @@ permissions:
 - `skip-disk-cache-restore`: resolved disk-cache restore decision (`true` or `false`)
 - `skip-repository-cache-restore`: resolved repository-cache restore decision
 - `repository-cache-save`: whether this run will publish the shared repository
-  cache (`true` only on the configured default branch when
+  cache (`true` only on a configured cache-saving branch when
   `save-repository-cache` is enabled)
 - `failed-job-cache-save`: whether Bazelisk was restored exactly and every
   generational cache selected for saving was restored exactly or by prefix,
@@ -148,10 +155,11 @@ normal save behavior.
 ## Validation model in this repository
 
 GitHub scopes every cache to the workflow run's actual Git ref. The
-`main-branch` input only decides whether this action attempts a save; it cannot
-move a cache into another ref's scope. The repository uses that distinction to
-test cache writes without giving candidate code access to the default branch's
-caches.
+`cache-save-branches` input only decides whether this action attempts a save; it
+cannot move a cache into another ref's scope. A cache written on a release
+branch is therefore not automatically shared with `main` or another release
+branch. The repository uses that distinction to test cache writes without
+giving candidate code access to the default branch's caches.
 
 | Context | Validation | Cache scope |
 | --- | --- | --- |

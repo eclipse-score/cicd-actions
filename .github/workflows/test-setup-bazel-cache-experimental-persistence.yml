@@ -82,8 +82,8 @@ jobs:
         id: setup
         uses: ./setup-bazel-cache-experimental
         with:
-          unique-cache-name: persistence-${{ github.run_id }}-${{ github.run_attempt }}
-          main-branch: ${{ github.ref_name }}
+          disk-cache-name: persistence-${{ github.run_id }}-${{ github.run_attempt }}
+          cache-save-branches: ${{ github.ref_name }}
           skip-disk-cache-restore: "false"
           skip-repository-cache-restore: "false"
 
@@ -124,8 +124,8 @@ jobs:
         id: restore
         uses: ./setup-bazel-cache-experimental
         with:
-          unique-cache-name: persistence-${{ github.run_id }}-${{ github.run_attempt }}
-          main-branch: ${{ github.ref_name }}
+          disk-cache-name: persistence-${{ github.run_id }}-${{ github.run_attempt }}
+          cache-save-branches: ${{ github.ref_name }}
           skip-disk-cache-restore: "false"
           skip-repository-cache-restore: "false"
 
@@ -179,8 +179,8 @@ jobs:
         id: restore
         uses: ./setup-bazel-cache-experimental
         with:
-          unique-cache-name: persistence-${{ github.run_id }}-${{ github.run_attempt }}
-          main-branch: ${{ github.ref_name }}
+          disk-cache-name: persistence-${{ github.run_id }}-${{ github.run_attempt }}
+          cache-save-branches: ${{ github.ref_name }}
           skip-disk-cache-restore: "false"
           skip-repository-cache-restore: "false"
 
