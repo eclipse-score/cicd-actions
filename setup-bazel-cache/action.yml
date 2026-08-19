@@ -15,57 +15,6 @@ name: Setup Bazel Cache
 description: Configures Bazel 8.6+ caching with opinionated defaults.
 
 inputs:
-  bazelisk-cache-restore:
-    description: >
-      Restore the Bazelisk cache.
-      Accepts true or false.
-    required: false
-    default: "true"
-
-  bazelisk-cache-save:
-    description: >
-      Save the Bazelisk cache.
-      Accepts true or false. Saving is still limited to configured
-      cache-saving branches.
-    required: false
-    default: "true"
-
-  repository-cache-restore:
-    description: >
-      Restore the shared repository cache.
-      Accepts true, false, or auto.
-      With auto, the cache is restored unless it should be rebuilt on a
-      cache-saving branch because MODULE.bazel.lock changed.
-    required: false
-    default: "auto"
-
-  repository-cache-save:
-    description: >
-      Save the shared repository cache.
-      Accepts true, false, or auto.
-      With auto, the cache is saved only on a configured cache-saving branch
-      when saving is required by the resolved cache policy.
-    required: false
-    default: "auto"
-
-  disk-cache-restore:
-    description: >
-      Restore the Bazel disk cache.
-      Accepts true, false, or auto.
-      With auto, the cache is restored unless it should be rebuilt on a
-      cache-saving branch because MODULE.bazel.lock changed.
-    required: false
-    default: "auto"
-
-  disk-cache-save:
-    description: >
-      Save the Bazel disk cache.
-      Accepts true, false, or auto.
-      With auto, the cache is saved only on a configured cache-saving branch
-      when saving is required by the resolved cache policy.
-    required: false
-    default: "false"
-
   disk-cache-key:
     description: >
       Stable disk-cache key for this workflow job and matrix configuration
@@ -79,6 +28,54 @@ inputs:
     required: false
     default: ""
 
+  bazelisk-cache-restore:
+    description: >
+      Restore the Bazelisk cache.
+      Accepts true or false.
+    required: false
+    default: "true"
+
+  bazelisk-cache-save:
+    description: >
+      Save the Bazelisk cache.
+      Accepts true or false.
+      Saving is still limited to configured
+      cache-saving branches.
+    required: false
+    default: "true"
+
+  repository-cache-restore:
+    description: >
+      Restore the shared repository cache.
+      Accepts true or false.
+    required: false
+    default: "true"
+
+  repository-cache-save:
+    description: >
+      Save the shared repository cache.
+      Accepts true or false.
+      Saving is still limited to configured cache-saving branches.
+    required: false
+    default: "true"
+
+  disk-cache-restore:
+    description: >
+      Restore the Bazel disk cache.
+      Accepts true, false, or auto.
+      With auto, the action decides whether restoring the existing cache is appropriate:
+      the cache is restored if MODULE.bazel.lock has NOT changed.
+    required: false
+    default: "auto"
+
+  disk-cache-save:
+    description: >
+      Save the Bazel disk cache.
+      Cache saves are always restricted to configured cache-saving branches.
+      Accepts true or false.
+    required: false
+    default: "false"
+
 outputs:
   cache-save-allowed:
     description: Whether this ref is allowed to save caches in the post action.
@@ -90,16 +87,10 @@ outputs:
     description: Resolved repository-cache save decision.
 
   disk-cache-restore:
-    description: Resolved disk-cache restore decision.
-
-  bazelisk-cache-save:
-    description: Resolved Bazelisk-cache save decision.
+    description: Resolved disk-cache restore decision (mostly interesting in case auto was used).
 
   disk-cache-save:
     description: Resolved disk-cache save decision.
-
-  bazelisk-cache-restore:
-    description: Resolved Bazelisk-cache restore decision.
 
   failed-job-cache-save-allowed:
     description: >
@@ -108,7 +99,7 @@ outputs:
 
   bazelisk-cache-restored:
     description: >
-      Bazelisk cache restore result: true, false, partial, skipped, or unknown.
+      Bazelisk cache restore result: true, false.
 
   disk-cache-restored:
     description: >

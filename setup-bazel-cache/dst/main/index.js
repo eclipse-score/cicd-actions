@@ -69731,8 +69731,8 @@ function lockFileChanged(workspace, comparisonBase, git = runGit) {
 }
 
 // src/inputs.js
-var AUTOMATIC_MODES = /* @__PURE__ */ new Set(["true", "false", "auto"]);
 var BOOLEAN_MODES = /* @__PURE__ */ new Set(["true", "false"]);
+var DISK_RESTORE_MODES = /* @__PURE__ */ new Set(["true", "false", "auto"]);
 var INVALID_BRANCH_PATTERN_CHARACTERS = /[\s~^:\\]/;
 function validateMode(name, value, allowed) {
   if (!allowed.has(value)) {
@@ -69743,19 +69743,19 @@ function parseCacheConfiguration(raw) {
   const restore2 = {
     bazelisk: raw.bazeliskCacheRestore.trim() || "true",
     disk: raw.diskCacheRestore.trim() || "auto",
-    repository: raw.repositoryCacheRestore.trim() || "auto"
+    repository: raw.repositoryCacheRestore.trim() || "true"
   };
   const save = {
     bazelisk: raw.bazeliskCacheSave.trim() || "true",
     disk: raw.diskCacheSave.trim() || "false",
-    repository: raw.repositoryCacheSave.trim() || "auto"
+    repository: raw.repositoryCacheSave.trim() || "true"
   };
   validateMode("bazelisk-cache-restore", restore2.bazelisk, BOOLEAN_MODES);
   validateMode("bazelisk-cache-save", save.bazelisk, BOOLEAN_MODES);
-  validateMode("disk-cache-restore", restore2.disk, AUTOMATIC_MODES);
-  validateMode("repository-cache-restore", restore2.repository, AUTOMATIC_MODES);
-  validateMode("disk-cache-save", save.disk, AUTOMATIC_MODES);
-  validateMode("repository-cache-save", save.repository, AUTOMATIC_MODES);
+  validateMode("disk-cache-restore", restore2.disk, DISK_RESTORE_MODES);
+  validateMode("repository-cache-restore", restore2.repository, BOOLEAN_MODES);
+  validateMode("disk-cache-save", save.disk, BOOLEAN_MODES);
+  validateMode("repository-cache-save", save.repository, BOOLEAN_MODES);
   return {
     restore: restore2,
     save
@@ -69789,14 +69789,14 @@ function resolveRestoreModes(configuration, cacheSaveAllowed, lockFileChanged2) 
   return {
     bazelisk: configuration.bazelisk === "true",
     disk: resolveRestoreMode(configuration.disk, cacheSaveAllowed, lockFileChanged2),
-    repository: resolveRestoreMode(configuration.repository, cacheSaveAllowed, lockFileChanged2)
+    repository: configuration.repository === "true"
   };
 }
 function resolveSaveModes(configuration, cacheSaveAllowed) {
   return {
     bazelisk: cacheSaveAllowed && configuration.bazelisk === "true",
-    disk: cacheSaveAllowed && configuration.disk !== "false",
-    repository: cacheSaveAllowed && configuration.repository !== "false"
+    disk: cacheSaveAllowed && configuration.disk === "true",
+    repository: cacheSaveAllowed && configuration.repository === "true"
   };
 }
 function isCacheSaveRef(ref, branchPatterns) {
@@ -69810,7 +69810,7 @@ function isCacheSaveRef(ref, branchPatterns) {
   }));
 }
 function needsLockFileCheck(configuration, cacheSaveAllowed) {
-  return cacheSaveAllowed && (configuration.disk === "auto" || configuration.repository === "auto");
+  return cacheSaveAllowed && configuration.disk === "auto";
 }
 
 // src/main.js

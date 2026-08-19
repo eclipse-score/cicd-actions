@@ -13,8 +13,8 @@
 
 import { minimatch } from 'minimatch';
 
-const AUTOMATIC_MODES = new Set(['true', 'false', 'auto']);
 const BOOLEAN_MODES = new Set(['true', 'false']);
+const DISK_RESTORE_MODES = new Set(['true', 'false', 'auto']);
 const INVALID_BRANCH_PATTERN_CHARACTERS = /[\s~^:\\]/;
 
 /** Reject unknown modes early because GitHub Action inputs are untyped strings. */
@@ -29,20 +29,20 @@ function parseCacheConfiguration(raw) {
   const restore = {
     bazelisk: raw.bazeliskCacheRestore.trim() || 'true',
     disk: raw.diskCacheRestore.trim() || 'auto',
-    repository: raw.repositoryCacheRestore.trim() || 'auto',
+    repository: raw.repositoryCacheRestore.trim() || 'true',
   };
   const save = {
     bazelisk: raw.bazeliskCacheSave.trim() || 'true',
     disk: raw.diskCacheSave.trim() || 'false',
-    repository: raw.repositoryCacheSave.trim() || 'auto',
+    repository: raw.repositoryCacheSave.trim() || 'true',
   };
 
   validateMode('bazelisk-cache-restore', restore.bazelisk, BOOLEAN_MODES);
   validateMode('bazelisk-cache-save', save.bazelisk, BOOLEAN_MODES);
-  validateMode('disk-cache-restore', restore.disk, AUTOMATIC_MODES);
-  validateMode('repository-cache-restore', restore.repository, AUTOMATIC_MODES);
-  validateMode('disk-cache-save', save.disk, AUTOMATIC_MODES);
-  validateMode('repository-cache-save', save.repository, AUTOMATIC_MODES);
+  validateMode('disk-cache-restore', restore.disk, DISK_RESTORE_MODES);
+  validateMode('repository-cache-restore', restore.repository, BOOLEAN_MODES);
+  validateMode('disk-cache-save', save.disk, BOOLEAN_MODES);
+  validateMode('repository-cache-save', save.repository, BOOLEAN_MODES);
   return {
     restore,
     save,
@@ -98,7 +98,7 @@ function resolveRestoreModes(configuration, cacheSaveAllowed, lockFileChanged) {
   return {
     bazelisk: configuration.bazelisk === 'true',
     disk: resolveRestoreMode(configuration.disk, cacheSaveAllowed, lockFileChanged),
-    repository: resolveRestoreMode(configuration.repository, cacheSaveAllowed, lockFileChanged),
+    repository: configuration.repository === 'true',
   };
 }
 
@@ -106,8 +106,8 @@ function resolveRestoreModes(configuration, cacheSaveAllowed, lockFileChanged) {
 function resolveSaveModes(configuration, cacheSaveAllowed) {
   return {
     bazelisk: cacheSaveAllowed && configuration.bazelisk === 'true',
-    disk: cacheSaveAllowed && configuration.disk !== 'false',
-    repository: cacheSaveAllowed && configuration.repository !== 'false',
+    disk: cacheSaveAllowed && configuration.disk === 'true',
+    repository: cacheSaveAllowed && configuration.repository === 'true',
   };
 }
 
@@ -124,13 +124,12 @@ function isCacheSaveRef(ref, branchPatterns) {
 }
 
 /**
- * Avoid Git inspection unless an automatic decision can affect this run.
+ * Avoid Git inspection unless the automatic disk-restore decision can affect this run.
  * Non-writing refs always restore and therefore do not need a parent commit.
  */
 function needsLockFileCheck(configuration, cacheSaveAllowed) {
   return cacheSaveAllowed && (
-    configuration.disk === 'auto' ||
-    configuration.repository === 'auto'
+    configuration.disk === 'auto'
   );
 }
 

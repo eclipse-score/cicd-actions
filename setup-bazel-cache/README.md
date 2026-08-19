@@ -21,8 +21,8 @@ steps:
       cache-save-branch-patterns: |
         main
         release/*
-      repository-cache-restore: auto
-      repository-cache-save: auto
+      repository-cache-restore: true
+      repository-cache-save: true
       disk-cache-restore: auto
       disk-cache-save: false
 ```
@@ -39,13 +39,14 @@ steps:
   fallback; include it explicitly if needed.
 - `bazelisk-cache-restore` and `bazelisk-cache-save` accept `true` or `false`.
   Both default to `true`; saving is still limited to configured cache-saving
-  branches. `repository-cache-restore`, `repository-cache-save`,
-  `disk-cache-restore`, and `disk-cache-save` accept `true`, `false`, or `auto`.
+  branches. `repository-cache-restore`, `repository-cache-save`, and
+  `disk-cache-save` accept `true` or `false`. `disk-cache-restore` additionally
+  accepts `auto`.
   Bazelisk uses the readable `.bazelversion` value in its exact cache key, so
   its cache is independent of `MODULE.bazel.lock`. For the disk and repository
-  caches, restore `false` skips
-  the restore, while `auto` starts a fresh cache on a cache-saving branch when
-  `MODULE.bazel.lock` changed. Other refs restore the latest available cache.
+  caches, restore `false` skips the restore. For disk-cache-restore, `auto`
+  starts a fresh cache on a cache-saving branch when `MODULE.bazel.lock` changed;
+  other refs restore the latest available cache.
   Save inputs only take effect on configured cache-saving branches; `false`
   disables saving for that cache.
 
