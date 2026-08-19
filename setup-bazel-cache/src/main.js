@@ -107,6 +107,8 @@ async function run() {
 
     fs.writeFileSync(configuration.bazelrc, configuration.bazelrcContents, { flag: 'wx' });
     core.info(`Created ${configuration.bazelrc}`);
+    // Bazel supports the BAZELRC environment RC file starting with Bazel 9;
+    // Bazel 8 and earlier require a standard rc file or an explicit --bazelrc.
     const bazelrcFiles = [process.env.BAZELRC, configuration.bazelrc].filter(Boolean);
     core.exportVariable('BAZELRC', bazelrcFiles.join(','));
 
