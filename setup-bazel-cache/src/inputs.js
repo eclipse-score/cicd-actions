@@ -123,6 +123,18 @@ function isCacheSaveRef(ref, branchPatterns) {
   }));
 }
 
+/** Explain why a ref cannot publish a cache, keeping policy failures actionable. */
+function cacheSaveDisallowReason(ref, branchPatterns) {
+  if (isCacheSaveRef(ref, branchPatterns)) return null;
+  if (!ref) return 'GITHUB_REF is empty';
+  if (ref.startsWith('refs/pull/')) return 'pull request refs cannot save caches';
+  if (ref.startsWith('refs/tags/')) return 'tag refs cannot save caches';
+  if (!ref.startsWith('refs/heads/')) {
+    return 'ref is not a branch ref (only refs/heads/* may save caches)';
+  }
+  return 'branch does not match cache-save-branch-patterns';
+}
+
 /**
  * Avoid Git inspection unless the automatic disk-restore decision can affect this run.
  * Non-writing refs always restore and therefore do not need a parent commit.
@@ -134,6 +146,7 @@ function needsLockFileCheck(configuration, cacheSaveAllowed) {
 }
 
 export {
+  cacheSaveDisallowReason,
   isCacheSaveRef,
   needsLockFileCheck,
   parseBranchPattern,

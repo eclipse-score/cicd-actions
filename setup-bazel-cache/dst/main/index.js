@@ -69871,6 +69871,16 @@ function isCacheSaveRef(ref, branchPatterns) {
     nonegate: true
   }));
 }
+function cacheSaveDisallowReason(ref, branchPatterns) {
+  if (isCacheSaveRef(ref, branchPatterns)) return null;
+  if (!ref) return "GITHUB_REF is empty";
+  if (ref.startsWith("refs/pull/")) return "pull request refs cannot save caches";
+  if (ref.startsWith("refs/tags/")) return "tag refs cannot save caches";
+  if (!ref.startsWith("refs/heads/")) {
+    return "ref is not a branch ref (only refs/heads/* may save caches)";
+  }
+  return "branch does not match cache-save-branch-patterns";
+}
 function needsLockFileCheck(configuration, cacheSaveAllowed) {
   return cacheSaveAllowed && configuration.disk === "auto";
 }
@@ -69900,10 +69910,9 @@ async function run() {
       repositoryCacheSave: getInput("repository-cache-save")
     });
     const configuration = createConfiguration(workspace, diskCacheKey);
-    const cacheSaveAllowed = isCacheSaveRef(
-      process.env.GITHUB_REF || "",
-      cacheSaveBranchPatterns
-    );
+    const ref = process.env.GITHUB_REF || "";
+    const cacheSaveAllowed = isCacheSaveRef(ref, cacheSaveBranchPatterns);
+    const cacheSaveReason = cacheSaveDisallowReason(ref, cacheSaveBranchPatterns);
     const saves = resolveSaveModes(cacheModes.save, cacheSaveAllowed);
     let checkoutHistory = "skipped";
     let changed = null;
@@ -69920,6 +69929,7 @@ async function run() {
     logDecision({
       cacheModes,
       cacheSaveAllowed,
+      cacheSaveReason,
       cacheSaveBranchPatterns,
       checkoutHistory,
       configuration,
@@ -69994,6 +70004,7 @@ function setDecisionOutputs({
 function logDecision({
   cacheModes,
   cacheSaveAllowed,
+  cacheSaveReason,
   cacheSaveBranchPatterns,
   checkoutHistory,
   configuration,
@@ -70005,7 +70016,7 @@ function logDecision({
   info(`Ref: ${process.env.GITHUB_REF || "(unknown)"}`);
   info(`Cache-save branch patterns: ${cacheSaveBranchPatterns.join(", ")}`);
   info(
-    `Cache saving allowed: ${cacheSaveAllowed}` + (cacheSaveAllowed ? "" : " (ref does not match cache-save-branch-patterns)")
+    `Cache saving allowed: ${cacheSaveAllowed}` + (cacheSaveAllowed ? "" : ` (${cacheSaveReason})`)
   );
   logModeTable(cacheModes, restores, saves);
   if (cacheModes.restore.disk === "auto" && cacheSaveAllowed) {

@@ -14,6 +14,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  cacheSaveDisallowReason,
   isCacheSaveRef,
   needsLockFileCheck,
   parseBranchPattern,
@@ -43,6 +44,23 @@ test('only configured branch patterns can save caches', () => {
   assert.equal(isCacheSaveRef('refs/heads/release/1.0/hotfix', ['release/*']), false);
   assert.equal(isCacheSaveRef('refs/heads/release/1.0/hotfix', ['release/**']), true);
   assert.equal(isCacheSaveRef('refs/pull/123/merge', ['**']), false);
+});
+
+test('cache save denial reasons distinguish ref policy from pattern misses', () => {
+  assert.equal(
+    cacheSaveDisallowReason('refs/pull/40/merge', ['**']),
+    'pull request refs cannot save caches',
+  );
+  assert.equal(
+    cacheSaveDisallowReason('refs/tags/v1.0.0', ['**']),
+    'tag refs cannot save caches',
+  );
+  assert.equal(
+    cacheSaveDisallowReason('refs/heads/feature', ['main']),
+    'branch does not match cache-save-branch-patterns',
+  );
+  assert.equal(cacheSaveDisallowReason('refs/heads/main', ['main']), null);
+  assert.equal(cacheSaveDisallowReason('', ['main']), 'GITHUB_REF is empty');
 });
 
 test('cache save patterns default to the repository default branch', () => {

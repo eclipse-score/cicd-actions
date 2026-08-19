@@ -28,6 +28,7 @@ import {
   resolveDefaultBranch,
 } from './git.js';
 import {
+  cacheSaveDisallowReason,
   isCacheSaveRef,
   needsLockFileCheck,
   parseCacheSaveBranchPatterns,
@@ -69,10 +70,9 @@ async function run() {
 
     const configuration = createConfiguration(workspace, diskCacheKey);
 
-    const cacheSaveAllowed = isCacheSaveRef(
-      process.env.GITHUB_REF || '',
-      cacheSaveBranchPatterns,
-    );
+    const ref = process.env.GITHUB_REF || '';
+    const cacheSaveAllowed = isCacheSaveRef(ref, cacheSaveBranchPatterns);
+    const cacheSaveReason = cacheSaveDisallowReason(ref, cacheSaveBranchPatterns);
     const saves = resolveSaveModes(cacheModes.save, cacheSaveAllowed);
     let checkoutHistory = 'skipped';
     let changed = null;
@@ -90,6 +90,7 @@ async function run() {
     logDecision({
       cacheModes,
       cacheSaveAllowed,
+      cacheSaveReason,
       cacheSaveBranchPatterns,
       checkoutHistory,
       configuration,
@@ -173,6 +174,7 @@ function setDecisionOutputs({
 function logDecision({
   cacheModes,
   cacheSaveAllowed,
+  cacheSaveReason,
   cacheSaveBranchPatterns,
   checkoutHistory,
   configuration,
@@ -187,7 +189,7 @@ function logDecision({
     `Cache saving allowed: ${cacheSaveAllowed}` +
     (cacheSaveAllowed
       ? ''
-      : ' (ref does not match cache-save-branch-patterns)'),
+      : ` (${cacheSaveReason})`),
   );
   logModeTable(cacheModes, restores, saves);
   if (cacheModes.restore.disk === 'auto' && cacheSaveAllowed) {
