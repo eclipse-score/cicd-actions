@@ -47,6 +47,17 @@ jobs:
     permissions:
       contents: read
 
+  setup-bazel-cache-experimental-tests:
+    uses: ./.github/workflows/test-setup-bazel-cache-experimental.yml
+    permissions:
+      contents: read
+
+  setup-bazel-cache-experimental-persistence-tests:
+    if: github.event_name == 'merge_group'
+    uses: ./.github/workflows/test-setup-bazel-cache-experimental-persistence.yml
+    permissions:
+      contents: read
+
   warm-bazel-repository-cache-tests:
     uses: ./.github/workflows/test-warm-bazel-repository-cache.yml
     permissions:
@@ -93,6 +104,8 @@ jobs:
       - setup-qnx-sdp-tests
       - unblock-user-namespace-for-linux-sandbox-tests
       - setup-bazel-cache-tests
+      - setup-bazel-cache-experimental-tests
+      - setup-bazel-cache-experimental-persistence-tests
       - warm-bazel-repository-cache-tests
       - prune-cache-tests
       - prune-cache-dry-run-tests

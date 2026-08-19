@@ -1,0 +1,65 @@
+# *******************************************************************************
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+name: Setup Bazel Cache Experimental
+description: Experimental Bazel 8.6+ cache design. Its API and cache format may change without compatibility.
+
+inputs:
+  unique-cache-name:
+    description: Stable disk-cache name for this workflow job and matrix configuration (1-400 printable characters, no commas).
+    required: true
+  main-branch:
+    description: Default branch allowed to save shared caches. Use a branch name, not a refs/heads/ ref.
+    required: false
+    default: main
+  skip-disk-cache-restore:
+    description: Skip the disk-cache restore. Empty uses auto, which rebuilds it on main when MODULE.bazel.lock changed.
+    required: false
+    default: ""
+  skip-repository-cache-restore:
+    description: Skip the repository-cache restore. Empty is false.
+    required: false
+    default: ""
+  save-repository-cache:
+    description: Save the shared repository cache on the configured default branch.
+    required: false
+    default: "true"
+outputs:
+  cache-save:
+    description: Whether this ref is allowed to save caches in the post action.
+  skip-bazelisk-cache-restore:
+    description: Resolved Bazelisk-cache restore decision.
+  skip-disk-cache-restore:
+    description: Resolved disk-cache restore decision.
+  skip-repository-cache-restore:
+    description: Resolved repository-cache restore decision.
+  repository-cache-save:
+    description: Whether this run will save the shared repository cache.
+  failed-job-cache-save:
+    description: Whether Bazelisk was restored exactly and all generational caches may be saved after a later step fails.
+  bazelisk-cache-restored:
+    description: "Bazelisk restore result: true, false, partial, skipped, or unknown."
+  disk-cache-restored:
+    description: "Disk-cache restore result: true, false, partial, skipped, or unknown."
+  repository-cache-restored:
+    description: "Repository-cache restore result: true, false, partial, skipped, or unknown."
+  checkout-history:
+    description: "How history for automatic detection was obtained: skipped, existing, deepened, or fetched."
+  lock-file-changed:
+    description: "Whether MODULE.bazel.lock changed: true, false, or unknown."
+
+runs:
+  using: node24
+  main: dst/main/index.js
+  post: dst/post/index.js
+  post-if: success() || (failure() && env.SETUP_BAZEL_CACHE_EXPERIMENTAL_ADDITIVE_SAVE == 'true')
