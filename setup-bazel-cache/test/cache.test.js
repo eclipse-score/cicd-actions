@@ -22,6 +22,7 @@ import {
   keyPlan,
   RESTORE_RESULT,
   restoreOutput,
+  shouldSave,
 } from '../src/cache.js';
 import { createConfiguration } from '../src/config.js';
 
@@ -132,17 +133,29 @@ test('content-based cache keys do not restore snapshots for other content', asyn
 });
 
 test('repository cache uses one rolling generation family for all configurations', async (context) => {
-  let timestamp = 1700000000000;
-  context.mock.method(Date, 'now', () => timestamp);
+  context.mock.method(Date, 'now', () => 1700000000000);
 
   const configuration = createConfiguration('/workspace', 'test');
   const prefix = cachePrefix(configuration, configuration.caches.repository);
   const first = await keyPlan(configuration, configuration.caches.repository);
-  assert.equal(first.key, `${prefix}${timestamp}`);
+  assert.equal(first.key.startsWith(prefix), true);
+  assert.match(first.key, /-[0-9a-f]{8,64}$/);
+  assert.equal(first.key.replace(/-[0-9a-f]{8,64}$/, ''), prefix.slice(0, -1));
   assert.deepEqual(first.restoreKeys, [prefix]);
 
-  timestamp += 1;
   const second = await keyPlan(configuration, configuration.caches.repository);
-  assert.equal(second.key, `${prefix}${timestamp}`);
+  assert.equal(second.key.startsWith(prefix), true);
+  assert.match(second.key, /-[0-9a-f]{8,64}$/);
+  assert.notEqual(second.key, first.key);
   assert.deepEqual(second.restoreKeys, [prefix]);
+});
+
+test('failed generational restores do not replace the existing cache snapshot', () => {
+  const configuration = createConfiguration('/workspace', 'test');
+
+  assert.equal(shouldSave(configuration.caches.disk, RESTORE_RESULT.UNKNOWN), false);
+  assert.equal(shouldSave(configuration.caches.repository, RESTORE_RESULT.UNKNOWN), false);
+  assert.equal(shouldSave(configuration.caches.disk, RESTORE_RESULT.FALSE), true);
+  assert.equal(shouldSave(configuration.caches.disk, RESTORE_RESULT.PARTIAL), true);
+  assert.equal(shouldSave(configuration.caches.bazelisk, RESTORE_RESULT.UNKNOWN), true);
 });

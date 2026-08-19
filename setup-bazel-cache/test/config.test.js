@@ -55,6 +55,14 @@ test('Bazelisk version is read as a readable cache-key component', (context) => 
   assert.equal(createConfiguration(workspace, 'test').caches.bazelisk.keySuffix, '8.6.0');
 });
 
+test('post-save configuration can use the version captured during setup', () => {
+  assert.equal(
+    createConfiguration('/workspace', 'test', { bazeliskVersion: '8.6.0' })
+      .caches.bazelisk.keySuffix,
+    '8.6.0',
+  );
+});
+
 test('disk cache keys are constrained to safe cache-key components', () => {
   assert.equal(validateDiskCacheKey('linux-debug'), 'linux-debug');
   assert.throws(() => validateDiskCacheKey(''), /printable characters without commas/);

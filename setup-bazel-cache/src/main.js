@@ -120,7 +120,14 @@ async function run() {
     );
     core.saveState(
       configuration.cacheSaveState,
-      JSON.stringify({ cacheSaveAllowed, saves, diskCacheKey, workspace }),
+      JSON.stringify({
+        cacheSaveAllowed,
+        saves,
+        diskCacheKey,
+        workspace,
+        bazeliskVersion: configuration.caches.bazelisk.keySuffix,
+        restoreResults,
+      }),
     );
   } catch (error) {
     core.setFailed(error.stack || error.message);

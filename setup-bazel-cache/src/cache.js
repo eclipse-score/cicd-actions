@@ -14,6 +14,7 @@
 import * as cache from '@actions/cache';
 import * as core from '@actions/core';
 import * as glob from '@actions/glob';
+import { randomUUID } from 'node:crypto';
 
 const RESTORE_RESULT = Object.freeze({
   FALSE: 'false',
@@ -35,6 +36,11 @@ function cachePrefix(configuration, cacheConfiguration) {
   return `${configuration.baseKey}-${cacheConfiguration.name}-`;
 }
 
+/** Generate a unique, prune-compatible hexadecimal generation suffix. */
+function generationSuffix() {
+  return `${Date.now().toString(16)}${randomUUID().replaceAll('-', '')}`;
+}
+
 /** A failed job may publish only caches that extend successfully restored snapshots. */
 function canSaveAfterFailure(restoreResults, saves) {
   if (saves.bazelisk && restoreResults.bazelisk !== RESTORE_RESULT.TRUE) return false;
@@ -44,6 +50,14 @@ function canSaveAfterFailure(restoreResults, saves) {
   if (saves.repository) selected.push(restoreResults.repository);
   return selected.length > 0 && selected.every(
     (result) => result === RESTORE_RESULT.TRUE || result === RESTORE_RESULT.PARTIAL,
+  );
+}
+
+/** Do not make a failed generational restore the newest cache snapshot. */
+function shouldSave(cacheConfiguration, restoreResult) {
+  return !(
+    cacheConfiguration.generational &&
+    restoreResult === RESTORE_RESULT.UNKNOWN
   );
 }
 
@@ -68,7 +82,7 @@ async function keyPlan(configuration, cacheConfiguration) {
 
   const generationPrefix = `${contentPrefix}${contentPrefix === prefix ? '' : '-'}`;
   return {
-    key: `${generationPrefix}${Date.now()}`,
+    key: `${generationPrefix}${generationSuffix()}`,
     restoreKeys: generationPrefix === prefix ? [prefix] : [generationPrefix, prefix],
   };
 }
@@ -118,17 +132,28 @@ async function restore(configuration, cacheConfiguration) {
  * Publish a cache generation from the post action. Exact immutable content hits
  * are not uploaded again, while additive caches always receive a new generation.
  */
-async function save(configuration, cacheConfiguration) {
+async function save(configuration, cacheConfiguration, restoreResult) {
   if (!cacheConfiguration.generational && core.getState(hitState(cacheConfiguration)) === 'true') {
     core.info(`Not saving exact ${cacheConfiguration.name} cache hit`);
+    return;
+  }
+  if (!shouldSave(cacheConfiguration, restoreResult)) {
+    core.info(
+      `Not saving ${cacheConfiguration.name} cache because its restore failed; ` +
+      'the existing generation is preserved.',
+    );
     return;
   }
 
   core.startGroup(`Save ${cacheConfiguration.name} cache`);
   try {
     const key = await exactKey(configuration, cacheConfiguration);
-    await cache.saveCache(cacheConfiguration.paths, key);
-    core.info(`Saved ${key}`);
+    const cacheId = await cache.saveCache(cacheConfiguration.paths, key);
+    if (cacheId === -1) {
+      core.info(`Cache save skipped for ${key}`);
+    } else {
+      core.info(`Saved ${key}`);
+    }
   } catch (error) {
     core.warning(`Cache save failed: ${error.stack || error}`);
   } finally {
@@ -145,4 +170,5 @@ export {
   restore,
   restoreOutput,
   save,
+  shouldSave,
 };

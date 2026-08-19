@@ -70024,6 +70024,7 @@ function hashFiles3(patterns_1) {
 }
 
 // src/cache.js
+var import_node_crypto4 = require("node:crypto");
 var RESTORE_RESULT = Object.freeze({
   FALSE: "false",
   PARTIAL: "partial",
@@ -70033,6 +70034,12 @@ var RESTORE_RESULT = Object.freeze({
 });
 function cachePrefix(configuration, cacheConfiguration) {
   return `${configuration.baseKey}-${cacheConfiguration.name}-`;
+}
+function generationSuffix() {
+  return `${Date.now().toString(16)}${(0, import_node_crypto4.randomUUID)().replaceAll("-", "")}`;
+}
+function shouldSave(cacheConfiguration, restoreResult) {
+  return !(cacheConfiguration.generational && restoreResult === RESTORE_RESULT.UNKNOWN);
 }
 async function keyPlan(configuration, cacheConfiguration) {
   const prefix2 = cachePrefix(configuration, cacheConfiguration);
@@ -70052,7 +70059,7 @@ async function keyPlan(configuration, cacheConfiguration) {
   }
   const generationPrefix = `${contentPrefix}${contentPrefix === prefix2 ? "" : "-"}`;
   return {
-    key: `${generationPrefix}${Date.now()}`,
+    key: `${generationPrefix}${generationSuffix()}`,
     restoreKeys: generationPrefix === prefix2 ? [prefix2] : [generationPrefix, prefix2]
   };
 }
@@ -70062,16 +70069,26 @@ async function exactKey(configuration, cacheConfiguration) {
 function hitState(cacheConfiguration) {
   return `cache-hit-${cacheConfiguration.name}`;
 }
-async function save(configuration, cacheConfiguration) {
+async function save(configuration, cacheConfiguration, restoreResult) {
   if (!cacheConfiguration.generational && getState(hitState(cacheConfiguration)) === "true") {
     info(`Not saving exact ${cacheConfiguration.name} cache hit`);
+    return;
+  }
+  if (!shouldSave(cacheConfiguration, restoreResult)) {
+    info(
+      `Not saving ${cacheConfiguration.name} cache because its restore failed; the existing generation is preserved.`
+    );
     return;
   }
   startGroup(`Save ${cacheConfiguration.name} cache`);
   try {
     const key = await exactKey(configuration, cacheConfiguration);
-    await saveCache2(cacheConfiguration.paths, key);
-    info(`Saved ${key}`);
+    const cacheId = await saveCache2(cacheConfiguration.paths, key);
+    if (cacheId === -1) {
+      info(`Cache save skipped for ${key}`);
+    } else {
+      info(`Saved ${key}`);
+    }
   } catch (error2) {
     warning(`Cache save failed: ${error2.stack || error2}`);
   } finally {
@@ -70099,6 +70116,14 @@ function hasControlCharacter(value) {
     return codePoint < 32 || codePoint === 127;
   });
 }
+function validateBazeliskVersion(value) {
+  if (typeof value !== "string" || !value || value.length > MAX_BAZELISK_VERSION_LENGTH || hasControlCharacter(value) || value.includes(",")) {
+    throw new Error(
+      ".bazelversion must contain 1 to 400 printable characters without commas."
+    );
+  }
+  return value;
+}
 function readBazeliskVersion(workspace) {
   const versionFile = import_node_path.default.join(workspace, ".bazelversion");
   let version3;
@@ -70108,16 +70133,11 @@ function readBazeliskVersion(workspace) {
     if (error2.code === "ENOENT") return "default";
     throw error2;
   }
-  if (!version3 || version3.length > MAX_BAZELISK_VERSION_LENGTH || hasControlCharacter(version3) || version3.includes(",")) {
-    throw new Error(
-      ".bazelversion must contain 1 to 400 printable characters without commas."
-    );
-  }
-  return version3;
+  return validateBazeliskVersion(version3);
 }
-function createConfiguration(workspace, diskCacheKey) {
+function createConfiguration(workspace, diskCacheKey, { bazeliskVersion } = {}) {
   validateDiskCacheKey(diskCacheKey);
-  const bazeliskVersion = readBazeliskVersion(workspace);
+  const resolvedBazeliskVersion = bazeliskVersion === void 0 ? readBazeliskVersion(workspace) : validateBazeliskVersion(bazeliskVersion);
   const home = import_node_os3.default.homedir();
   const cacheRoot = import_node_path.default.join(home, ".cache");
   const runnerTemp = process.env.RUNNER_TEMP || import_node_os3.default.tmpdir();
@@ -70135,7 +70155,7 @@ function createConfiguration(workspace, diskCacheKey) {
       bazelisk: {
         name: "bazelisk",
         files: [],
-        keySuffix: bazeliskVersion,
+        keySuffix: resolvedBazeliskVersion,
         paths: [import_node_path.default.join(cacheRoot, "bazelisk")]
       },
       disk: {
@@ -70164,24 +70184,31 @@ async function run() {
       info("Setup did not complete; caches will not be saved");
       return;
     }
-    const { cacheSaveAllowed, saves, diskCacheKey, workspace } = JSON.parse(state3);
+    const {
+      cacheSaveAllowed,
+      saves,
+      diskCacheKey,
+      workspace,
+      bazeliskVersion,
+      restoreResults
+    } = JSON.parse(state3);
     if (!cacheSaveAllowed) {
       info("Cache saving is disabled on this ref");
       return;
     }
-    const configuration = createConfiguration(workspace, diskCacheKey);
+    const configuration = createConfiguration(workspace, diskCacheKey, { bazeliskVersion });
     if (saves.bazelisk) {
-      await save(configuration, configuration.caches.bazelisk);
+      await save(configuration, configuration.caches.bazelisk, restoreResults?.bazelisk);
     } else {
       info("Bazelisk cache saving is disabled for this job");
     }
     if (saves.disk) {
-      await save(configuration, configuration.caches.disk);
+      await save(configuration, configuration.caches.disk, restoreResults?.disk);
     } else {
       info("Disk cache saving is disabled for this job");
     }
     if (saves.repository) {
-      await save(configuration, configuration.caches.repository);
+      await save(configuration, configuration.caches.repository, restoreResults?.repository);
     } else {
       info("Repository cache saving is disabled for this job");
     }

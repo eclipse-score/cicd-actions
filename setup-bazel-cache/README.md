@@ -117,6 +117,11 @@ snapshot would likely be worse than the existing generation. When
 `repository-cache-save` is disabled, the repository restore does not participate
 in this decision. Cancelled jobs never save.
 
+On a successful job, a generational cache is also left untouched when its restore
+failed with an `unknown` result. This prevents a transient cache-service or
+archive error from turning an incomplete local directory into the newest cache
+generation. A normal cache miss still creates a new generation.
+
 Each disk-cache generation includes the previously restored cache plus new
 entries. Use the companion [`prune-cache`](../prune-cache/README.md) action to
 remove superseded GitHub cache generations. Pruning old generations does not

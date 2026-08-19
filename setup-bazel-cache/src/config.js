@@ -40,6 +40,22 @@ function hasControlCharacter(value) {
   });
 }
 
+/** Validate a Bazelisk version before it becomes part of a cache key. */
+function validateBazeliskVersion(value) {
+  if (
+    typeof value !== 'string' ||
+    !value ||
+    value.length > MAX_BAZELISK_VERSION_LENGTH ||
+    hasControlCharacter(value) ||
+    value.includes(',')
+  ) {
+    throw new Error(
+      '.bazelversion must contain 1 to 400 printable characters without commas.',
+    );
+  }
+  return value;
+}
+
 /** Read the human-readable Bazelisk version used as the exact cache key suffix. */
 function readBazeliskVersion(workspace) {
   const versionFile = path.join(workspace, '.bazelversion');
@@ -50,23 +66,15 @@ function readBazeliskVersion(workspace) {
     if (error.code === 'ENOENT') return 'default';
     throw error;
   }
-  if (
-    !version ||
-    version.length > MAX_BAZELISK_VERSION_LENGTH ||
-    hasControlCharacter(version) ||
-    version.includes(',')
-  ) {
-    throw new Error(
-      '.bazelversion must contain 1 to 400 printable characters without commas.',
-    );
-  }
-  return version;
+  return validateBazeliskVersion(version);
 }
 
 /** Build the complete Linux cache configuration in one place. */
-function createConfiguration(workspace, diskCacheKey) {
+function createConfiguration(workspace, diskCacheKey, { bazeliskVersion } = {}) {
   validateDiskCacheKey(diskCacheKey);
-  const bazeliskVersion = readBazeliskVersion(workspace);
+  const resolvedBazeliskVersion = bazeliskVersion === undefined
+    ? readBazeliskVersion(workspace)
+    : validateBazeliskVersion(bazeliskVersion);
   const home = os.homedir();
   const cacheRoot = path.join(home, '.cache');
   const runnerTemp = process.env.RUNNER_TEMP || os.tmpdir();
@@ -86,7 +94,7 @@ function createConfiguration(workspace, diskCacheKey) {
       bazelisk: {
         name: 'bazelisk',
         files: [],
-        keySuffix: bazeliskVersion,
+        keySuffix: resolvedBazeliskVersion,
         paths: [path.join(cacheRoot, 'bazelisk')],
       },
       disk: {

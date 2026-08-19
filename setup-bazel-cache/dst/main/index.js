@@ -69501,6 +69501,7 @@ function hashFiles3(patterns_1) {
 }
 
 // src/cache.js
+var import_node_crypto4 = require("node:crypto");
 var RESTORE_RESULT = Object.freeze({
   FALSE: "false",
   PARTIAL: "partial",
@@ -69513,6 +69514,9 @@ function restoreOutput(result) {
 }
 function cachePrefix(configuration, cacheConfiguration) {
   return `${configuration.baseKey}-${cacheConfiguration.name}-`;
+}
+function generationSuffix() {
+  return `${Date.now().toString(16)}${(0, import_node_crypto4.randomUUID)().replaceAll("-", "")}`;
 }
 function canSaveAfterFailure(restoreResults, saves) {
   if (saves.bazelisk && restoreResults.bazelisk !== RESTORE_RESULT.TRUE) return false;
@@ -69541,7 +69545,7 @@ async function keyPlan(configuration, cacheConfiguration) {
   }
   const generationPrefix = `${contentPrefix}${contentPrefix === prefix2 ? "" : "-"}`;
   return {
-    key: `${generationPrefix}${Date.now()}`,
+    key: `${generationPrefix}${generationSuffix()}`,
     restoreKeys: generationPrefix === prefix2 ? [prefix2] : [generationPrefix, prefix2]
   };
 }
@@ -69595,6 +69599,14 @@ function hasControlCharacter(value) {
     return codePoint < 32 || codePoint === 127;
   });
 }
+function validateBazeliskVersion(value) {
+  if (typeof value !== "string" || !value || value.length > MAX_BAZELISK_VERSION_LENGTH || hasControlCharacter(value) || value.includes(",")) {
+    throw new Error(
+      ".bazelversion must contain 1 to 400 printable characters without commas."
+    );
+  }
+  return value;
+}
 function readBazeliskVersion(workspace) {
   const versionFile = import_node_path.default.join(workspace, ".bazelversion");
   let version3;
@@ -69604,16 +69616,11 @@ function readBazeliskVersion(workspace) {
     if (error2.code === "ENOENT") return "default";
     throw error2;
   }
-  if (!version3 || version3.length > MAX_BAZELISK_VERSION_LENGTH || hasControlCharacter(version3) || version3.includes(",")) {
-    throw new Error(
-      ".bazelversion must contain 1 to 400 printable characters without commas."
-    );
-  }
-  return version3;
+  return validateBazeliskVersion(version3);
 }
-function createConfiguration(workspace, diskCacheKey) {
+function createConfiguration(workspace, diskCacheKey, { bazeliskVersion } = {}) {
   validateDiskCacheKey(diskCacheKey);
-  const bazeliskVersion = readBazeliskVersion(workspace);
+  const resolvedBazeliskVersion = bazeliskVersion === void 0 ? readBazeliskVersion(workspace) : validateBazeliskVersion(bazeliskVersion);
   const home = import_node_os3.default.homedir();
   const cacheRoot = import_node_path.default.join(home, ".cache");
   const runnerTemp = process.env.RUNNER_TEMP || import_node_os3.default.tmpdir();
@@ -69631,7 +69638,7 @@ function createConfiguration(workspace, diskCacheKey) {
       bazelisk: {
         name: "bazelisk",
         files: [],
-        keySuffix: bazeliskVersion,
+        keySuffix: resolvedBazeliskVersion,
         paths: [import_node_path.default.join(cacheRoot, "bazelisk")]
       },
       disk: {
@@ -69888,7 +69895,14 @@ async function run() {
     );
     saveState(
       configuration.cacheSaveState,
-      JSON.stringify({ cacheSaveAllowed, saves, diskCacheKey, workspace })
+      JSON.stringify({
+        cacheSaveAllowed,
+        saves,
+        diskCacheKey,
+        workspace,
+        bazeliskVersion: configuration.caches.bazelisk.keySuffix,
+        restoreResults
+      })
     );
   } catch (error2) {
     setFailed(error2.stack || error2.message);
