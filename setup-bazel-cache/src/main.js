@@ -140,6 +140,7 @@ async function run() {
       configuration.cacheSaveState,
       JSON.stringify({
         cacheSaveAllowed,
+        repositoryCacheSaveMode: cacheModes.save.repository,
         saves,
         diskCacheKey,
         workspace,

@@ -15,6 +15,7 @@ import { minimatch } from 'minimatch';
 
 const BOOLEAN_MODES = new Set(['true', 'false']);
 const DISK_RESTORE_MODES = new Set(['true', 'false', 'auto']);
+const REPOSITORY_SAVE_MODES = new Set(['true', 'false', 'auto']);
 const INVALID_BRANCH_PATTERN_CHARACTERS = /[\s~^:\\]/;
 
 /** Reject unknown modes early because GitHub Action inputs are untyped strings. */
@@ -34,7 +35,7 @@ function parseCacheConfiguration(raw) {
   const save = {
     bazelisk: raw.bazeliskCacheSave.trim() || 'true',
     disk: raw.diskCacheSave.trim() || 'false',
-    repository: raw.repositoryCacheSave.trim() || 'true',
+    repository: raw.repositoryCacheSave.trim() || 'auto',
   };
 
   validateMode('bazelisk-cache-restore', restore.bazelisk, BOOLEAN_MODES);
@@ -42,7 +43,7 @@ function parseCacheConfiguration(raw) {
   validateMode('disk-cache-restore', restore.disk, DISK_RESTORE_MODES);
   validateMode('repository-cache-restore', restore.repository, BOOLEAN_MODES);
   validateMode('disk-cache-save', save.disk, BOOLEAN_MODES);
-  validateMode('repository-cache-save', save.repository, BOOLEAN_MODES);
+  validateMode('repository-cache-save', save.repository, REPOSITORY_SAVE_MODES);
   return {
     restore,
     save,
@@ -107,7 +108,7 @@ function resolveSaveModes(configuration, cacheSaveAllowed) {
   return {
     bazelisk: cacheSaveAllowed && configuration.bazelisk === 'true',
     disk: cacheSaveAllowed && configuration.disk === 'true',
-    repository: cacheSaveAllowed && configuration.repository === 'true',
+    repository: cacheSaveAllowed && configuration.repository !== 'false',
   };
 }
 

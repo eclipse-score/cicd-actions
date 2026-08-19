@@ -69547,10 +69547,26 @@ function formatBytes(bytes) {
   const precision = value >= 100 ? 0 : value >= 10 ? 1 : 2;
   return `${value.toFixed(precision)} ${BYTE_UNITS[unitIndex]}`;
 }
+function describeLocalCachePaths(cacheConfiguration) {
+  return cacheConfiguration.paths.map((cachePath) => {
+    try {
+      const entry = import_node_fs2.default.lstatSync(cachePath);
+      if (entry.isSymbolicLink()) return `${cachePath}: symlink (ignored)`;
+      if (!entry.isDirectory()) return `${cachePath}: file (${formatBytes(entry.size)})`;
+      const directEntries = import_node_fs2.default.readdirSync(cachePath).length;
+      if (directEntries === 0) return `${cachePath}: empty directory`;
+      return `${cachePath}: directory with ${directEntries} direct entries and ${formatBytes(localPathSize(cachePath))} recursive payload`;
+    } catch (error2) {
+      if (error2.code === "ENOENT") return `${cachePath}: missing`;
+      return `${cachePath}: unavailable (${error2.message || error2})`;
+    }
+  }).join("; ");
+}
 function logLocalCacheSize(cacheConfiguration, label) {
   try {
     const bytes = localCacheSize(cacheConfiguration);
-    info(`${label}: ${formatBytes(bytes)} uncompressed local data`);
+    const details = bytes === 0 ? `; path status: ${describeLocalCachePaths(cacheConfiguration)}` : "";
+    info(`${label}: ${formatBytes(bytes)} uncompressed local data${details}`);
     return bytes;
   } catch (error2) {
     warning(
@@ -69795,6 +69811,7 @@ function lockFileChanged(workspace, comparisonBase, git = runGit) {
 // src/inputs.js
 var BOOLEAN_MODES = /* @__PURE__ */ new Set(["true", "false"]);
 var DISK_RESTORE_MODES = /* @__PURE__ */ new Set(["true", "false", "auto"]);
+var REPOSITORY_SAVE_MODES = /* @__PURE__ */ new Set(["true", "false", "auto"]);
 var INVALID_BRANCH_PATTERN_CHARACTERS = /[\s~^:\\]/;
 function validateMode(name, value, allowed) {
   if (!allowed.has(value)) {
@@ -69810,14 +69827,14 @@ function parseCacheConfiguration(raw) {
   const save = {
     bazelisk: raw.bazeliskCacheSave.trim() || "true",
     disk: raw.diskCacheSave.trim() || "false",
-    repository: raw.repositoryCacheSave.trim() || "true"
+    repository: raw.repositoryCacheSave.trim() || "auto"
   };
   validateMode("bazelisk-cache-restore", restore2.bazelisk, BOOLEAN_MODES);
   validateMode("bazelisk-cache-save", save.bazelisk, BOOLEAN_MODES);
   validateMode("disk-cache-restore", restore2.disk, DISK_RESTORE_MODES);
   validateMode("repository-cache-restore", restore2.repository, BOOLEAN_MODES);
   validateMode("disk-cache-save", save.disk, BOOLEAN_MODES);
-  validateMode("repository-cache-save", save.repository, BOOLEAN_MODES);
+  validateMode("repository-cache-save", save.repository, REPOSITORY_SAVE_MODES);
   return {
     restore: restore2,
     save
@@ -69858,7 +69875,7 @@ function resolveSaveModes(configuration, cacheSaveAllowed) {
   return {
     bazelisk: cacheSaveAllowed && configuration.bazelisk === "true",
     disk: cacheSaveAllowed && configuration.disk === "true",
-    repository: cacheSaveAllowed && configuration.repository === "true"
+    repository: cacheSaveAllowed && configuration.repository !== "false"
   };
 }
 function isCacheSaveRef(ref, branchPatterns) {
@@ -69973,6 +69990,7 @@ async function run() {
       configuration.cacheSaveState,
       JSON.stringify({
         cacheSaveAllowed,
+        repositoryCacheSaveMode: cacheModes.save.repository,
         saves,
         diskCacheKey,
         workspace,

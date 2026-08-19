@@ -12,7 +12,7 @@
 // *******************************************************************************
 
 import * as core from '@actions/core';
-import { save } from './cache.js';
+import { save, shouldSaveRepositoryCache } from './cache.js';
 import { createConfiguration } from './config.js';
 
 /**
@@ -29,6 +29,7 @@ async function run() {
 
     const {
       cacheSaveAllowed,
+      repositoryCacheSaveMode = 'true',
       saves,
       diskCacheKey,
       workspace,
@@ -51,8 +52,13 @@ async function run() {
     } else {
       core.info('Disk cache saving is disabled for this job');
     }
-    if (saves.repository) {
+    if (
+      saves.repository &&
+      shouldSaveRepositoryCache(repositoryCacheSaveMode, restoreResults?.repository)
+    ) {
       await save(configuration, configuration.caches.repository, restoreResults?.repository);
+    } else if (saves.repository && repositoryCacheSaveMode === 'auto') {
+      core.info('Repository cache automatic save skipped because an empty start-of-job cache was not confirmed');
     } else {
       core.info('Repository cache saving is disabled for this job');
     }

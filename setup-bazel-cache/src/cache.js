@@ -73,11 +73,33 @@ function formatBytes(bytes) {
   return `${value.toFixed(precision)} ${BYTE_UNITS[unitIndex]}`;
 }
 
+/** Describe cache paths when their aggregate payload is empty. */
+function describeLocalCachePaths(cacheConfiguration) {
+  return cacheConfiguration.paths.map((cachePath) => {
+    try {
+      const entry = fs.lstatSync(cachePath);
+      if (entry.isSymbolicLink()) return `${cachePath}: symlink (ignored)`;
+      if (!entry.isDirectory()) return `${cachePath}: file (${formatBytes(entry.size)})`;
+
+      const directEntries = fs.readdirSync(cachePath).length;
+      if (directEntries === 0) return `${cachePath}: empty directory`;
+      return `${cachePath}: directory with ${directEntries} direct entries and ` +
+        `${formatBytes(localPathSize(cachePath))} recursive payload`;
+    } catch (error) {
+      if (error.code === 'ENOENT') return `${cachePath}: missing`;
+      return `${cachePath}: unavailable (${error.message || error})`;
+    }
+  }).join('; ');
+}
+
 /** Log a best-effort local size without allowing diagnostics to affect caching. */
 function logLocalCacheSize(cacheConfiguration, label) {
   try {
     const bytes = localCacheSize(cacheConfiguration);
-    core.info(`${label}: ${formatBytes(bytes)} uncompressed local data`);
+    const details = bytes === 0
+      ? `; path status: ${describeLocalCachePaths(cacheConfiguration)}`
+      : '';
+    core.info(`${label}: ${formatBytes(bytes)} uncompressed local data${details}`);
     return bytes;
   } catch (error) {
     core.warning(
@@ -102,6 +124,11 @@ function cachePrefix(configuration, cacheConfiguration) {
 /** Generate the readable, prune-compatible timestamp generation suffix. */
 function generationSuffix() {
   return Date.now().toString();
+}
+
+/** Decide whether repository auto mode should publish a cache generation. */
+function shouldSaveRepositoryCache(mode, restoreResult) {
+  return mode === 'true' || (mode === 'auto' && restoreResult === RESTORE_RESULT.FALSE);
 }
 
 /** A failed job may publish only caches that extend successfully restored snapshots. */
@@ -212,6 +239,13 @@ async function save(configuration, cacheConfiguration, restoreResult) {
       );
       return;
     }
+    if (payloadSize === 0) {
+      core.info(
+        `Not saving ${cacheConfiguration.name} cache because its local payload is empty; ` +
+        'there is no cache archive to upload.',
+      );
+      return;
+    }
 
     const key = await exactKey(configuration, cacheConfiguration);
     const cacheId = await cache.saveCache(cacheConfiguration.paths, key);
@@ -237,8 +271,10 @@ export {
   restore,
   restoreOutput,
   save,
+  shouldSaveRepositoryCache,
   shouldSave,
   formatBytes,
+  describeLocalCachePaths,
   logLocalCacheSize,
   localCacheSize,
 };

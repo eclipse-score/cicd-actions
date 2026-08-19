@@ -70070,10 +70070,26 @@ function formatBytes(bytes) {
   const precision = value >= 100 ? 0 : value >= 10 ? 1 : 2;
   return `${value.toFixed(precision)} ${BYTE_UNITS[unitIndex]}`;
 }
+function describeLocalCachePaths(cacheConfiguration) {
+  return cacheConfiguration.paths.map((cachePath) => {
+    try {
+      const entry = import_node_fs2.default.lstatSync(cachePath);
+      if (entry.isSymbolicLink()) return `${cachePath}: symlink (ignored)`;
+      if (!entry.isDirectory()) return `${cachePath}: file (${formatBytes(entry.size)})`;
+      const directEntries = import_node_fs2.default.readdirSync(cachePath).length;
+      if (directEntries === 0) return `${cachePath}: empty directory`;
+      return `${cachePath}: directory with ${directEntries} direct entries and ${formatBytes(localPathSize(cachePath))} recursive payload`;
+    } catch (error2) {
+      if (error2.code === "ENOENT") return `${cachePath}: missing`;
+      return `${cachePath}: unavailable (${error2.message || error2})`;
+    }
+  }).join("; ");
+}
 function logLocalCacheSize(cacheConfiguration, label) {
   try {
     const bytes = localCacheSize(cacheConfiguration);
-    info(`${label}: ${formatBytes(bytes)} uncompressed local data`);
+    const details = bytes === 0 ? `; path status: ${describeLocalCachePaths(cacheConfiguration)}` : "";
+    info(`${label}: ${formatBytes(bytes)} uncompressed local data${details}`);
     return bytes;
   } catch (error2) {
     warning(
@@ -70087,6 +70103,9 @@ function cachePrefix(configuration, cacheConfiguration) {
 }
 function generationSuffix() {
   return Date.now().toString();
+}
+function shouldSaveRepositoryCache(mode, restoreResult) {
+  return mode === "true" || mode === "auto" && restoreResult === RESTORE_RESULT.FALSE;
 }
 function shouldSave(cacheConfiguration, restoreResult) {
   return !(cacheConfiguration.generational && restoreResult === RESTORE_RESULT.UNKNOWN);
@@ -70130,6 +70149,12 @@ async function save(configuration, cacheConfiguration, restoreResult) {
     if (!shouldSave(cacheConfiguration, restoreResult)) {
       info(
         `Not saving ${cacheConfiguration.name} cache because its restore failed; the existing generation is preserved.`
+      );
+      return;
+    }
+    if (payloadSize === 0) {
+      info(
+        `Not saving ${cacheConfiguration.name} cache because its local payload is empty; there is no cache archive to upload.`
       );
       return;
     }
@@ -70238,6 +70263,7 @@ async function run() {
     }
     const {
       cacheSaveAllowed,
+      repositoryCacheSaveMode = "true",
       saves,
       diskCacheKey,
       workspace,
@@ -70259,8 +70285,10 @@ async function run() {
     } else {
       info("Disk cache saving is disabled for this job");
     }
-    if (saves.repository) {
+    if (saves.repository && shouldSaveRepositoryCache(repositoryCacheSaveMode, restoreResults?.repository)) {
       await save(configuration, configuration.caches.repository, restoreResults?.repository);
+    } else if (saves.repository && repositoryCacheSaveMode === "auto") {
+      info("Repository cache automatic save skipped because an empty start-of-job cache was not confirmed");
     } else {
       info("Repository cache saving is disabled for this job");
     }

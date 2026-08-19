@@ -92,7 +92,7 @@ test('new cache API uses the requested defaults', () => {
     save: {
       bazelisk: 'true',
       disk: 'false',
-      repository: 'true',
+      repository: 'auto',
     },
   });
   assert.equal(needsLockFileCheck(configuration.restore, true), true);
@@ -181,5 +181,27 @@ test('Bazelisk uses boolean modes independently of lock-file policy', () => {
   assert.throws(
     () => parseCacheConfiguration(raw({ bazeliskCacheRestore: 'auto' })),
     /Invalid bazelisk-cache-restore/
+  );
+});
+
+test('repository cache save accepts true, false, and auto independently', () => {
+  for (const mode of ['true', 'false', 'auto']) {
+    const configuration = parseCacheConfiguration(raw({ repositoryCacheSave: mode }));
+    assert.equal(configuration.save.repository, mode);
+  }
+  assert.equal(
+    resolveSaveModes(parseCacheConfiguration(raw({ repositoryCacheSave: 'false' })).save, true)
+      .repository,
+    false,
+  );
+  assert.equal(
+    resolveSaveModes(parseCacheConfiguration(raw({ repositoryCacheSave: 'true' })).save, true)
+      .repository,
+    true,
+  );
+  assert.equal(
+    resolveSaveModes(parseCacheConfiguration(raw({ repositoryCacheSave: 'auto' })).save, true)
+      .repository,
+    true,
   );
 });

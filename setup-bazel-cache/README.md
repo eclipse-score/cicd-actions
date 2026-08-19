@@ -37,9 +37,11 @@ steps:
 Further parameters to configure cache behavior:
 - `bazelisk-cache-restore` and `bazelisk-cache-save` accept `true` or `false`.
   Both default to `true`; saving is still limited to configured cache-saving
-  branches. `repository-cache-restore`, `repository-cache-save`, and
-  `disk-cache-save` accept `true` or `false`. `disk-cache-restore` additionally
-  accepts `auto`.
+  branches. `repository-cache-restore` accepts `true` or `false`, while
+  `repository-cache-save` accepts `true`, `false`, or `auto` and defaults to
+  `auto`. With `auto`, the repository cache is saved only when the restore at
+  the start of the job misses. `disk-cache-save` accepts `true` or `false`, and
+  `disk-cache-restore` additionally accepts `auto`.
   Bazelisk uses the readable `.bazelversion` value in its exact cache key, so
   its cache is independent of `MODULE.bazel.lock`. For the disk and repository
   caches, restore `false` skips the restore. For disk-cache-restore, `auto`
@@ -149,6 +151,13 @@ referenced. Periodically setting `repository-cache-restore: "false"` on a
 cache-writing run rebuilds a compact generation from only the dependencies used
 by that run. A dedicated warm-cache job should fetch every supported variant
 before publishing such a replacement.
+
+With the default `repository-cache-save: "auto"`, the first successful
+cache-writing job seeds the repository cache when no snapshot can be restored.
+Jobs that restore an existing snapshot leave it untouched. Use
+`repository-cache-save: "true"` when a job is intended to publish an additive
+generation on every successful run, or `"false"` to disable repository-cache
+saving entirely.
 
 GitHub cannot merge cache archives uploaded concurrently. If several
 default-branch jobs restore the same generation, add different dependencies,

@@ -19,11 +19,13 @@ import test from 'node:test';
 import {
   cachePrefix,
   canSaveAfterFailure,
+  describeLocalCachePaths,
   keyPlan,
   RESTORE_RESULT,
   formatBytes,
   localCacheSize,
   restoreOutput,
+  shouldSaveRepositoryCache,
   shouldSave,
 } from '../src/cache.js';
 import { createConfiguration } from '../src/config.js';
@@ -84,6 +86,21 @@ test('local cache sizes are formatted compactly and ignore symlinks', (context) 
   assert.equal(formatBytes(0), '0 B');
   assert.equal(formatBytes(1024), '1.00 KiB');
   assert.equal(formatBytes(1024 * 1024), '1.00 MiB');
+});
+
+test('empty cache diagnostics distinguish missing and empty paths', (context) => {
+  const workspace = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'setup-bazel-cache-empty-diagnostics-'),
+  );
+  context.after(() => fs.rmSync(workspace, { recursive: true, force: true }));
+  const empty = path.join(workspace, 'empty');
+  const missing = path.join(workspace, 'missing');
+  fs.mkdirSync(empty);
+
+  assert.equal(
+    describeLocalCachePaths({ paths: [empty, missing] }),
+    `${empty}: empty directory; ${missing}: missing`,
+  );
 });
 
 test('failed jobs may save only when every selected cache restore was additive', () => {
@@ -176,4 +193,32 @@ test('failed generational restores do not replace the existing cache snapshot', 
   assert.equal(shouldSave(configuration.caches.disk, RESTORE_RESULT.FALSE), true);
   assert.equal(shouldSave(configuration.caches.disk, RESTORE_RESULT.PARTIAL), true);
   assert.equal(shouldSave(configuration.caches.bazelisk, RESTORE_RESULT.UNKNOWN), true);
+});
+
+test('repository cache auto mode only seeds a missing cache', () => {
+  assert.equal(shouldSaveRepositoryCache('auto', RESTORE_RESULT.FALSE), true);
+  assert.equal(shouldSaveRepositoryCache('auto', RESTORE_RESULT.TRUE), false);
+  assert.equal(shouldSaveRepositoryCache('auto', RESTORE_RESULT.PARTIAL), false);
+  assert.equal(shouldSaveRepositoryCache('auto', RESTORE_RESULT.UNKNOWN), false);
+  assert.equal(shouldSaveRepositoryCache('auto', RESTORE_RESULT.SKIPPED), false);
+  assert.equal(shouldSaveRepositoryCache('true', RESTORE_RESULT.TRUE), true);
+  assert.equal(shouldSaveRepositoryCache('false', RESTORE_RESULT.FALSE), false);
+});
+
+test('repository auto mode does not allow failed jobs to seed a cache', () => {
+  const restored = {
+    bazelisk: RESTORE_RESULT.TRUE,
+    disk: RESTORE_RESULT.PARTIAL,
+    repository: RESTORE_RESULT.FALSE,
+  };
+  assert.equal(canSaveAfterFailure(restored, {
+    bazelisk: true,
+    disk: true,
+    repository: true,
+  }), false);
+  assert.equal(canSaveAfterFailure({ ...restored, repository: RESTORE_RESULT.PARTIAL }, {
+    bazelisk: true,
+    disk: true,
+    repository: true,
+  }), true);
 });

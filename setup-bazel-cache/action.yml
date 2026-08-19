@@ -55,10 +55,11 @@ inputs:
   repository-cache-save:
     description: >
       Save the shared repository cache.
-      Accepts true or false.
-      Note: even with true, saving is still limited to configured cache-saving branches (see cache-save-branch-patterns).
+      Accepts true, false, or auto.
+      With auto, save only when the cache was empty at the start of the job.
+      Saving is still limited to configured cache-saving branches (see cache-save-branch-patterns).
     required: false
-    default: "false"
+    default: "auto"
 
   disk-cache-restore:
     description: >
