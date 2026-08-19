@@ -15,6 +15,7 @@ import * as core from '@actions/core';
 import fs from 'node:fs';
 import {
   canSaveAfterFailure,
+  logLocalCacheSize,
   RESTORE_RESULT,
   restore,
   restoreOutput,
@@ -86,6 +87,17 @@ async function run() {
       changed === true,
     );
 
+    logDecision({
+      cacheModes,
+      cacheSaveAllowed,
+      cacheSaveBranchPatterns,
+      checkoutHistory,
+      configuration,
+      changed,
+      restores,
+      saves,
+    });
+
     setDecisionOutputs({
       cacheSaveAllowed,
       checkoutHistory,
@@ -107,6 +119,10 @@ async function run() {
       ),
     };
     setRestoreOutputs(restoreResults);
+    core.info(
+      `Restore summary: bazelisk=${restoreResults.bazelisk}, ` +
+      `disk=${restoreResults.disk}, repository=${restoreResults.repository}`,
+    );
 
     const failedJobCacheSaveAllowed =
       cacheSaveAllowed && canSaveAfterFailure(restoreResults, saves);
@@ -118,6 +134,7 @@ async function run() {
       configuration.additiveCacheSaveEnvironment,
       failedJobCacheSaveAllowed.toString(),
     );
+    core.info(`Additive cache save after job failure: ${failedJobCacheSaveAllowed}`);
     core.saveState(
       configuration.cacheSaveState,
       JSON.stringify({
@@ -137,6 +154,7 @@ async function run() {
 async function restoreCache(configuration, cacheConfiguration, shouldRestore) {
   if (!shouldRestore) {
     core.info(`Skipping ${cacheConfiguration.name} cache restore`);
+    logLocalCacheSize(cacheConfiguration, 'Local size without restore');
     return RESTORE_RESULT.SKIPPED;
   }
   return restore(configuration, cacheConfiguration);
@@ -150,6 +168,48 @@ function setDecisionOutputs({
   core.setOutput('cache-save-branch-evaluated', cacheSaveAllowed.toString());
   core.setOutput('_checkout-history', checkoutHistory);
   core.setOutput('_lock-file-changed', changed === null ? 'unknown' : changed.toString());
+}
+
+function logDecision({
+  cacheModes,
+  cacheSaveAllowed,
+  cacheSaveBranchPatterns,
+  checkoutHistory,
+  configuration,
+  changed,
+  restores,
+  saves,
+}) {
+  core.startGroup('Bazel cache decision');
+  core.info(`Ref: ${process.env.GITHUB_REF || '(unknown)'}`);
+  core.info(`Cache-save branch patterns: ${cacheSaveBranchPatterns.join(', ')}`);
+  core.info(`Cache saving allowed: ${cacheSaveAllowed}`);
+  core.info(
+    `Restore modes: requested bazelisk=${cacheModes.restore.bazelisk}, ` +
+    `disk=${cacheModes.restore.disk}, repository=${cacheModes.restore.repository}; ` +
+    `effective bazelisk=${restores.bazelisk}, disk=${restores.disk}, ` +
+    `repository=${restores.repository}`,
+  );
+  core.info(
+    `Save modes: requested bazelisk=${cacheModes.save.bazelisk}, ` +
+    `disk=${cacheModes.save.disk}, repository=${cacheModes.save.repository}; ` +
+    `effective bazelisk=${saves.bazelisk}, disk=${saves.disk}, ` +
+    `repository=${saves.repository}`,
+  );
+  if (cacheModes.restore.disk === 'auto' && cacheSaveAllowed) {
+    core.info(
+      `Automatic disk-cache decision: MODULE.bazel.lock changed=${changed === null ? 'unknown' : changed}; ` +
+      `checkout history=${checkoutHistory}`,
+    );
+  }
+  core.info(`Bazelisk version key: ${configuration.caches.bazelisk.keySuffix}`);
+  core.info(`Bazelrc: ${configuration.bazelrc}`);
+  core.info(
+    `Cache directories: bazelisk=${configuration.caches.bazelisk.paths.join(',')}, ` +
+    `disk=${configuration.caches.disk.paths.join(',')}, ` +
+    `repository=${configuration.caches.repository.paths.join(',')}`,
+  );
+  core.endGroup();
 }
 
 function setRestoreOutputs({ bazelisk, disk, repository }) {

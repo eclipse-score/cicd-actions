@@ -1068,14 +1068,14 @@ var require_util = __commonJS({
         }
         const port = url2.port != null ? url2.port : url2.protocol === "https:" ? 443 : 80;
         let origin = url2.origin != null ? url2.origin : `${url2.protocol || ""}//${url2.hostname || ""}:${port}`;
-        let path14 = url2.path != null ? url2.path : `${url2.pathname || ""}${url2.search || ""}`;
+        let path15 = url2.path != null ? url2.path : `${url2.pathname || ""}${url2.search || ""}`;
         if (origin[origin.length - 1] === "/") {
           origin = origin.slice(0, origin.length - 1);
         }
-        if (path14 && path14[0] !== "/") {
-          path14 = `/${path14}`;
+        if (path15 && path15[0] !== "/") {
+          path15 = `/${path15}`;
         }
-        return new URL(`${origin}${path14}`);
+        return new URL(`${origin}${path15}`);
       }
       if (!isHttpOrHttpsPrefixed(url2.origin || url2.protocol)) {
         throw new InvalidArgumentError("Invalid URL protocol: the URL must start with `http:` or `https:`.");
@@ -1526,39 +1526,39 @@ var require_diagnostics = __commonJS({
       });
       diagnosticsChannel.channel("undici:client:sendHeaders").subscribe((evt) => {
         const {
-          request: { method, path: path14, origin }
+          request: { method, path: path15, origin }
         } = evt;
-        debuglog("sending request to %s %s/%s", method, origin, path14);
+        debuglog("sending request to %s %s/%s", method, origin, path15);
       });
       diagnosticsChannel.channel("undici:request:headers").subscribe((evt) => {
         const {
-          request: { method, path: path14, origin },
+          request: { method, path: path15, origin },
           response: { statusCode }
         } = evt;
         debuglog(
           "received response to %s %s/%s - HTTP %d",
           method,
           origin,
-          path14,
+          path15,
           statusCode
         );
       });
       diagnosticsChannel.channel("undici:request:trailers").subscribe((evt) => {
         const {
-          request: { method, path: path14, origin }
+          request: { method, path: path15, origin }
         } = evt;
-        debuglog("trailers received from %s %s/%s", method, origin, path14);
+        debuglog("trailers received from %s %s/%s", method, origin, path15);
       });
       diagnosticsChannel.channel("undici:request:error").subscribe((evt) => {
         const {
-          request: { method, path: path14, origin },
+          request: { method, path: path15, origin },
           error: error2
         } = evt;
         debuglog(
           "request to %s %s/%s errored - %s",
           method,
           origin,
-          path14,
+          path15,
           error2.message
         );
       });
@@ -1607,9 +1607,9 @@ var require_diagnostics = __commonJS({
         });
         diagnosticsChannel.channel("undici:client:sendHeaders").subscribe((evt) => {
           const {
-            request: { method, path: path14, origin }
+            request: { method, path: path15, origin }
           } = evt;
-          debuglog("sending request to %s %s/%s", method, origin, path14);
+          debuglog("sending request to %s %s/%s", method, origin, path15);
         });
       }
       diagnosticsChannel.channel("undici:websocket:open").subscribe((evt) => {
@@ -1672,7 +1672,7 @@ var require_request = __commonJS({
     var kHandler = Symbol("handler");
     var Request = class {
       constructor(origin, {
-        path: path14,
+        path: path15,
         method,
         body: body2,
         headers,
@@ -1687,11 +1687,11 @@ var require_request = __commonJS({
         expectContinue,
         servername
       }, handler) {
-        if (typeof path14 !== "string") {
+        if (typeof path15 !== "string") {
           throw new InvalidArgumentError("path must be a string");
-        } else if (path14[0] !== "/" && !(path14.startsWith("http://") || path14.startsWith("https://")) && method !== "CONNECT") {
+        } else if (path15[0] !== "/" && !(path15.startsWith("http://") || path15.startsWith("https://")) && method !== "CONNECT") {
           throw new InvalidArgumentError("path must be an absolute URL or start with a slash");
-        } else if (invalidPathRegex.test(path14)) {
+        } else if (invalidPathRegex.test(path15)) {
           throw new InvalidArgumentError("invalid request path");
         }
         if (typeof method !== "string") {
@@ -1757,7 +1757,7 @@ var require_request = __commonJS({
         this.completed = false;
         this.aborted = false;
         this.upgrade = upgrade || null;
-        this.path = query ? buildURL(path14, query) : path14;
+        this.path = query ? buildURL(path15, query) : path15;
         this.origin = origin;
         this.idempotent = idempotent == null ? method === "HEAD" || method === "GET" : idempotent;
         this.blocking = blocking == null ? false : blocking;
@@ -6387,7 +6387,7 @@ var require_client_h1 = __commonJS({
       return method !== "GET" && method !== "HEAD" && method !== "OPTIONS" && method !== "TRACE" && method !== "CONNECT";
     }
     function writeH1(client, request) {
-      const { method, path: path14, host, upgrade, blocking, reset } = request;
+      const { method, path: path15, host, upgrade, blocking, reset } = request;
       let { body: body2, headers, contentLength: contentLength2 } = request;
       const expectsPayload = method === "PUT" || method === "POST" || method === "PATCH" || method === "QUERY" || method === "PROPFIND" || method === "PROPPATCH";
       if (util6.isFormDataLike(body2)) {
@@ -6462,7 +6462,7 @@ var require_client_h1 = __commonJS({
       if (blocking) {
         socket[kBlocking] = true;
       }
-      let header = `${method} ${path14} HTTP/1.1\r
+      let header = `${method} ${path15} HTTP/1.1\r
 `;
       if (typeof host === "string") {
         header += `host: ${host}\r
@@ -6988,7 +6988,7 @@ var require_client_h2 = __commonJS({
     }
     function writeH2(client, request) {
       const session = client[kHTTP2Session];
-      const { method, path: path14, host, upgrade, expectContinue, signal, headers: reqHeaders } = request;
+      const { method, path: path15, host, upgrade, expectContinue, signal, headers: reqHeaders } = request;
       let { body: body2 } = request;
       if (upgrade) {
         util6.errorRequest(client, request, new Error("Upgrade not supported for H2"));
@@ -7055,7 +7055,7 @@ var require_client_h2 = __commonJS({
         });
         return true;
       }
-      headers[HTTP2_HEADER_PATH] = path14;
+      headers[HTTP2_HEADER_PATH] = path15;
       headers[HTTP2_HEADER_SCHEME] = "https";
       const expectsPayload = method === "PUT" || method === "POST" || method === "PATCH";
       if (body2 && typeof body2.read === "function") {
@@ -7408,9 +7408,9 @@ var require_redirect_handler = __commonJS({
           return this.handler.onHeaders(statusCode, headers, resume, statusText);
         }
         const { origin, pathname, search } = util6.parseURL(new URL(this.location, this.opts.origin && new URL(this.opts.path, this.opts.origin)));
-        const path14 = search ? `${pathname}${search}` : pathname;
+        const path15 = search ? `${pathname}${search}` : pathname;
         this.opts.headers = cleanRequestHeaders(this.opts.headers, statusCode === 303, this.opts.origin !== origin);
-        this.opts.path = path14;
+        this.opts.path = path15;
         this.opts.origin = origin;
         this.opts.maxRedirections = 0;
         this.opts.query = null;
@@ -8645,10 +8645,10 @@ var require_proxy_agent = __commonJS({
         };
         const {
           origin,
-          path: path14 = "/",
+          path: path15 = "/",
           headers = {}
         } = opts;
-        opts.path = origin + path14;
+        opts.path = origin + path15;
         if (!("host" in headers) && !("Host" in headers)) {
           const { host } = new URL3(origin);
           headers.host = host;
@@ -10597,20 +10597,20 @@ var require_mock_utils = __commonJS({
       }
       return true;
     }
-    function safeUrl(path14) {
-      if (typeof path14 !== "string") {
-        return path14;
+    function safeUrl(path15) {
+      if (typeof path15 !== "string") {
+        return path15;
       }
-      const pathSegments = path14.split("?");
+      const pathSegments = path15.split("?");
       if (pathSegments.length !== 2) {
-        return path14;
+        return path15;
       }
       const qp = new URLSearchParams(pathSegments.pop());
       qp.sort();
       return [...pathSegments, qp.toString()].join("?");
     }
-    function matchKey(mockDispatch2, { path: path14, method, body: body2, headers }) {
-      const pathMatch = matchValue(mockDispatch2.path, path14);
+    function matchKey(mockDispatch2, { path: path15, method, body: body2, headers }) {
+      const pathMatch = matchValue(mockDispatch2.path, path15);
       const methodMatch = matchValue(mockDispatch2.method, method);
       const bodyMatch = typeof mockDispatch2.body !== "undefined" ? matchValue(mockDispatch2.body, body2) : true;
       const headersMatch = matchHeaders(mockDispatch2, headers);
@@ -10632,7 +10632,7 @@ var require_mock_utils = __commonJS({
     function getMockDispatch(mockDispatches, key) {
       const basePath = key.query ? buildURL(key.path, key.query) : key.path;
       const resolvedPath = typeof basePath === "string" ? safeUrl(basePath) : basePath;
-      let matchedMockDispatches = mockDispatches.filter(({ consumed }) => !consumed).filter(({ path: path14 }) => matchValue(safeUrl(path14), resolvedPath));
+      let matchedMockDispatches = mockDispatches.filter(({ consumed }) => !consumed).filter(({ path: path15 }) => matchValue(safeUrl(path15), resolvedPath));
       if (matchedMockDispatches.length === 0) {
         throw new MockNotMatchedError(`Mock dispatch not matched for path '${resolvedPath}'`);
       }
@@ -10670,9 +10670,9 @@ var require_mock_utils = __commonJS({
       }
     }
     function buildKey(opts) {
-      const { path: path14, method, body: body2, headers, query } = opts;
+      const { path: path15, method, body: body2, headers, query } = opts;
       return {
-        path: path14,
+        path: path15,
         method,
         body: body2,
         headers,
@@ -11135,10 +11135,10 @@ var require_pending_interceptors_formatter = __commonJS({
       }
       format(pendingInterceptors) {
         const withPrettyHeaders = pendingInterceptors.map(
-          ({ method, path: path14, data: { statusCode }, persist, times, timesInvoked, origin }) => ({
+          ({ method, path: path15, data: { statusCode }, persist, times, timesInvoked, origin }) => ({
             Method: method,
             Origin: origin,
-            Path: path14,
+            Path: path15,
             "Status code": statusCode,
             Persistent: persist ? PERSISTENT : NOT_PERSISTENT,
             Invocations: timesInvoked,
@@ -16019,9 +16019,9 @@ var require_util6 = __commonJS({
         }
       }
     }
-    function validateCookiePath(path14) {
-      for (let i = 0; i < path14.length; ++i) {
-        const code = path14.charCodeAt(i);
+    function validateCookiePath(path15) {
+      for (let i = 0; i < path15.length; ++i) {
+        const code = path15.charCodeAt(i);
         if (code < 32 || // exclude CTLs (0-31)
         code > 126 || // exclude DEL and non-ascii
         code === 59) {
@@ -18752,11 +18752,11 @@ var require_undici = __commonJS({
           if (typeof opts.path !== "string") {
             throw new InvalidArgumentError("invalid opts.path");
           }
-          let path14 = opts.path;
+          let path15 = opts.path;
           if (!opts.path.startsWith("/")) {
-            path14 = `/${path14}`;
+            path15 = `/${path15}`;
           }
-          url2 = new URL(util6.parseOrigin(url2).origin + path14);
+          url2 = new URL(util6.parseOrigin(url2).origin + path15);
         } else {
           if (!opts) {
             opts = typeof url2 === "object" ? url2 : {};
@@ -19146,7 +19146,7 @@ var require_minimatch = __commonJS({
   "node_modules/@actions/cache/node_modules/minimatch/minimatch.js"(exports2, module2) {
     module2.exports = minimatch3;
     minimatch3.Minimatch = Minimatch3;
-    var path14 = (function() {
+    var path15 = (function() {
       try {
         return require("path");
       } catch (e) {
@@ -19154,7 +19154,7 @@ var require_minimatch = __commonJS({
     })() || {
       sep: "/"
     };
-    minimatch3.sep = path14.sep;
+    minimatch3.sep = path15.sep;
     var GLOBSTAR2 = minimatch3.GLOBSTAR = Minimatch3.GLOBSTAR = {};
     var expand2 = require_brace_expansion();
     var plTypes = {
@@ -19243,8 +19243,8 @@ var require_minimatch = __commonJS({
       assertValidPattern2(pattern);
       if (!options) options = {};
       pattern = pattern.trim();
-      if (!options.allowWindowsEscape && path14.sep !== "/") {
-        pattern = pattern.split(path14.sep).join("/");
+      if (!options.allowWindowsEscape && path15.sep !== "/") {
+        pattern = pattern.split(path15.sep).join("/");
       }
       this.options = options;
       this.maxGlobstarRecursion = options.maxGlobstarRecursion !== void 0 ? options.maxGlobstarRecursion : 200;
@@ -19615,8 +19615,8 @@ var require_minimatch = __commonJS({
       if (this.empty) return f === "";
       if (f === "/" && partial) return true;
       var options = this.options;
-      if (path14.sep !== "/") {
-        f = f.split(path14.sep).join("/");
+      if (path15.sep !== "/") {
+        f = f.split(path15.sep).join("/");
       }
       f = f.split(slashSplit);
       this.debug(this.pattern, "split", f);
@@ -29449,7 +29449,7 @@ function saveState(name, value) {
 }
 
 // src/main.js
-var import_node_fs4 = __toESM(require("node:fs"), 1);
+var import_node_fs5 = __toESM(require("node:fs"), 1);
 
 // node_modules/@actions/cache/lib/cache.js
 var path6 = __toESM(require("path"), 1);
@@ -33701,15 +33701,15 @@ function getRequestUrl(baseUri, operationSpec, operationArguments, fallbackObjec
   let isAbsolutePath = false;
   let requestUrl = replaceAll(baseUri, urlReplacements);
   if (operationSpec.path) {
-    let path14 = replaceAll(operationSpec.path, urlReplacements);
-    if (operationSpec.path === "/{nextLink}" && path14.startsWith("/")) {
-      path14 = path14.substring(1);
+    let path15 = replaceAll(operationSpec.path, urlReplacements);
+    if (operationSpec.path === "/{nextLink}" && path15.startsWith("/")) {
+      path15 = path15.substring(1);
     }
-    if (isAbsoluteUrl(path14)) {
-      requestUrl = path14;
+    if (isAbsoluteUrl(path15)) {
+      requestUrl = path15;
       isAbsolutePath = true;
     } else {
-      requestUrl = appendPath(requestUrl, path14);
+      requestUrl = appendPath(requestUrl, path15);
     }
   }
   const { queryParams, sequenceParams } = calculateQueryParameters(operationSpec, operationArguments, fallbackObject);
@@ -33755,9 +33755,9 @@ function appendPath(url2, pathToAppend) {
   }
   const searchStart = pathToAppend.indexOf("?");
   if (searchStart !== -1) {
-    const path14 = pathToAppend.substring(0, searchStart);
+    const path15 = pathToAppend.substring(0, searchStart);
     const search = pathToAppend.substring(searchStart + 1);
-    newPath = newPath + path14;
+    newPath = newPath + path15;
     if (search) {
       parsedUrl.search = parsedUrl.search ? `${parsedUrl.search}&${search}` : search;
     }
@@ -36565,16 +36565,16 @@ var MatcherView = class {
    * @returns {string|undefined}
    */
   getCurrentTag() {
-    const path14 = this._matcher.path;
-    return path14.length > 0 ? path14[path14.length - 1].tag : void 0;
+    const path15 = this._matcher.path;
+    return path15.length > 0 ? path15[path15.length - 1].tag : void 0;
   }
   /**
    * Get current namespace.
    * @returns {string|undefined}
    */
   getCurrentNamespace() {
-    const path14 = this._matcher.path;
-    return path14.length > 0 ? path14[path14.length - 1].namespace : void 0;
+    const path15 = this._matcher.path;
+    return path15.length > 0 ? path15[path15.length - 1].namespace : void 0;
   }
   /**
    * Get current node's attribute value.
@@ -36582,9 +36582,9 @@ var MatcherView = class {
    * @returns {*}
    */
   getAttrValue(attrName) {
-    const path14 = this._matcher.path;
-    if (path14.length === 0) return void 0;
-    return path14[path14.length - 1].values?.[attrName];
+    const path15 = this._matcher.path;
+    if (path15.length === 0) return void 0;
+    return path15[path15.length - 1].values?.[attrName];
   }
   /**
    * Check if current node has an attribute.
@@ -36592,9 +36592,9 @@ var MatcherView = class {
    * @returns {boolean}
    */
   hasAttr(attrName) {
-    const path14 = this._matcher.path;
-    if (path14.length === 0) return false;
-    const current = path14[path14.length - 1];
+    const path15 = this._matcher.path;
+    if (path15.length === 0) return false;
+    const current = path15[path15.length - 1];
     return current.values !== void 0 && attrName in current.values;
   }
   /**
@@ -36620,18 +36620,18 @@ var MatcherView = class {
    * @returns {number}
    */
   getPosition() {
-    const path14 = this._matcher.path;
-    if (path14.length === 0) return -1;
-    return path14[path14.length - 1].position ?? 0;
+    const path15 = this._matcher.path;
+    if (path15.length === 0) return -1;
+    return path15[path15.length - 1].position ?? 0;
   }
   /**
    * Get current node's repeat counter (occurrence count of this tag name).
    * @returns {number}
    */
   getCounter() {
-    const path14 = this._matcher.path;
-    if (path14.length === 0) return -1;
-    return path14[path14.length - 1].counter ?? 0;
+    const path15 = this._matcher.path;
+    if (path15.length === 0) return -1;
+    return path15[path15.length - 1].counter ?? 0;
   }
   /**
    * Get current node's sibling index (alias for getPosition).
@@ -39789,11 +39789,11 @@ var NativeCRC64 = (() => {
       throw new Error("Module.ENVIRONMENT has been deprecated. To force the environment, use the ENVIRONMENT compile-time option (for example, -sENVIRONMENT=web or -sENVIRONMENT=node)");
     }
     var scriptDirectory = "";
-    function locateFile(path14) {
+    function locateFile(path15) {
       if (Module["locateFile"]) {
-        return Module["locateFile"](path14, scriptDirectory);
+        return Module["locateFile"](path15, scriptDirectory);
       }
-      return scriptDirectory + path14;
+      return scriptDirectory + path15;
     }
     var read_, readAsync, readBinary, setWindowTitle;
     function logExceptionOnExit(e) {
@@ -43276,9 +43276,9 @@ var StorageSharedKeyCredentialPolicy = class extends CredentialPolicy {
    * @param request -
    */
   getCanonicalizedResourceString(request) {
-    const path14 = getURLPath(request.url) || "/";
+    const path15 = getURLPath(request.url) || "/";
     let canonicalizedResourceString = "";
-    canonicalizedResourceString += `/${this.factory.accountName}${path14}`;
+    canonicalizedResourceString += `/${this.factory.accountName}${path15}`;
     const queries = getURLQueries(request.url);
     const lowercaseQueries = {};
     if (queries) {
@@ -43760,9 +43760,9 @@ function storageSharedKeyCredentialPolicy(options) {
     return canonicalizedHeadersStringToSign;
   }
   function getCanonicalizedResourceString(request) {
-    const path14 = getURLPath(request.url) || "/";
+    const path15 = getURLPath(request.url) || "/";
     let canonicalizedResourceString = "";
-    canonicalizedResourceString += `/${options.accountName}${path14}`;
+    canonicalizedResourceString += `/${options.accountName}${path15}`;
     const queries = getURLQueries(request.url);
     const lowercaseQueries = {};
     if (queries) {
@@ -57907,10 +57907,10 @@ var accountNameSuffixes = [
 ];
 function escapeURLPath(url2) {
   const urlParsed = new URL(url2);
-  let path14 = urlParsed.pathname;
-  path14 = path14 || "/";
-  path14 = escape(path14);
-  urlParsed.pathname = path14;
+  let path15 = urlParsed.pathname;
+  path15 = path15 || "/";
+  path15 = escape(path15);
+  urlParsed.pathname = path15;
   return urlParsed.toString();
 }
 function getProxyUriFromDevConnString(connectionString) {
@@ -57995,9 +57995,9 @@ function escape(text) {
 }
 function appendToURLPath(url2, name) {
   const urlParsed = new URL(url2);
-  let path14 = urlParsed.pathname;
-  path14 = path14 ? path14.endsWith("/") ? `${path14}${name}` : `${path14}/${name}` : name;
-  urlParsed.pathname = path14;
+  let path15 = urlParsed.pathname;
+  path15 = path15 ? path15.endsWith("/") ? `${path15}${name}` : `${path15}/${name}` : name;
+  urlParsed.pathname = path15;
   return urlParsed.toString();
 }
 function setURLParameter2(url2, name, value) {
@@ -69109,8 +69109,8 @@ var Pattern2 = class _Pattern {
 
 // node_modules/@actions/glob/lib/internal-search-state.js
 var SearchState2 = class {
-  constructor(path14, level) {
-    this.path = path14;
+  constructor(path15, level) {
+    this.path = path15;
     this.level = level;
   }
 };
@@ -69501,6 +69501,8 @@ function hashFiles3(patterns_1) {
 }
 
 // src/cache.js
+var import_node_fs2 = __toESM(require("node:fs"), 1);
+var import_node_path = __toESM(require("node:path"), 1);
 var RESTORE_RESULT = Object.freeze({
   FALSE: "false",
   PARTIAL: "partial",
@@ -69508,6 +69510,55 @@ var RESTORE_RESULT = Object.freeze({
   TRUE: "true",
   UNKNOWN: "unknown"
 });
+var BYTE_UNITS = ["B", "KiB", "MiB", "GiB", "TiB"];
+function localPathSize(root) {
+  const pending = [root];
+  let bytes = 0;
+  while (pending.length > 0) {
+    const current = pending.pop();
+    let entry;
+    try {
+      entry = import_node_fs2.default.lstatSync(current);
+    } catch (error2) {
+      if (error2.code === "ENOENT") continue;
+      throw error2;
+    }
+    if (entry.isSymbolicLink()) continue;
+    if (!entry.isDirectory()) {
+      bytes += entry.size;
+      continue;
+    }
+    for (const child2 of import_node_fs2.default.readdirSync(current)) {
+      pending.push(import_node_path.default.join(current, child2));
+    }
+  }
+  return bytes;
+}
+function localCacheSize(cacheConfiguration) {
+  return cacheConfiguration.paths.reduce((bytes, cachePath) => bytes + localPathSize(cachePath), 0);
+}
+function formatBytes(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  const unitIndex = Math.min(
+    Math.floor(Math.log(bytes) / Math.log(1024)),
+    BYTE_UNITS.length - 1
+  );
+  const value = bytes / 1024 ** unitIndex;
+  const precision = value >= 100 ? 0 : value >= 10 ? 1 : 2;
+  return `${value.toFixed(precision)} ${BYTE_UNITS[unitIndex]}`;
+}
+function logLocalCacheSize(cacheConfiguration, label) {
+  try {
+    const bytes = localCacheSize(cacheConfiguration);
+    info(`${label}: ${formatBytes(bytes)} uncompressed local data`);
+    return bytes;
+  } catch (error2) {
+    warning(
+      `Could not measure ${cacheConfiguration.name} cache size: ${error2.message || error2}`
+    );
+    return null;
+  }
+}
 function restoreOutput(result) {
   return result === RESTORE_RESULT.TRUE || result === RESTORE_RESULT.PARTIAL ? RESTORE_RESULT.TRUE : RESTORE_RESULT.FALSE;
 }
@@ -69553,6 +69604,7 @@ function hitState(cacheConfiguration) {
 }
 async function restore(configuration, cacheConfiguration) {
   startGroup(`Restore ${cacheConfiguration.name} cache`);
+  logLocalCacheSize(cacheConfiguration, "Local size before restore");
   try {
     const { key, restoreKeys } = await keyPlan(configuration, cacheConfiguration);
     const restoredKey = await restoreCache(
@@ -69574,14 +69626,15 @@ async function restore(configuration, cacheConfiguration) {
     warning(`Cache restore failed: ${error2.stack || error2}`);
     return RESTORE_RESULT.UNKNOWN;
   } finally {
+    logLocalCacheSize(cacheConfiguration, "Local size after restore");
     endGroup();
   }
 }
 
 // src/config.js
-var import_node_fs2 = __toESM(require("node:fs"), 1);
+var import_node_fs3 = __toESM(require("node:fs"), 1);
 var import_node_os3 = __toESM(require("node:os"), 1);
-var import_node_path = __toESM(require("node:path"), 1);
+var import_node_path2 = __toESM(require("node:path"), 1);
 var MAX_BAZELISK_VERSION_LENGTH = 400;
 var MAX_DISK_CACHE_KEY_LENGTH = 400;
 function validateDiskCacheKey(value) {
@@ -69607,10 +69660,10 @@ function validateBazeliskVersion(value) {
   return value;
 }
 function readBazeliskVersion(workspace) {
-  const versionFile = import_node_path.default.join(workspace, ".bazelversion");
+  const versionFile = import_node_path2.default.join(workspace, ".bazelversion");
   let version3;
   try {
-    version3 = import_node_fs2.default.readFileSync(versionFile, "utf8").trim();
+    version3 = import_node_fs3.default.readFileSync(versionFile, "utf8").trim();
   } catch (error2) {
     if (error2.code === "ENOENT") return "default";
     throw error2;
@@ -69621,15 +69674,15 @@ function createConfiguration(workspace, diskCacheKey, { bazeliskVersion } = {}) 
   validateDiskCacheKey(diskCacheKey);
   const resolvedBazeliskVersion = bazeliskVersion === void 0 ? readBazeliskVersion(workspace) : validateBazeliskVersion(bazeliskVersion);
   const home = import_node_os3.default.homedir();
-  const cacheRoot = import_node_path.default.join(home, ".cache");
+  const cacheRoot = import_node_path2.default.join(home, ".cache");
   const runnerTemp = process.env.RUNNER_TEMP || import_node_os3.default.tmpdir();
   const baseKey = `setup-bazel-cache-v1-linux-${import_node_os3.default.arch()}`;
   return {
     additiveCacheSaveEnvironment: "SETUP_BAZEL_CACHE_ADDITIVE_SAVE",
-    bazelrc: import_node_path.default.join(runnerTemp, "setup-bazel-cache.bazelrc"),
+    bazelrc: import_node_path2.default.join(runnerTemp, "setup-bazel-cache.bazelrc"),
     bazelrcContents: [
-      `build --disk_cache=${import_node_path.default.join(cacheRoot, "bazel-disk")}`,
-      `common --repository_cache=${import_node_path.default.join(cacheRoot, "bazel-repo")}`,
+      `build --disk_cache=${import_node_path2.default.join(cacheRoot, "bazel-disk")}`,
+      `common --repository_cache=${import_node_path2.default.join(cacheRoot, "bazel-repo")}`,
       ""
     ].join("\n"),
     cacheSaveState: "setup-bazel-cache-configuration",
@@ -69638,19 +69691,19 @@ function createConfiguration(workspace, diskCacheKey, { bazeliskVersion } = {}) 
         name: "bazelisk",
         files: [],
         keySuffix: resolvedBazeliskVersion,
-        paths: [import_node_path.default.join(cacheRoot, "bazelisk")]
+        paths: [import_node_path2.default.join(cacheRoot, "bazelisk")]
       },
       disk: {
         name: `disk-${diskCacheKey.length}-${diskCacheKey}`,
         generational: true,
         files: [],
-        paths: [import_node_path.default.join(cacheRoot, "bazel-disk")]
+        paths: [import_node_path2.default.join(cacheRoot, "bazel-disk")]
       },
       repository: {
         name: "repository",
         generational: true,
         files: [],
-        paths: [import_node_path.default.join(cacheRoot, "bazel-repo")]
+        paths: [import_node_path2.default.join(cacheRoot, "bazel-repo")]
       }
     },
     baseKey,
@@ -69660,7 +69713,7 @@ function createConfiguration(workspace, diskCacheKey, { bazeliskVersion } = {}) 
 
 // src/git.js
 var childProcess = __toESM(require("node:child_process"), 1);
-var import_node_fs3 = __toESM(require("node:fs"), 1);
+var import_node_fs4 = __toESM(require("node:fs"), 1);
 var FALLBACK_COMPARISON_BASE = "HEAD^";
 var NULL_SHA = "0".repeat(40);
 var SHA_PATTERN = /^[0-9a-f]{40}$/;
@@ -69674,7 +69727,7 @@ function runGit(workspace, args, options = {}) {
 function succeeds(result) {
   return result.status === 0;
 }
-function resolveDefaultBranch(eventPath = process.env.GITHUB_EVENT_PATH, readFile = import_node_fs3.default.readFileSync) {
+function resolveDefaultBranch(eventPath = process.env.GITHUB_EVENT_PATH, readFile = import_node_fs4.default.readFileSync) {
   if (!eventPath) {
     throw new Error(
       "GITHUB_EVENT_PATH is not set; set cache-save-branch-patterns explicitly when running outside GitHub Actions."
@@ -69689,7 +69742,7 @@ function resolveDefaultBranch(eventPath = process.env.GITHUB_EVENT_PATH, readFil
   }
   return defaultBranch;
 }
-function resolveComparisonBase(eventName = process.env.GITHUB_EVENT_NAME, eventPath = process.env.GITHUB_EVENT_PATH, readFile = import_node_fs3.default.readFileSync) {
+function resolveComparisonBase(eventName = process.env.GITHUB_EVENT_NAME, eventPath = process.env.GITHUB_EVENT_PATH, readFile = import_node_fs4.default.readFileSync) {
   if (eventName !== "push") return FALLBACK_COMPARISON_BASE;
   if (!eventPath) {
     throw new Error("GITHUB_EVENT_PATH is not set for this push event.");
@@ -69864,12 +69917,22 @@ async function run() {
       cacheSaveAllowed,
       changed === true
     );
+    logDecision({
+      cacheModes,
+      cacheSaveAllowed,
+      cacheSaveBranchPatterns,
+      checkoutHistory,
+      configuration,
+      changed,
+      restores,
+      saves
+    });
     setDecisionOutputs({
       cacheSaveAllowed,
       checkoutHistory,
       changed
     });
-    import_node_fs4.default.writeFileSync(configuration.bazelrc, configuration.bazelrcContents, { flag: "wx" });
+    import_node_fs5.default.writeFileSync(configuration.bazelrc, configuration.bazelrcContents, { flag: "wx" });
     info(`Created ${configuration.bazelrc}`);
     const bazelrcFiles = [process.env.BAZELRC, configuration.bazelrc].filter(Boolean);
     exportVariable("BAZELRC", bazelrcFiles.join(","));
@@ -69883,6 +69946,9 @@ async function run() {
       )
     };
     setRestoreOutputs(restoreResults);
+    info(
+      `Restore summary: bazelisk=${restoreResults.bazelisk}, disk=${restoreResults.disk}, repository=${restoreResults.repository}`
+    );
     const failedJobCacheSaveAllowed = cacheSaveAllowed && canSaveAfterFailure(restoreResults, saves);
     setOutput(
       "_failed-job-cache-save-allowed",
@@ -69892,6 +69958,7 @@ async function run() {
       configuration.additiveCacheSaveEnvironment,
       failedJobCacheSaveAllowed.toString()
     );
+    info(`Additive cache save after job failure: ${failedJobCacheSaveAllowed}`);
     saveState(
       configuration.cacheSaveState,
       JSON.stringify({
@@ -69910,6 +69977,7 @@ async function run() {
 async function restoreCache2(configuration, cacheConfiguration, shouldRestore) {
   if (!shouldRestore) {
     info(`Skipping ${cacheConfiguration.name} cache restore`);
+    logLocalCacheSize(cacheConfiguration, "Local size without restore");
     return RESTORE_RESULT.SKIPPED;
   }
   return restore(configuration, cacheConfiguration);
@@ -69922,6 +69990,38 @@ function setDecisionOutputs({
   setOutput("cache-save-branch-evaluated", cacheSaveAllowed.toString());
   setOutput("_checkout-history", checkoutHistory);
   setOutput("_lock-file-changed", changed === null ? "unknown" : changed.toString());
+}
+function logDecision({
+  cacheModes,
+  cacheSaveAllowed,
+  cacheSaveBranchPatterns,
+  checkoutHistory,
+  configuration,
+  changed,
+  restores,
+  saves
+}) {
+  startGroup("Bazel cache decision");
+  info(`Ref: ${process.env.GITHUB_REF || "(unknown)"}`);
+  info(`Cache-save branch patterns: ${cacheSaveBranchPatterns.join(", ")}`);
+  info(`Cache saving allowed: ${cacheSaveAllowed}`);
+  info(
+    `Restore modes: requested bazelisk=${cacheModes.restore.bazelisk}, disk=${cacheModes.restore.disk}, repository=${cacheModes.restore.repository}; effective bazelisk=${restores.bazelisk}, disk=${restores.disk}, repository=${restores.repository}`
+  );
+  info(
+    `Save modes: requested bazelisk=${cacheModes.save.bazelisk}, disk=${cacheModes.save.disk}, repository=${cacheModes.save.repository}; effective bazelisk=${saves.bazelisk}, disk=${saves.disk}, repository=${saves.repository}`
+  );
+  if (cacheModes.restore.disk === "auto" && cacheSaveAllowed) {
+    info(
+      `Automatic disk-cache decision: MODULE.bazel.lock changed=${changed === null ? "unknown" : changed}; checkout history=${checkoutHistory}`
+    );
+  }
+  info(`Bazelisk version key: ${configuration.caches.bazelisk.keySuffix}`);
+  info(`Bazelrc: ${configuration.bazelrc}`);
+  info(
+    `Cache directories: bazelisk=${configuration.caches.bazelisk.paths.join(",")}, disk=${configuration.caches.disk.paths.join(",")}, repository=${configuration.caches.repository.paths.join(",")}`
+  );
+  endGroup();
 }
 function setRestoreOutputs({ bazelisk, disk, repository }) {
   setOutput("bazelisk-cache-restored", restoreOutput(bazelisk));

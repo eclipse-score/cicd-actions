@@ -90,6 +90,20 @@ The following outputs are intended for the action's internal diagnostics:
 - `_checkout-history`: `skipped`, `existing`, `deepened`, or `fetched`
 - `_lock-file-changed`: `true`, `false`, or `unknown`
 
+## Logging
+
+The action writes a compact decision summary to the workflow log. It includes
+the effective restore and save decisions, branch-save eligibility, automatic
+`MODULE.bazel.lock` detection, the configured cache directories, and the
+Bazelisk version key.
+
+Each restore is shown in its own expandable log group with the result and the
+local cache size before and after the restore. The post action reports the
+local uncompressed payload size before each save and whether the cache was
+saved, skipped, or deliberately preserved. GitHub's cache service does not
+expose the compressed archive size through the cache API, so the reported size
+is the local directory size rather than the uploaded archive size.
+
 ## Cache lifecycle
 
 Cache keys use the prefix

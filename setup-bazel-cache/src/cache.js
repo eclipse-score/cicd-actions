@@ -14,6 +14,8 @@
 import * as cache from '@actions/cache';
 import * as core from '@actions/core';
 import * as glob from '@actions/glob';
+import fs from 'node:fs';
+import path from 'node:path';
 
 const RESTORE_RESULT = Object.freeze({
   FALSE: 'false',
@@ -22,6 +24,68 @@ const RESTORE_RESULT = Object.freeze({
   TRUE: 'true',
   UNKNOWN: 'unknown',
 });
+
+const BYTE_UNITS = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+
+/** Return the uncompressed size of one local cache path without following symlinks. */
+function localPathSize(root) {
+  const pending = [root];
+  let bytes = 0;
+
+  while (pending.length > 0) {
+    const current = pending.pop();
+    let entry;
+    try {
+      entry = fs.lstatSync(current);
+    } catch (error) {
+      if (error.code === 'ENOENT') continue;
+      throw error;
+    }
+
+    if (entry.isSymbolicLink()) continue;
+    if (!entry.isDirectory()) {
+      bytes += entry.size;
+      continue;
+    }
+
+    for (const child of fs.readdirSync(current)) {
+      pending.push(path.join(current, child));
+    }
+  }
+
+  return bytes;
+}
+
+/** Measure all local paths belonging to a cache; missing paths count as empty. */
+function localCacheSize(cacheConfiguration) {
+  return cacheConfiguration.paths.reduce((bytes, cachePath) => bytes + localPathSize(cachePath), 0);
+}
+
+/** Format local cache sizes compactly for one-line action log messages. */
+function formatBytes(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  const unitIndex = Math.min(
+    Math.floor(Math.log(bytes) / Math.log(1024)),
+    BYTE_UNITS.length - 1,
+  );
+  const value = bytes / (1024 ** unitIndex);
+  const precision = value >= 100 ? 0 : value >= 10 ? 1 : 2;
+  return `${value.toFixed(precision)} ${BYTE_UNITS[unitIndex]}`;
+}
+
+/** Log a best-effort local size without allowing diagnostics to affect caching. */
+function logLocalCacheSize(cacheConfiguration, label) {
+  try {
+    const bytes = localCacheSize(cacheConfiguration);
+    core.info(`${label}: ${formatBytes(bytes)} uncompressed local data`);
+    return bytes;
+  } catch (error) {
+    core.warning(
+      `Could not measure ${cacheConfiguration.name} cache size: ${error.message || error}`,
+    );
+    return null;
+  }
+}
 
 /** Expose successful exact and fallback restores as true without losing internal detail. */
 function restoreOutput(result) {
@@ -102,6 +166,7 @@ function hitState(cacheConfiguration) {
  */
 async function restore(configuration, cacheConfiguration) {
   core.startGroup(`Restore ${cacheConfiguration.name} cache`);
+  logLocalCacheSize(cacheConfiguration, 'Local size before restore');
   try {
     const { key, restoreKeys } = await keyPlan(configuration, cacheConfiguration);
     const restoredKey = await cache.restoreCache(
@@ -123,6 +188,7 @@ async function restore(configuration, cacheConfiguration) {
     core.warning(`Cache restore failed: ${error.stack || error}`);
     return RESTORE_RESULT.UNKNOWN;
   } finally {
+    logLocalCacheSize(cacheConfiguration, 'Local size after restore');
     core.endGroup();
   }
 }
@@ -132,26 +198,28 @@ async function restore(configuration, cacheConfiguration) {
  * are not uploaded again, while additive caches always receive a new generation.
  */
 async function save(configuration, cacheConfiguration, restoreResult) {
-  if (!cacheConfiguration.generational && core.getState(hitState(cacheConfiguration)) === 'true') {
-    core.info(`Not saving exact ${cacheConfiguration.name} cache hit`);
-    return;
-  }
-  if (!shouldSave(cacheConfiguration, restoreResult)) {
-    core.info(
-      `Not saving ${cacheConfiguration.name} cache because its restore failed; ` +
-      'the existing generation is preserved.',
-    );
-    return;
-  }
-
   core.startGroup(`Save ${cacheConfiguration.name} cache`);
   try {
+    const payloadSize = logLocalCacheSize(cacheConfiguration, 'Local payload before save');
+    if (!cacheConfiguration.generational && core.getState(hitState(cacheConfiguration)) === 'true') {
+      core.info(`Not saving exact ${cacheConfiguration.name} cache hit`);
+      return;
+    }
+    if (!shouldSave(cacheConfiguration, restoreResult)) {
+      core.info(
+        `Not saving ${cacheConfiguration.name} cache because its restore failed; ` +
+        'the existing generation is preserved.',
+      );
+      return;
+    }
+
     const key = await exactKey(configuration, cacheConfiguration);
     const cacheId = await cache.saveCache(cacheConfiguration.paths, key);
     if (cacheId === -1) {
       core.info(`Cache save skipped for ${key}`);
     } else {
-      core.info(`Saved ${key}`);
+      const payload = payloadSize === null ? 'size unavailable' : formatBytes(payloadSize);
+      core.info(`Saved ${key} (local payload: ${payload})`);
     }
   } catch (error) {
     core.warning(`Cache save failed: ${error.stack || error}`);
@@ -170,4 +238,7 @@ export {
   restoreOutput,
   save,
   shouldSave,
+  formatBytes,
+  logLocalCacheSize,
+  localCacheSize,
 };

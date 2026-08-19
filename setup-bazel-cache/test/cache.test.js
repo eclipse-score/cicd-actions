@@ -21,6 +21,8 @@ import {
   canSaveAfterFailure,
   keyPlan,
   RESTORE_RESULT,
+  formatBytes,
+  localCacheSize,
   restoreOutput,
   shouldSave,
 } from '../src/cache.js';
@@ -65,6 +67,23 @@ test('restore outputs expose successful restores as true', () => {
   assert.equal(restoreOutput(RESTORE_RESULT.FALSE), 'false');
   assert.equal(restoreOutput(RESTORE_RESULT.SKIPPED), 'false');
   assert.equal(restoreOutput(RESTORE_RESULT.UNKNOWN), 'false');
+});
+
+test('local cache sizes are formatted compactly and ignore symlinks', (context) => {
+  const workspace = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'setup-bazel-cache-size-test-'),
+  );
+  context.after(() => fs.rmSync(workspace, { recursive: true, force: true }));
+
+  fs.writeFileSync(path.join(workspace, 'small'), '123');
+  fs.mkdirSync(path.join(workspace, 'nested'));
+  fs.writeFileSync(path.join(workspace, 'nested', 'large'), 'x'.repeat(1024));
+  fs.symlinkSync(path.join(workspace, 'small'), path.join(workspace, 'ignored-link'));
+
+  assert.equal(localCacheSize({ paths: [workspace] }), 1027);
+  assert.equal(formatBytes(0), '0 B');
+  assert.equal(formatBytes(1024), '1.00 KiB');
+  assert.equal(formatBytes(1024 * 1024), '1.00 MiB');
 });
 
 test('failed jobs may save only when every selected cache restore was additive', () => {
