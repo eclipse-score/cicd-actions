@@ -70004,13 +70004,10 @@ function logDecision({
   startGroup("Bazel cache decision");
   info(`Ref: ${process.env.GITHUB_REF || "(unknown)"}`);
   info(`Cache-save branch patterns: ${cacheSaveBranchPatterns.join(", ")}`);
-  info(`Cache saving allowed: ${cacheSaveAllowed}`);
   info(
-    `Restore modes: requested bazelisk=${cacheModes.restore.bazelisk}, disk=${cacheModes.restore.disk}, repository=${cacheModes.restore.repository}; effective bazelisk=${restores.bazelisk}, disk=${restores.disk}, repository=${restores.repository}`
+    `Cache saving allowed: ${cacheSaveAllowed}` + (cacheSaveAllowed ? "" : " (ref does not match cache-save-branch-patterns)")
   );
-  info(
-    `Save modes: requested bazelisk=${cacheModes.save.bazelisk}, disk=${cacheModes.save.disk}, repository=${cacheModes.save.repository}; effective bazelisk=${saves.bazelisk}, disk=${saves.disk}, repository=${saves.repository}`
-  );
+  logModeTable(cacheModes, restores, saves);
   if (cacheModes.restore.disk === "auto" && cacheSaveAllowed) {
     info(
       `Automatic disk-cache decision: MODULE.bazel.lock changed=${changed === null ? "unknown" : changed}; checkout history=${checkoutHistory}`
@@ -70022,6 +70019,32 @@ function logDecision({
     `Cache directories: bazelisk=${configuration.caches.bazelisk.paths.join(",")}, disk=${configuration.caches.disk.paths.join(",")}, repository=${configuration.caches.repository.paths.join(",")}`
   );
   endGroup();
+}
+function logModeTable(cacheModes, restores, saves) {
+  const headers = [
+    "Cache",
+    "Restore requested",
+    "Restore effective",
+    "Save requested",
+    "Save effective"
+  ];
+  const rows = [
+    ["bazelisk", cacheModes.restore.bazelisk, restores.bazelisk, cacheModes.save.bazelisk, saves.bazelisk],
+    ["disk", cacheModes.restore.disk, restores.disk, cacheModes.save.disk, saves.disk],
+    ["repository", cacheModes.restore.repository, restores.repository, cacheModes.save.repository, saves.repository]
+  ].map((row) => row.map((value) => value.toString()));
+  const widths = headers.map((header, index) => Math.max(
+    header.length,
+    ...rows.map((row) => row[index].length)
+  ));
+  const border = `+${widths.map((width) => "-".repeat(width + 2)).join("+")}+`;
+  const formatRow = (row) => `| ${row.map((value, index) => value.padEnd(widths[index])).join(" | ")} |`;
+  info("Mode matrix:");
+  info(border);
+  info(formatRow(headers));
+  info(border);
+  for (const row of rows) info(formatRow(row));
+  info(border);
 }
 function setRestoreOutputs({ bazelisk, disk, repository }) {
   setOutput("bazelisk-cache-restored", restoreOutput(bazelisk));
