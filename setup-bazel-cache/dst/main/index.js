@@ -69501,7 +69501,6 @@ function hashFiles3(patterns_1) {
 }
 
 // src/cache.js
-var import_node_crypto4 = require("node:crypto");
 var RESTORE_RESULT = Object.freeze({
   FALSE: "false",
   PARTIAL: "partial",
@@ -69516,7 +69515,7 @@ function cachePrefix(configuration, cacheConfiguration) {
   return `${configuration.baseKey}-${cacheConfiguration.name}-`;
 }
 function generationSuffix() {
-  return `${Date.now().toString(16)}${(0, import_node_crypto4.randomUUID)().replaceAll("-", "")}`;
+  return Date.now().toString();
 }
 function canSaveAfterFailure(restoreResults, saves) {
   if (saves.bazelisk && restoreResults.bazelisk !== RESTORE_RESULT.TRUE) return false;

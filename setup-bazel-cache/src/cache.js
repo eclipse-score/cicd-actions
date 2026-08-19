@@ -14,7 +14,6 @@
 import * as cache from '@actions/cache';
 import * as core from '@actions/core';
 import * as glob from '@actions/glob';
-import { randomUUID } from 'node:crypto';
 
 const RESTORE_RESULT = Object.freeze({
   FALSE: 'false',
@@ -36,9 +35,9 @@ function cachePrefix(configuration, cacheConfiguration) {
   return `${configuration.baseKey}-${cacheConfiguration.name}-`;
 }
 
-/** Generate a unique, prune-compatible hexadecimal generation suffix. */
+/** Generate the readable, prune-compatible timestamp generation suffix. */
 function generationSuffix() {
-  return `${Date.now().toString(16)}${randomUUID().replaceAll('-', '')}`;
+  return Date.now().toString();
 }
 
 /** A failed job may publish only caches that extend successfully restored snapshots. */
