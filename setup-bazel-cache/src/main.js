@@ -13,7 +13,12 @@
 
 import * as core from '@actions/core';
 import fs from 'node:fs';
-import { canSaveAfterFailure, RESTORE_RESULT, restore } from './cache.js';
+import {
+  canSaveAfterFailure,
+  RESTORE_RESULT,
+  restore,
+  restoreOutput,
+} from './cache.js';
 import { createConfiguration } from './config.js';
 import {
   ensureComparisonHistory,
@@ -85,8 +90,6 @@ async function run() {
       cacheSaveAllowed,
       checkoutHistory,
       changed,
-      saves,
-      restores,
     });
 
     fs.writeFileSync(configuration.bazelrc, configuration.bazelrcContents, { flag: 'wx' });
@@ -108,7 +111,7 @@ async function run() {
     const failedJobCacheSaveAllowed =
       cacheSaveAllowed && canSaveAfterFailure(restoreResults, saves);
     core.setOutput(
-      'failed-job-cache-save-allowed',
+      '_failed-job-cache-save-allowed',
       failedJobCacheSaveAllowed.toString(),
     );
     core.exportVariable(
@@ -136,24 +139,16 @@ function setDecisionOutputs({
   cacheSaveAllowed,
   checkoutHistory,
   changed,
-  saves,
-  restores,
 }) {
-  core.setOutput('cache-save-allowed', cacheSaveAllowed.toString());
-  core.setOutput('bazelisk-cache-save', saves.bazelisk.toString());
-  core.setOutput('disk-cache-save', saves.disk.toString());
-  core.setOutput('repository-cache-save', saves.repository.toString());
-  core.setOutput('bazelisk-cache-restore', restores.bazelisk.toString());
-  core.setOutput('disk-cache-restore', restores.disk.toString());
-  core.setOutput('repository-cache-restore', restores.repository.toString());
-  core.setOutput('checkout-history', checkoutHistory);
-  core.setOutput('lock-file-changed', changed === null ? 'unknown' : changed.toString());
+  core.setOutput('cache-save-branch-evaluated', cacheSaveAllowed.toString());
+  core.setOutput('_checkout-history', checkoutHistory);
+  core.setOutput('_lock-file-changed', changed === null ? 'unknown' : changed.toString());
 }
 
 function setRestoreOutputs({ bazelisk, disk, repository }) {
-  core.setOutput('bazelisk-cache-restored', bazelisk);
-  core.setOutput('disk-cache-restored', disk);
-  core.setOutput('repository-cache-restored', repository);
+  core.setOutput('bazelisk-cache-restored', restoreOutput(bazelisk));
+  core.setOutput('disk-cache-restored', restoreOutput(disk));
+  core.setOutput('repository-cache-restored', restoreOutput(repository));
 }
 
 run();

@@ -23,6 +23,13 @@ const RESTORE_RESULT = Object.freeze({
   UNKNOWN: 'unknown',
 });
 
+/** Expose successful exact and fallback restores as true without losing internal detail. */
+function restoreOutput(result) {
+  return result === RESTORE_RESULT.TRUE || result === RESTORE_RESULT.PARTIAL
+    ? RESTORE_RESULT.TRUE
+    : RESTORE_RESULT.FALSE;
+}
+
 /** Return the stable cache-family prefix used for fallback restores. */
 function cachePrefix(configuration, cacheConfiguration) {
   return `${configuration.baseKey}-${cacheConfiguration.name}-`;
@@ -136,5 +143,6 @@ export {
   keyPlan,
   RESTORE_RESULT,
   restore,
+  restoreOutput,
   save,
 };

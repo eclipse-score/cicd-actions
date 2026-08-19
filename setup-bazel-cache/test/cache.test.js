@@ -21,6 +21,7 @@ import {
   canSaveAfterFailure,
   keyPlan,
   RESTORE_RESULT,
+  restoreOutput,
 } from '../src/cache.js';
 import { createConfiguration } from '../src/config.js';
 
@@ -55,6 +56,14 @@ test('restore results use a stable output vocabulary', () => {
     TRUE: 'true',
     UNKNOWN: 'unknown',
   });
+});
+
+test('restore outputs expose successful restores as true', () => {
+  assert.equal(restoreOutput(RESTORE_RESULT.TRUE), 'true');
+  assert.equal(restoreOutput(RESTORE_RESULT.PARTIAL), 'true');
+  assert.equal(restoreOutput(RESTORE_RESULT.FALSE), 'false');
+  assert.equal(restoreOutput(RESTORE_RESULT.SKIPPED), 'false');
+  assert.equal(restoreOutput(RESTORE_RESULT.UNKNOWN), 'false');
 });
 
 test('failed jobs may save only when every selected cache restore was additive', () => {

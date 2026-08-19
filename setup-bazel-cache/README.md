@@ -6,6 +6,8 @@ pull-request jobs restore caches; only configured cache-saving branches save
 them. If no cache-save branch patterns are configured, the repository's default
 branch is used automatically.
 
+The action supports Linux runners only.
+
 ## Usage
 
 ```yaml
@@ -16,27 +18,23 @@ steps:
     with:
       disk-cache-key: ${{ github.workflow }}-${{ github.job }}
       # Optional:
-      bazelisk-cache-restore: true
-      bazelisk-cache-save: true
       cache-save-branch-patterns: |
-        main
+        master
         release/*
-      repository-cache-restore: true
-      repository-cache-save: true
-      disk-cache-restore: auto
-      disk-cache-save: false
 ```
 
 - `disk-cache-key` separates disk caches belonging to different jobs or
-  matrix configurations. It must be a stable, printable value up to 400
-  characters long and must not contain commas.
+  matrix configurations. It must be a stable value; do not include transient
+  values such as `${{ github.run_id }}`.
 - `cache-save-branch-patterns` is an optional newline-separated list of branch
   glob patterns allowed to save caches. An empty input uses the repository's GitHub
-  default branch from the workflow event. `*` matches within one branch path
-  component and `**` also crosses `/`, so `release/*` matches `release/1.0`.
-  Pull-request refs never save caches, even when a pattern would match them.
-  When multiple patterns are configured, they replace the default-branch
-  fallback; include it explicitly if needed.
+  default branch.
+  Globbing: `*` matches within one branch path component and `**` also crosses `/`,
+  so `release/*` matches `release/1.0` and `release/**` matches `release/1/0` and `release/2.0`.
+
+### Advanced
+
+Further parameters to configure cache behavior:
 - `bazelisk-cache-restore` and `bazelisk-cache-save` accept `true` or `false`.
   Both default to `true`; saving is still limited to configured cache-saving
   branches. `repository-cache-restore`, `repository-cache-save`, and
@@ -50,14 +48,6 @@ steps:
   Save inputs only take effect on configured cache-saving branches; `false`
   disables saving for that cache.
 
-The action creates a temporary bazelrc with `--disk_cache` and
-`--repository_cache`, then appends it to the `BAZELRC` environment variable.
-Existing workspace, home, and environment-provided bazelrc files are preserved;
-the temporary file is read last so the action's cache locations take
-precedence.
-
-The action supports Linux runners only.
-
 ## Cache security
 
 GitHub makes default-branch caches readable from pull-request workflows,
@@ -70,7 +60,11 @@ that pull-request authors must not be able to read.
 On a cache-saving branch, `disk-cache-restore: auto` compares
 `MODULE.bazel.lock` with the commit preceding the current push, covering every
 commit in a multi-commit push. For events without a push base, it compares the
-previous commit. An ordinary shallow checkout fetches the comparison commit
+previous commit.
+
+This behavior may change in the future without notice!
+
+An ordinary shallow checkout fetches the comparison commit
 when necessary. If that is impossible, use `actions/checkout` with
 `fetch-depth: 0`, or set `disk-cache-restore` explicitly.
 
@@ -83,21 +77,18 @@ permissions:
 
 ## Outputs
 
-- `cache-save-allowed`: whether this ref can save caches in the post action
-- `repository-cache-restore`: resolved repository-cache restore decision
-- `repository-cache-save`: resolved repository-cache save decision
-- `disk-cache-restore`: resolved disk-cache restore decision
-- `disk-cache-save`: resolved disk-cache save decision
-- `bazelisk-cache-restore`: resolved Bazelisk-cache restore decision
-- `bazelisk-cache-save`: resolved Bazelisk-cache save decision
-- `failed-job-cache-save-allowed`: whether every selected cache was restored
-  sufficiently to allow an additive save if a later step fails
+- `cache-save-branch-evaluated`: whether this ref can save caches in the post
+  action
 - `bazelisk-cache-restored`, `disk-cache-restored`, and
-  `repository-cache-restored`: restore result for each cache (`true` for an
-  exact key, `partial` for a prefix match, `false` for a miss, `skipped`, or
-  `unknown` after a cache API failure)
-- `checkout-history`: `skipped`, `existing`, `deepened`, or `fetched`
-- `lock-file-changed`: `true`, `false`, or `unknown`
+  `repository-cache-restored`: `true` for an exact or fallback cache hit;
+  `false` for a miss, disabled restore, or restore error
+
+The following outputs are intended for the action's internal diagnostics:
+
+- `_failed-job-cache-save-allowed`: whether every selected cache was restored
+  sufficiently to allow an additive save if a later step fails
+- `_checkout-history`: `skipped`, `existing`, `deepened`, or `fetched`
+- `_lock-file-changed`: `true`, `false`, or `unknown`
 
 ## Cache lifecycle
 
@@ -117,7 +108,7 @@ cache outage does not fail the build.
 
 Successful jobs may publish new cache baselines. A failed job publishes only
 when every selected cache was restored with an exact `true` result or, for
-generational caches, a `partial` result. When the Bazelisk cache is selected,
+generational caches, an internal `partial` result. When the Bazelisk cache is selected,
 requiring an exact Bazelisk hit prevents a failed job from publishing an old
 binary under a new Bazelisk version key. The generational-cache results prove that
 their snapshots extend existing caches. A restore result of `false`, `skipped`,
@@ -151,48 +142,3 @@ other jobs' additions. For deterministic coverage, use one dedicated job that:
 Set `repository-cache-save: "false"` in other parallel jobs. They still restore
 the shared repository snapshot, while their disk and Bazelisk caches retain the
 normal save behavior.
-
-## Validation model in this repository
-
-GitHub scopes every cache to the workflow run's actual Git ref. The
-The `cache-save-branch-patterns` input only decides whether this action attempts a save; it
-cannot move a cache into another ref's scope. A cache written on a release
-branch is therefore not automatically shared with `main` or another release
-branch. The repository uses that distinction to test cache writes without
-giving candidate code access to the default branch's caches.
-
-| Context | Validation | Cache scope |
-| --- | --- | --- |
-| Same-repository branch push that changes `setup-bazel-cache/**` | Automatic save and restore test | That feature branch |
-| Fork pull request | Restore-only action tests | Pull-request/default-branch caches allowed by GitHub |
-| Approved pull request in the merge queue | Automatic save and restore test | Temporary `merge_group` ref |
-| `workflow_dispatch` | Optional diagnostic rerun | The explicitly selected branch |
-
-The persistence workflow uses three jobs because GitHub runs a JavaScript
-action's post step only after its job has finished:
-
-1. A successful job seeds a baseline for all three caches.
-2. A second job restores that baseline, verifies
-   `failed-job-cache-save-allowed: "true"`, and adds disk and repository markers.
-   Automatic runs complete successfully. A manual run can enable
-   `exercise-failed-job` to fail intentionally and exercise the
-   failure-sensitive post condition.
-3. A final job restores the next generation and verifies the added markers.
-
-Unit tests separately verify that misses, skipped restores, and cache API
-failures produce `failed-job-cache-save-allowed: "false"`. The action exports that
-decision for its failure-sensitive `post-if` condition; the pull-request action
-test verifies that the exported value matches the public output.
-
-The marker keys contain the workflow run ID and attempt, so this test cannot
-pass using a cache from an earlier run.
-
-`pull_request_target` is intentionally not used. Although it triggers reliably
-for forks, it runs with the default branch's trusted workflow context.
-Executing the pull request's action implementation there would expose a
-privileged token and the default branch's cache scope to untrusted code.
-`workflow_call`, `workflow_dispatch`, and API dispatch do not inherently solve
-that trust boundary: they either inherit the caller's permissions or run in the
-selected base-repository ref. The merge queue provides the required automatic,
-pre-merge coverage with an isolated temporary ref and no manual approval step
-beyond the normal pull-request review.

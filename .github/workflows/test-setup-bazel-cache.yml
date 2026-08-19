@@ -85,14 +85,14 @@ jobs:
             echo "ERROR: setup-bazel-cache failed"
             exit 1
           fi
-          if [[ "${{ steps.setup-bazel-cache.outputs.checkout-history }}" != "${{ matrix.history-method }}" ]]; then
-            echo "ERROR: expected '${{ matrix.history-method }}', got '${{ steps.setup-bazel-cache.outputs.checkout-history }}'"
+          if [[ "${{ steps.setup-bazel-cache.outputs._checkout-history }}" != "${{ matrix.history-method }}" ]]; then
+            echo "ERROR: expected '${{ matrix.history-method }}', got '${{ steps.setup-bazel-cache.outputs._checkout-history }}'"
             exit 1
           fi
-          case "${{ steps.setup-bazel-cache.outputs.lock-file-changed }}" in
+          case "${{ steps.setup-bazel-cache.outputs._lock-file-changed }}" in
             true|false) ;;
             *)
-              echo "ERROR: expected a lockfile change result, got '${{ steps.setup-bazel-cache.outputs.lock-file-changed }}'"
+              echo "ERROR: expected a lockfile change result, got '${{ steps.setup-bazel-cache.outputs._lock-file-changed }}'"
               exit 1
               ;;
           esac
@@ -138,20 +138,12 @@ jobs:
         include:
           - disk-cache-restore: true
             repository-cache-restore: true
-            expected-disk-cache-restore: true
-            expected-repository-cache-restore: true
           - disk-cache-restore: false
             repository-cache-restore: true
-            expected-disk-cache-restore: false
-            expected-repository-cache-restore: true
           - disk-cache-restore: auto
             repository-cache-restore: true
-            expected-disk-cache-restore: true
-            expected-repository-cache-restore: true
           - disk-cache-restore: true
             repository-cache-restore: false
-            expected-disk-cache-restore: true
-            expected-repository-cache-restore: false
     steps:
       - name: Check out action source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
@@ -176,23 +168,14 @@ jobs:
             echo "ERROR: setup-bazel-cache failed"
             exit 1
           fi
-          if [[ "${{ steps.setup-bazel-cache.outputs.checkout-history }}" != "skipped" ]]; then
-            echo "ERROR: expected skipped history check, got '${{ steps.setup-bazel-cache.outputs.checkout-history }}'"
+          if [[ "${{ steps.setup-bazel-cache.outputs._checkout-history }}" != "skipped" ]]; then
+            echo "ERROR: expected skipped history check, got '${{ steps.setup-bazel-cache.outputs._checkout-history }}'"
             exit 1
           fi
-          if [[ "${{ steps.setup-bazel-cache.outputs.lock-file-changed }}" != "unknown" ]]; then
-            echo "ERROR: expected unknown lockfile result, got '${{ steps.setup-bazel-cache.outputs.lock-file-changed }}'"
+          if [[ "${{ steps.setup-bazel-cache.outputs._lock-file-changed }}" != "unknown" ]]; then
+            echo "ERROR: expected unknown lockfile result, got '${{ steps.setup-bazel-cache.outputs._lock-file-changed }}'"
             exit 1
           fi
-          if [[ "${{ steps.setup-bazel-cache.outputs.disk-cache-restore }}" != "${{ matrix.expected-disk-cache-restore }}" ]]; then
-            echo "ERROR: expected disk-cache-restore=${{ matrix.expected-disk-cache-restore }}, got '${{ steps.setup-bazel-cache.outputs.disk-cache-restore }}'"
-            exit 1
-          fi
-          if [[ "${{ steps.setup-bazel-cache.outputs.repository-cache-restore }}" != "${{ matrix.expected-repository-cache-restore }}" ]]; then
-            echo "ERROR: expected repository-cache-restore=${{ matrix.expected-repository-cache-restore }}, got '${{ steps.setup-bazel-cache.outputs.repository-cache-restore }}'"
-            exit 1
-          fi
-
   preserves-existing-bazelrc:
     name: Existing user bazelrc is preserved
     runs-on: ubuntu-latest
@@ -255,9 +238,9 @@ jobs:
       - name: Verify cache decision and restore outputs
         shell: bash
         env:
-          CACHE_SAVE_ALLOWED: ${{ steps.setup-bazel-cache.outputs.cache-save-allowed }}
+          CACHE_SAVE_ALLOWED: ${{ steps.setup-bazel-cache.outputs.cache-save-branch-evaluated }}
           EXPECTED_CACHE_SAVE: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
-          FAILED_JOB_CACHE_SAVE_ALLOWED: ${{ steps.setup-bazel-cache.outputs.failed-job-cache-save-allowed }}
+          FAILED_JOB_CACHE_SAVE_ALLOWED: ${{ steps.setup-bazel-cache.outputs._failed-job-cache-save-allowed }}
           BAZELISK_RESTORE: ${{ steps.setup-bazel-cache.outputs.bazelisk-cache-restored }}
           DISK_RESTORE: ${{ steps.setup-bazel-cache.outputs.disk-cache-restored }}
           REPOSITORY_RESTORE: ${{ steps.setup-bazel-cache.outputs.repository-cache-restored }}
@@ -267,7 +250,7 @@ jobs:
           [[ "$SETUP_BAZEL_CACHE_ADDITIVE_SAVE" == "$FAILED_JOB_CACHE_SAVE_ALLOWED" ]]
           for result in "$BAZELISK_RESTORE" "$DISK_RESTORE" "$REPOSITORY_RESTORE"; do
             case "$result" in
-              true|false|partial|skipped|unknown) ;;
+              true|false) ;;
               *)
                 echo "ERROR: unexpected cache restore result: $result"
                 exit 1

@@ -69508,6 +69508,9 @@ var RESTORE_RESULT = Object.freeze({
   TRUE: "true",
   UNKNOWN: "unknown"
 });
+function restoreOutput(result) {
+  return result === RESTORE_RESULT.TRUE || result === RESTORE_RESULT.PARTIAL ? RESTORE_RESULT.TRUE : RESTORE_RESULT.FALSE;
+}
 function cachePrefix(configuration, cacheConfiguration) {
   return `${configuration.baseKey}-${cacheConfiguration.name}-`;
 }
@@ -69858,9 +69861,7 @@ async function run() {
     setDecisionOutputs({
       cacheSaveAllowed,
       checkoutHistory,
-      changed,
-      saves,
-      restores
+      changed
     });
     import_node_fs4.default.writeFileSync(configuration.bazelrc, configuration.bazelrcContents, { flag: "wx" });
     info(`Created ${configuration.bazelrc}`);
@@ -69878,7 +69879,7 @@ async function run() {
     setRestoreOutputs(restoreResults);
     const failedJobCacheSaveAllowed = cacheSaveAllowed && canSaveAfterFailure(restoreResults, saves);
     setOutput(
-      "failed-job-cache-save-allowed",
+      "_failed-job-cache-save-allowed",
       failedJobCacheSaveAllowed.toString()
     );
     exportVariable(
@@ -69903,24 +69904,16 @@ async function restoreCache2(configuration, cacheConfiguration, shouldRestore) {
 function setDecisionOutputs({
   cacheSaveAllowed,
   checkoutHistory,
-  changed,
-  saves,
-  restores
+  changed
 }) {
-  setOutput("cache-save-allowed", cacheSaveAllowed.toString());
-  setOutput("bazelisk-cache-save", saves.bazelisk.toString());
-  setOutput("disk-cache-save", saves.disk.toString());
-  setOutput("repository-cache-save", saves.repository.toString());
-  setOutput("bazelisk-cache-restore", restores.bazelisk.toString());
-  setOutput("disk-cache-restore", restores.disk.toString());
-  setOutput("repository-cache-restore", restores.repository.toString());
-  setOutput("checkout-history", checkoutHistory);
-  setOutput("lock-file-changed", changed === null ? "unknown" : changed.toString());
+  setOutput("cache-save-branch-evaluated", cacheSaveAllowed.toString());
+  setOutput("_checkout-history", checkoutHistory);
+  setOutput("_lock-file-changed", changed === null ? "unknown" : changed.toString());
 }
 function setRestoreOutputs({ bazelisk, disk, repository }) {
-  setOutput("bazelisk-cache-restored", bazelisk);
-  setOutput("disk-cache-restored", disk);
-  setOutput("repository-cache-restored", repository);
+  setOutput("bazelisk-cache-restored", restoreOutput(bazelisk));
+  setOutput("disk-cache-restored", restoreOutput(disk));
+  setOutput("repository-cache-restored", restoreOutput(repository));
 }
 run();
 /*! Bundled license information:

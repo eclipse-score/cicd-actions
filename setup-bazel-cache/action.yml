@@ -12,7 +12,7 @@
 # *******************************************************************************
 
 name: Setup Bazel Cache
-description: Configures Bazel 8.6+ caching with opinionated defaults.
+description: Configures Bazel 8.6+ caching with opinionated defaults and automations.
 
 inputs:
   disk-cache-key:
@@ -28,6 +28,8 @@ inputs:
     required: false
     default: ""
 
+  # cache flags:
+
   bazelisk-cache-restore:
     description: >
       Restore the Bazelisk cache.
@@ -39,8 +41,7 @@ inputs:
     description: >
       Save the Bazelisk cache.
       Accepts true or false.
-      Saving is still limited to configured
-      cache-saving branches.
+      Note: even with true, saving is still limited to configured cache-saving branches (see cache-save-branch-patterns).
     required: false
     default: "true"
 
@@ -55,68 +56,63 @@ inputs:
     description: >
       Save the shared repository cache.
       Accepts true or false.
-      Saving is still limited to configured cache-saving branches.
+      Note: even with true, saving is still limited to configured cache-saving branches (see cache-save-branch-patterns).
     required: false
-    default: "true"
+    default: "false"
 
   disk-cache-restore:
     description: >
       Restore the Bazel disk cache.
       Accepts true, false, or auto.
-      With auto, the action decides whether restoring the existing cache is appropriate:
-      the cache is restored if MODULE.bazel.lock has NOT changed.
+      With auto, the action decides whether restoring the existing cache is appropriate
+      or a new cache should be built.
     required: false
     default: "auto"
 
   disk-cache-save:
     description: >
       Save the Bazel disk cache.
-      Cache saves are always restricted to configured cache-saving branches.
       Accepts true or false.
+      Note: even with true, saving is still limited to configured cache-saving branches (see cache-save-branch-patterns).
     required: false
-    default: "false"
+    default: "true"
 
 outputs:
-  cache-save-allowed:
-    description: Whether this ref is allowed to save caches in the post action.
-
-  repository-cache-restore:
-    description: Resolved repository-cache restore decision.
-
-  repository-cache-save:
-    description: Resolved repository-cache save decision.
-
-  disk-cache-restore:
-    description: Resolved disk-cache restore decision (mostly interesting in case auto was used).
-
-  disk-cache-save:
-    description: Resolved disk-cache save decision.
-
-  failed-job-cache-save-allowed:
+  cache-save-branch-evaluated:
     description: >
-      Whether every selected cache was restored sufficiently for an additive
-      save after a later workflow step fails.
+      Whether this ref is allowed to save caches in the post action.
+      Reports true or false.
 
   bazelisk-cache-restored:
     description: >
-      Bazelisk cache restore result: true, false.
+      Whether the Bazelisk cache was restored.
+      Reports true or false.
 
   disk-cache-restored:
     description: >
-      Disk-cache restore result: true, false, partial, skipped, or unknown.
+      Whether the bazel disk cache was restored.
+      Reports true or false.
 
   repository-cache-restored:
     description: >
-      Repository-cache restore result: true, false, partial, skipped, or unknown.
+      Whether the bazel repository cache was restored.
+      Reports true or false.
 
-  checkout-history:
+  # potentially internal? not sure yet.
+
+  _checkout-history:
     description: >
       How history for automatic detection was obtained:
       skipped, existing, deepened, or fetched.
 
-  lock-file-changed:
+  _lock-file-changed:
     description: >
       Whether MODULE.bazel.lock changed: true, false, or unknown.
+
+  _failed-job-cache-save-allowed:
+    description: >
+      Whether every selected cache was restored sufficiently for an additive
+      save after a later workflow step fails.
 
 runs:
   using: node24

@@ -92,8 +92,8 @@ jobs:
       - name: Add baseline cache markers
         shell: bash
         env:
-          CACHE_SAVE_ALLOWED: ${{ steps.setup.outputs.cache-save-allowed }}
-          FAILED_JOB_CACHE_SAVE_ALLOWED: ${{ steps.setup.outputs.failed-job-cache-save-allowed }}
+          CACHE_SAVE_ALLOWED: ${{ steps.setup.outputs.cache-save-branch-evaluated }}
+          FAILED_JOB_CACHE_SAVE_ALLOWED: ${{ steps.setup.outputs._failed-job-cache-save-allowed }}
         run: |
           set -euo pipefail
           [[ "$CACHE_SAVE_ALLOWED" == "true" ]]
@@ -138,13 +138,13 @@ jobs:
         env:
           BAZELISK_RESTORE: ${{ steps.restore.outputs.bazelisk-cache-restored }}
           DISK_RESTORE: ${{ steps.restore.outputs.disk-cache-restored }}
-          FAILED_JOB_CACHE_SAVE_ALLOWED: ${{ steps.restore.outputs.failed-job-cache-save-allowed }}
+          FAILED_JOB_CACHE_SAVE_ALLOWED: ${{ steps.restore.outputs._failed-job-cache-save-allowed }}
           REPOSITORY_RESTORE: ${{ steps.restore.outputs.repository-cache-restored }}
         run: |
           set -euo pipefail
           [[ "$BAZELISK_RESTORE" == "true" ]]
-          [[ "$DISK_RESTORE" == "partial" ]]
-          [[ "$REPOSITORY_RESTORE" == "partial" ]]
+          [[ "$DISK_RESTORE" == "true" ]]
+          [[ "$REPOSITORY_RESTORE" == "true" ]]
           [[ "$FAILED_JOB_CACHE_SAVE_ALLOWED" == "true" ]]
 
           marker="baseline-${{ github.run_id }}-${{ github.run_attempt }}"
@@ -199,8 +199,8 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$BAZELISK_RESTORE" == "true" ]]
-          [[ "$DISK_RESTORE" == "partial" ]]
-          [[ "$REPOSITORY_RESTORE" == "partial" ]]
+          [[ "$DISK_RESTORE" == "true" ]]
+          [[ "$REPOSITORY_RESTORE" == "true" ]]
 
           marker="addition-${{ github.run_id }}-${{ github.run_attempt }}"
           for cache in bazel-disk bazel-repo; do
