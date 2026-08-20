@@ -26,6 +26,12 @@ const RESTORE_RESULT = Object.freeze({
 });
 
 const BYTE_UNITS = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+const REPOSITORY_CACHE_GROWTH_PERCENT = 10;
+
+/** Keep the restored generation key available to the post action. */
+function restoredKeyState(cacheConfiguration) {
+  return `setup-bazel-cache-restored-key-${cacheConfiguration.name}`;
+}
 
 /** Return the uncompressed size of one local path without following symlinks. */
 function localPathSize(root) {
@@ -120,8 +126,21 @@ function generationSuffix() {
 }
 
 /** Decide whether repository auto mode should publish a cache generation. */
-function shouldSaveRepositoryCache(mode, restoreResult) {
-  return mode === 'true' || (mode === 'auto' && restoreResult === RESTORE_RESULT.FALSE);
+function shouldSaveRepositoryCache(mode, restoreResult, startSize, endSize) {
+  if (mode === 'true') return true;
+  if (mode !== 'auto') return false;
+  if (restoreResult === RESTORE_RESULT.FALSE) return true;
+  return (
+    restoreResult === RESTORE_RESULT.TRUE ||
+    restoreResult === RESTORE_RESULT.PARTIAL
+  ) && repositoryCacheGrewByTenPercent(startSize, endSize);
+}
+
+/** Return whether the local repository cache grew by at least ten percent. */
+function repositoryCacheGrewByTenPercent(startSize, endSize) {
+  if (!Number.isFinite(startSize) || !Number.isFinite(endSize)) return false;
+  if (startSize === 0) return endSize > 0;
+  return (endSize - startSize) * 100 >= startSize * REPOSITORY_CACHE_GROWTH_PERCENT;
 }
 
 /** A failed job may publish only caches that extend successfully restored snapshots. */
@@ -213,6 +232,7 @@ async function restore(configuration, cacheConfiguration) {
       return RESTORE_RESULT.FALSE;
     }
     core.info(`Restored ${restoredKey}`);
+    core.saveState(restoredKeyState(cacheConfiguration), restoredKey);
     if (!cacheConfiguration.generational && restoredKey === key) {
       core.saveState(hitState(cacheConfiguration), 'true');
     }
@@ -286,6 +306,73 @@ async function save(configuration, cacheConfiguration, restoreResult) {
   return result;
 }
 
+/** Delete one prior repository cache generation without making cleanup required. */
+async function deleteCacheByKey(cacheKey, {
+  token = core.getInput('token'),
+  apiUrl = process.env.GITHUB_API_URL || 'https://api.github.com',
+  repository = process.env.GITHUB_REPOSITORY,
+  ref = process.env.GITHUB_REF,
+} = {}) {
+  const permissionHint =
+    'Grant the action actions: write (for example, via permissions) to enable automatic cleanup.';
+
+  if (!token) {
+    core.info(`Repository cache cleanup skipped because no GitHub token is available. ${permissionHint}`);
+    return false;
+  }
+  if (!repository) {
+    core.info(`Repository cache cleanup skipped because GITHUB_REPOSITORY is not available. ${permissionHint}`);
+    return false;
+  }
+  if (!ref) {
+    core.info(`Repository cache cleanup skipped because GITHUB_REF is not available. ${permissionHint}`);
+    return false;
+  }
+
+  const [owner, repo, ...unexpectedParts] = repository.split('/');
+  if (!owner || !repo || unexpectedParts.length > 0) {
+    core.info(`Repository cache cleanup skipped because GITHUB_REPOSITORY is invalid. ${permissionHint}`);
+    return false;
+  }
+
+  try {
+    const url = new URL(
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/caches`,
+      apiUrl,
+    );
+    url.searchParams.set('key', cacheKey);
+    url.searchParams.set('ref', ref);
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${token}`,
+        'X-GitHub-Api-Version': '2022-11-28',
+        'User-Agent': 'setup-bazel-cache',
+      },
+    });
+
+    if (response.ok) {
+      core.info(`Deleted previous repository cache generation ${cacheKey}`);
+      return true;
+    }
+
+    if (response.status === 401 || response.status === 403 || response.status === 404) {
+      core.info(
+        `Repository cache cleanup skipped because the GitHub token lacks permission to delete caches. ${permissionHint}`,
+      );
+    } else {
+      core.warning(
+        `Repository cache cleanup failed for ${cacheKey}: ` +
+        `GitHub API returned HTTP ${response.status} ${response.statusText}`,
+      );
+    }
+  } catch (error) {
+    core.warning(`Repository cache cleanup failed for ${cacheKey}: ${error.message || error}`);
+  }
+  return false;
+}
+
 export {
   cachePrefix,
   canSaveAfterFailure,
@@ -300,6 +387,9 @@ export {
   shouldSave,
   formatBytes,
   describeLocalCachePath,
+  deleteCacheByKey,
   logLocalCacheSize,
   localPathSize,
+  repositoryCacheGrewByTenPercent,
+  restoredKeyState,
 };

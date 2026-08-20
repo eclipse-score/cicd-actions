@@ -130,6 +130,10 @@ async function run() {
       `Restore summary: bazelisk=${restoreResults.bazelisk}, ` +
       `disk=${restoreResults.disk}, repository=${restoreResults.repository}`,
     );
+    const repositoryCacheStartSize = logLocalCacheSize(
+      configuration.caches.repository,
+      'Repository cache baseline after restore',
+    );
 
     installManagedBazelrc(configuration);
     core.info(`Added Bazel 8 compatibility import to ${configuration.userBazelrc}`);
@@ -155,6 +159,7 @@ async function run() {
         workspace,
         bazeliskVersion: configuration.caches.bazelisk.keySuffix,
         restoreResults,
+        repositoryCacheStartSize,
       }),
     );
   } catch (error) {

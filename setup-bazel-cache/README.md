@@ -35,12 +35,16 @@ steps:
 ### Advanced
 
 Further parameters to configure cache behavior:
+- `token` is optional and defaults to `${{ github.token }}`. It is only used to
+  remove the previous repository-cache generation after an automatic upload.
 - `bazelisk-cache-restore` and `bazelisk-cache-save` accept `true` or `false`.
   Both default to `true`; saving is still limited to configured cache-saving
   branches. `repository-cache-restore` accepts `true` or `false`, while
   `repository-cache-save` accepts `true`, `false`, or `auto` and defaults to
-  `auto`. With `auto`, the repository cache is saved only when the restore at
-  the start of the job misses. `disk-cache-save` accepts `true` or `false`, and
+  `auto`. With `auto`, the repository cache is seeded after a miss and is
+  uploaded again when its local payload grows by at least 10% during the job;
+  the previous generation is then removed on a best-effort basis.
+  `disk-cache-save` accepts `true` or `false`, and
   `disk-cache-restore` additionally accepts `auto`.
   Bazelisk uses the readable `.bazelversion` value in its exact cache key, so
   its cache is independent of `MODULE.bazel.lock`. For the disk and repository
@@ -77,6 +81,17 @@ permissions:
   contents: read
 ```
 
+The action uses the token input to remove the previous repository-cache
+generation after an automatic upload. Grant `actions: write` when this cleanup
+should work; without it, the upload still succeeds and cleanup is reported as
+an informational message:
+
+```yaml
+permissions:
+  contents: read
+  actions: write
+```
+
 ## Outputs
 
 - `cache-save-branch-evaluated`: whether this ref can save caches in the post
@@ -102,7 +117,9 @@ Bazelisk version key.
 Each restore is shown in its own expandable log group with the result and the
 local cache size before and after the restore. The post action reports the
 local uncompressed payload size before each save and whether the cache was
-saved, skipped, or deliberately preserved. GitHub's cache service does not
+saved, skipped, or deliberately preserved. In repository-cache auto mode it
+also reports the post-restore baseline and the 10% growth decision. GitHub's
+cache service does not
 expose the compressed archive size through the cache API, so the reported size
 is the local directory size rather than the uploaded archive size.
 
@@ -154,7 +171,9 @@ before publishing such a replacement.
 
 With the default `repository-cache-save: "auto"`, the first successful
 cache-writing job seeds the repository cache when no snapshot can be restored.
-Jobs that restore an existing snapshot leave it untouched. Use
+Jobs that restore an existing snapshot publish a new generation only when the
+local repository payload grows by at least 10%; after that upload, the previous
+generation is removed when the token has `actions: write`. Use
 `repository-cache-save: "true"` when a job is intended to publish an additive
 generation on every successful run, or `"false"` to disable repository-cache
 saving entirely.

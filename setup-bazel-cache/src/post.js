@@ -13,9 +13,12 @@
 
 import * as core from '@actions/core';
 import {
+  deleteCacheByKey,
   formatBytes,
+  logLocalCacheSize,
   save,
   shouldSaveRepositoryCache,
+  restoredKeyState,
   skippedSaveSummary,
 } from './cache.js';
 import { createConfiguration } from './config.js';
@@ -69,6 +72,7 @@ async function run() {
       workspace,
       bazeliskVersion,
       restoreResults,
+      repositoryCacheStartSize = null,
     } = JSON.parse(state);
     if (!cacheSaveAllowed) {
       core.info('Cache saving is disabled on this ref');
@@ -89,13 +93,46 @@ async function run() {
       core.info('Disk cache saving is disabled for this job');
       results.push(skippedSaveSummary(configuration.caches.disk, 'disabled'));
     }
+    const repositoryCacheSizeBeforeSave = repositoryCacheSaveMode === 'auto'
+      ? logLocalCacheSize(
+        configuration.caches.repository,
+        'Repository cache size before automatic save decision',
+      )
+      : null;
     if (
       saves.repository &&
-      shouldSaveRepositoryCache(repositoryCacheSaveMode, restoreResults?.repository)
+      shouldSaveRepositoryCache(
+        repositoryCacheSaveMode,
+        restoreResults?.repository,
+        repositoryCacheStartSize,
+        repositoryCacheSizeBeforeSave,
+      )
     ) {
-      results.push(await save(configuration, configuration.caches.repository, restoreResults?.repository));
+      const repositoryResult = await save(
+        configuration,
+        configuration.caches.repository,
+        restoreResults?.repository,
+      );
+      results.push(repositoryResult);
+      if (repositoryCacheSaveMode === 'auto' && repositoryResult.uploaded) {
+        const previousKey = core.getState(restoredKeyState(configuration.caches.repository));
+        if (previousKey) {
+          await deleteCacheByKey(previousKey);
+        } else {
+          core.info('Repository cache cleanup skipped because no previous cache generation was restored');
+        }
+      }
     } else if (saves.repository && repositoryCacheSaveMode === 'auto') {
-      core.info('Repository cache automatic save skipped because an empty start-of-job cache was not confirmed');
+      if (repositoryCacheStartSize === null || repositoryCacheSizeBeforeSave === null) {
+        core.info(
+          'Repository cache automatic save skipped because its start or end size could not be measured',
+        );
+      } else {
+        core.info(
+          'Repository cache automatic save skipped because the local cache grew by less than 10% ' +
+          `(${formatBytes(repositoryCacheStartSize)} -> ${formatBytes(repositoryCacheSizeBeforeSave)})`,
+        );
+      }
       results.push(skippedSaveSummary(configuration.caches.repository, 'existing cache preserved'));
     } else {
       core.info('Repository cache saving is disabled for this job');

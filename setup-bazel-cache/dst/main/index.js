@@ -13472,7 +13472,7 @@ var require_fetch = __commonJS({
     function handleFetchDone(response) {
       finalizeAndReportTiming(response, "fetch");
     }
-    function fetch(input, init = void 0) {
+    function fetch2(input, init = void 0) {
       webidl.argumentLengthCheck(arguments, 1, "globalThis.fetch");
       let p = createDeferredPromise();
       let requestObject;
@@ -14429,7 +14429,7 @@ var require_fetch = __commonJS({
       }
     }
     module2.exports = {
-      fetch,
+      fetch: fetch2,
       Fetch,
       fetching,
       finalizeAndReportTiming
@@ -18778,7 +18778,7 @@ var require_undici = __commonJS({
     module2.exports.setGlobalDispatcher = setGlobalDispatcher;
     module2.exports.getGlobalDispatcher = getGlobalDispatcher;
     var fetchImpl = require_fetch().fetch;
-    module2.exports.fetch = async function fetch(init, options = void 0) {
+    module2.exports.fetch = async function fetch2(init, options = void 0) {
       try {
         return await fetchImpl(init, options);
       } catch (err) {
@@ -69511,6 +69511,9 @@ var RESTORE_RESULT = Object.freeze({
   UNKNOWN: "unknown"
 });
 var BYTE_UNITS = ["B", "KiB", "MiB", "GiB", "TiB"];
+function restoredKeyState(cacheConfiguration) {
+  return `setup-bazel-cache-restored-key-${cacheConfiguration.name}`;
+}
 function localPathSize(root) {
   const pending = [root];
   let bytes = 0;
@@ -69629,6 +69632,7 @@ async function restore(configuration, cacheConfiguration) {
       return RESTORE_RESULT.FALSE;
     }
     info(`Restored ${restoredKey}`);
+    saveState(restoredKeyState(cacheConfiguration), restoredKey);
     if (!cacheConfiguration.generational && restoredKey === key) {
       saveState(hitState(cacheConfiguration), "true");
     }
@@ -69800,11 +69804,11 @@ function ensureComparisonHistory(workspace, comparisonBase, git = runGit) {
     return "existing";
   }
   const fetchArguments = comparisonBase === FALLBACK_COMPARISON_BASE ? ["fetch", "--no-tags", "--deepen=1", "origin"] : ["fetch", "--no-tags", "--depth=1", "origin", comparisonBase];
-  const fetch = git(workspace, fetchArguments, {
+  const fetch2 = git(workspace, fetchArguments, {
     quiet: true,
     env: { GIT_TERMINAL_PROMPT: "0" }
   });
-  if (succeeds(fetch) && succeeds(git(
+  if (succeeds(fetch2) && succeeds(git(
     workspace,
     ["rev-parse", "--verify", `${comparisonBase}^{commit}`],
     { quiet: true }
@@ -69996,6 +70000,10 @@ async function run() {
     info(
       `Restore summary: bazelisk=${restoreResults.bazelisk}, disk=${restoreResults.disk}, repository=${restoreResults.repository}`
     );
+    const repositoryCacheStartSize = logLocalCacheSize(
+      configuration.caches.repository,
+      "Repository cache baseline after restore"
+    );
     installManagedBazelrc(configuration);
     info(`Added Bazel 8 compatibility import to ${configuration.userBazelrc}`);
     const failedJobCacheSaveAllowed = cacheSaveAllowed && canSaveAfterFailure(restoreResults, saves);
@@ -70017,7 +70025,8 @@ async function run() {
         diskCacheKey,
         workspace,
         bazeliskVersion: configuration.caches.bazelisk.keySuffix,
-        restoreResults
+        restoreResults,
+        repositoryCacheStartSize
       })
     );
   } catch (error2) {

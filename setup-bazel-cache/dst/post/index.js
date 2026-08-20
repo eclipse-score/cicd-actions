@@ -13472,7 +13472,7 @@ var require_fetch = __commonJS({
     function handleFetchDone(response) {
       finalizeAndReportTiming(response, "fetch");
     }
-    function fetch(input, init = void 0) {
+    function fetch2(input, init = void 0) {
       webidl.argumentLengthCheck(arguments, 1, "globalThis.fetch");
       let p = createDeferredPromise();
       let requestObject;
@@ -14429,7 +14429,7 @@ var require_fetch = __commonJS({
       }
     }
     module2.exports = {
-      fetch,
+      fetch: fetch2,
       Fetch,
       fetching,
       finalizeAndReportTiming
@@ -18778,7 +18778,7 @@ var require_undici = __commonJS({
     module2.exports.setGlobalDispatcher = setGlobalDispatcher;
     module2.exports.getGlobalDispatcher = getGlobalDispatcher;
     var fetchImpl = require_fetch().fetch;
-    module2.exports.fetch = async function fetch(init, options = void 0) {
+    module2.exports.fetch = async function fetch2(init, options = void 0) {
       try {
         return await fetchImpl(init, options);
       } catch (err) {
@@ -29359,6 +29359,16 @@ var ExitCode;
 })(ExitCode || (ExitCode = {}));
 function setSecret(secret) {
   issueCommand("add-mask", {}, secret);
+}
+function getInput(name, options) {
+  const val = process.env[`INPUT_${name.replace(/ /g, "_").toUpperCase()}`] || "";
+  if (options && options.required && !val) {
+    throw new Error(`Input required and not supplied: ${name}`);
+  }
+  if (options && options.trimWhitespace === false) {
+    return val;
+  }
+  return val.trim();
 }
 function setFailed(message) {
   process.exitCode = ExitCode.Failure;
@@ -70034,6 +70044,10 @@ var RESTORE_RESULT = Object.freeze({
   UNKNOWN: "unknown"
 });
 var BYTE_UNITS = ["B", "KiB", "MiB", "GiB", "TiB"];
+var REPOSITORY_CACHE_GROWTH_PERCENT = 10;
+function restoredKeyState(cacheConfiguration) {
+  return `setup-bazel-cache-restored-key-${cacheConfiguration.name}`;
+}
 function localPathSize(root) {
   const pending = [root];
   let bytes = 0;
@@ -70099,8 +70113,16 @@ function cachePrefix(configuration, cacheConfiguration) {
 function generationSuffix() {
   return Date.now().toString();
 }
-function shouldSaveRepositoryCache(mode, restoreResult) {
-  return mode === "true" || mode === "auto" && restoreResult === RESTORE_RESULT.FALSE;
+function shouldSaveRepositoryCache(mode, restoreResult, startSize, endSize) {
+  if (mode === "true") return true;
+  if (mode !== "auto") return false;
+  if (restoreResult === RESTORE_RESULT.FALSE) return true;
+  return (restoreResult === RESTORE_RESULT.TRUE || restoreResult === RESTORE_RESULT.PARTIAL) && repositoryCacheGrewByTenPercent(startSize, endSize);
+}
+function repositoryCacheGrewByTenPercent(startSize, endSize) {
+  if (!Number.isFinite(startSize) || !Number.isFinite(endSize)) return false;
+  if (startSize === 0) return endSize > 0;
+  return (endSize - startSize) * 100 >= startSize * REPOSITORY_CACHE_GROWTH_PERCENT;
 }
 function shouldSave(cacheConfiguration, restoreResult) {
   return !(cacheConfiguration.generational && restoreResult === RESTORE_RESULT.UNKNOWN);
@@ -70195,6 +70217,64 @@ async function save(configuration, cacheConfiguration, restoreResult) {
     endGroup();
   }
   return result;
+}
+async function deleteCacheByKey(cacheKey, {
+  token = getInput("token"),
+  apiUrl = process.env.GITHUB_API_URL || "https://api.github.com",
+  repository = process.env.GITHUB_REPOSITORY,
+  ref = process.env.GITHUB_REF
+} = {}) {
+  const permissionHint = "Grant the action actions: write (for example, via permissions) to enable automatic cleanup.";
+  if (!token) {
+    info(`Repository cache cleanup skipped because no GitHub token is available. ${permissionHint}`);
+    return false;
+  }
+  if (!repository) {
+    info(`Repository cache cleanup skipped because GITHUB_REPOSITORY is not available. ${permissionHint}`);
+    return false;
+  }
+  if (!ref) {
+    info(`Repository cache cleanup skipped because GITHUB_REF is not available. ${permissionHint}`);
+    return false;
+  }
+  const [owner, repo, ...unexpectedParts] = repository.split("/");
+  if (!owner || !repo || unexpectedParts.length > 0) {
+    info(`Repository cache cleanup skipped because GITHUB_REPOSITORY is invalid. ${permissionHint}`);
+    return false;
+  }
+  try {
+    const url2 = new URL(
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/caches`,
+      apiUrl
+    );
+    url2.searchParams.set("key", cacheKey);
+    url2.searchParams.set("ref", ref);
+    const response = await fetch(url2, {
+      method: "DELETE",
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${token}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "setup-bazel-cache"
+      }
+    });
+    if (response.ok) {
+      info(`Deleted previous repository cache generation ${cacheKey}`);
+      return true;
+    }
+    if (response.status === 401 || response.status === 403 || response.status === 404) {
+      info(
+        `Repository cache cleanup skipped because the GitHub token lacks permission to delete caches. ${permissionHint}`
+      );
+    } else {
+      warning(
+        `Repository cache cleanup failed for ${cacheKey}: GitHub API returned HTTP ${response.status} ${response.statusText}`
+      );
+    }
+  } catch (error2) {
+    warning(`Repository cache cleanup failed for ${cacheKey}: ${error2.message || error2}`);
+  }
+  return false;
 }
 
 // src/config.js
@@ -70326,7 +70406,8 @@ async function run() {
       diskCacheKey,
       workspace,
       bazeliskVersion,
-      restoreResults
+      restoreResults,
+      repositoryCacheStartSize = null
     } = JSON.parse(state3);
     if (!cacheSaveAllowed) {
       info("Cache saving is disabled on this ref");
@@ -70346,10 +70427,40 @@ async function run() {
       info("Disk cache saving is disabled for this job");
       results.push(skippedSaveSummary(configuration.caches.disk, "disabled"));
     }
-    if (saves.repository && shouldSaveRepositoryCache(repositoryCacheSaveMode, restoreResults?.repository)) {
-      results.push(await save(configuration, configuration.caches.repository, restoreResults?.repository));
+    const repositoryCacheSizeBeforeSave = repositoryCacheSaveMode === "auto" ? logLocalCacheSize(
+      configuration.caches.repository,
+      "Repository cache size before automatic save decision"
+    ) : null;
+    if (saves.repository && shouldSaveRepositoryCache(
+      repositoryCacheSaveMode,
+      restoreResults?.repository,
+      repositoryCacheStartSize,
+      repositoryCacheSizeBeforeSave
+    )) {
+      const repositoryResult = await save(
+        configuration,
+        configuration.caches.repository,
+        restoreResults?.repository
+      );
+      results.push(repositoryResult);
+      if (repositoryCacheSaveMode === "auto" && repositoryResult.uploaded) {
+        const previousKey = getState(restoredKeyState(configuration.caches.repository));
+        if (previousKey) {
+          await deleteCacheByKey(previousKey);
+        } else {
+          info("Repository cache cleanup skipped because no previous cache generation was restored");
+        }
+      }
     } else if (saves.repository && repositoryCacheSaveMode === "auto") {
-      info("Repository cache automatic save skipped because an empty start-of-job cache was not confirmed");
+      if (repositoryCacheStartSize === null || repositoryCacheSizeBeforeSave === null) {
+        info(
+          "Repository cache automatic save skipped because its start or end size could not be measured"
+        );
+      } else {
+        info(
+          `Repository cache automatic save skipped because the local cache grew by less than 10% (${formatBytes(repositoryCacheStartSize)} -> ${formatBytes(repositoryCacheSizeBeforeSave)})`
+        );
+      }
       results.push(skippedSaveSummary(configuration.caches.repository, "existing cache preserved"));
     } else {
       info("Repository cache saving is disabled for this job");

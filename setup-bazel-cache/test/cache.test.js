@@ -20,11 +20,14 @@ import {
   cachePrefix,
   canSaveAfterFailure,
   describeLocalCachePath,
+  deleteCacheByKey,
   keyPlan,
   RESTORE_RESULT,
   formatBytes,
   localPathSize,
+  repositoryCacheGrewByTenPercent,
   restoreOutput,
+  restoredKeyState,
   skippedSaveSummary,
   shouldSaveRepositoryCache,
   shouldSave,
@@ -213,7 +216,7 @@ test('failed generational restores do not replace the existing cache snapshot', 
   assert.equal(shouldSave(configuration.caches.bazelisk, RESTORE_RESULT.UNKNOWN), true);
 });
 
-test('repository cache auto mode only seeds a missing cache', () => {
+test('repository cache auto mode still seeds a missing cache', () => {
   assert.equal(shouldSaveRepositoryCache('auto', RESTORE_RESULT.FALSE), true);
   assert.equal(shouldSaveRepositoryCache('auto', RESTORE_RESULT.TRUE), false);
   assert.equal(shouldSaveRepositoryCache('auto', RESTORE_RESULT.PARTIAL), false);
@@ -221,6 +224,68 @@ test('repository cache auto mode only seeds a missing cache', () => {
   assert.equal(shouldSaveRepositoryCache('auto', RESTORE_RESULT.SKIPPED), false);
   assert.equal(shouldSaveRepositoryCache('true', RESTORE_RESULT.TRUE), true);
   assert.equal(shouldSaveRepositoryCache('false', RESTORE_RESULT.FALSE), false);
+});
+
+test('repository cache auto mode publishes after ten percent growth', () => {
+  assert.equal(repositoryCacheGrewByTenPercent(100, 110), true);
+  assert.equal(repositoryCacheGrewByTenPercent(100, 109), false);
+  assert.equal(repositoryCacheGrewByTenPercent(0, 1), true);
+  assert.equal(repositoryCacheGrewByTenPercent(null, 100), false);
+
+  assert.equal(
+    shouldSaveRepositoryCache('auto', RESTORE_RESULT.PARTIAL, 100, 110),
+    true,
+  );
+  assert.equal(
+    shouldSaveRepositoryCache('auto', RESTORE_RESULT.PARTIAL, 100, 109),
+    false,
+  );
+  assert.equal(
+    shouldSaveRepositoryCache('auto', RESTORE_RESULT.UNKNOWN, 100, 200),
+    false,
+  );
+});
+
+test('restored cache keys use a stable post-action state name', () => {
+  assert.equal(
+    restoredKeyState({ name: 'repository' }),
+    'setup-bazel-cache-restored-key-repository',
+  );
+});
+
+test('previous repository cache cleanup uses the current ref', async (context) => {
+  let request;
+  context.mock.method(globalThis, 'fetch', async (url, options) => {
+    request = { url: String(url), options };
+    return { ok: true, status: 200, statusText: 'OK' };
+  });
+
+  assert.equal(await deleteCacheByKey('old-generation', {
+    token: 'token',
+    apiUrl: 'https://api.example.test',
+    repository: 'owner/repository',
+    ref: 'refs/heads/main',
+  }), true);
+  assert.equal(
+    request.url,
+    'https://api.example.test/repos/owner/repository/actions/caches?key=old-generation&ref=refs%2Fheads%2Fmain',
+  );
+  assert.equal(request.options.method, 'DELETE');
+});
+
+test('insufficient repository cache cleanup permission is non-fatal', async (context) => {
+  context.mock.method(globalThis, 'fetch', async () => ({
+    ok: false,
+    status: 403,
+    statusText: 'Forbidden',
+  }));
+
+  await assert.doesNotReject(() => deleteCacheByKey('old-generation', {
+    token: 'token',
+    apiUrl: 'https://api.example.test',
+    repository: 'owner/repository',
+    ref: 'refs/heads/main',
+  }));
 });
 
 test('repository auto mode does not allow failed jobs to seed a cache', () => {
