@@ -16,7 +16,7 @@ description: Configures Bazel 8.6+ caching with opinionated defaults and automat
 
 inputs:
   token:
-    description: GitHub token used to remove the previous repository cache generation
+    description: GitHub token used to remove previous repository and disk cache generations
     required: false
     default: ${{ github.token }}
 
@@ -62,7 +62,7 @@ inputs:
       Save the shared repository cache.
       Accepts true, false, or auto.
       With auto, save when the cache is empty at the start of the job or grows by at least 10%.
-      After a successful auto upload, the previous generation is removed when the token permits it.
+      After a successful upload, the previous generation owned by this action is removed when the token permits it.
       Saving is still limited to configured cache-saving branches (see cache-save-branch-patterns).
     required: false
     default: "auto"

@@ -88,7 +88,15 @@ async function run() {
       results.push(skippedSaveSummary(configuration.caches.bazelisk, 'disabled'));
     }
     if (saves.disk) {
-      results.push(await save(configuration, configuration.caches.disk, restoreResults?.disk));
+      const diskResult = await save(
+        configuration,
+        configuration.caches.disk,
+        restoreResults?.disk,
+      );
+      results.push(diskResult);
+      if (diskResult.uploaded) {
+        await cleanupPreviousGeneration(configuration, configuration.caches.disk);
+      }
     } else {
       core.info('Disk cache saving is disabled for this job');
       results.push(skippedSaveSummary(configuration.caches.disk, 'disabled'));
@@ -114,13 +122,8 @@ async function run() {
         restoreResults?.repository,
       );
       results.push(repositoryResult);
-      if (repositoryCacheSaveMode === 'auto' && repositoryResult.uploaded) {
-        const previousKey = core.getState(restoredKeyState(configuration.caches.repository));
-        if (previousKey) {
-          await deleteCacheByKey(previousKey);
-        } else {
-          core.info('Repository cache cleanup skipped because no previous cache generation was restored');
-        }
+      if (repositoryResult.uploaded) {
+        await cleanupPreviousGeneration(configuration, configuration.caches.repository);
       }
     } else if (saves.repository && repositoryCacheSaveMode === 'auto') {
       if (repositoryCacheStartSize === null || repositoryCacheSizeBeforeSave === null) {
@@ -142,6 +145,23 @@ async function run() {
   } catch (error) {
     core.setFailed(error.stack || error.message);
   }
+}
+
+/** Remove only the prior generation restored by this action, after upload. */
+async function cleanupPreviousGeneration(configuration, cacheConfiguration) {
+  const previousKey = core.getState(restoredKeyState(cacheConfiguration));
+  if (!previousKey) {
+    core.info(
+      `${cacheConfiguration.name} cache cleanup skipped because no previous ` +
+      'cache generation was restored',
+    );
+    return;
+  }
+
+  await deleteCacheByKey(previousKey, {
+    configuration,
+    cacheConfiguration,
+  });
 }
 
 run();

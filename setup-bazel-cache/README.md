@@ -36,7 +36,8 @@ steps:
 
 Further parameters to configure cache behavior:
 - `token` is optional and defaults to `${{ github.token }}`. It is only used to
-  remove the previous repository-cache generation after an automatic upload.
+  remove the previous repository- or disk-cache generation after a successful
+  upload by this action.
 - `bazelisk-cache-restore` and `bazelisk-cache-save` accept `true` or `false`.
   Both default to `true`; saving is still limited to configured cache-saving
   branches. `repository-cache-restore` accepts `true` or `false`, while
@@ -81,10 +82,10 @@ permissions:
   contents: read
 ```
 
-The action uses the token input to remove the previous repository-cache
-generation after an automatic upload. Grant `actions: write` when this cleanup
-should work; without it, the upload still succeeds and cleanup is reported as
-an informational message:
+The action uses the token input to remove the previous repository- or
+disk-cache generation after a successful upload. Grant `actions: write` when
+this cleanup should work; without it, the upload still succeeds and cleanup is
+reported as an informational message:
 
 ```yaml
 permissions:
@@ -156,11 +157,12 @@ archive error from turning an incomplete local directory into the newest cache
 generation. A normal cache miss still creates a new generation.
 
 Each disk-cache generation includes the previously restored cache plus new
-entries. Use the companion [`prune-cache`](../prune-cache/README.md) action to
-remove superseded GitHub cache generations. Pruning old generations does not
-limit the size of the newest Bazel disk-cache archive. Cache-size and age limits
-are workload-specific and should be configured in the repository's `.bazelrc`
-with Bazel's `--experimental_disk_cache_gc_max_size` and
+entries. After a successful upload, this action removes only the previously
+restored generation belonging to its own disk-cache family and Git ref. A token
+with `actions: write` is required for that cleanup; without it, the upload
+still succeeds and the action reports an informational message. Cache-size and
+age limits are workload-specific and should be configured in the repository's
+`.bazelrc` with Bazel's `--experimental_disk_cache_gc_max_size` and
 `--experimental_disk_cache_gc_max_age` flags when needed.
 
 The rolling repository snapshot may retain artifacts that are no longer
@@ -172,8 +174,9 @@ before publishing such a replacement.
 With the default `repository-cache-save: "auto"`, the first successful
 cache-writing job seeds the repository cache when no snapshot can be restored.
 Jobs that restore an existing snapshot publish a new generation only when the
-local repository payload grows by at least 10%; after that upload, the previous
-generation is removed when the token has `actions: write`. Use
+local repository payload grows by at least 10%; after that upload, this action
+removes only the previous repository generation from the same cache family and
+ref when the token has `actions: write`. Use
 `repository-cache-save: "true"` when a job is intended to publish an additive
 generation on every successful run, or `"false"` to disable repository-cache
 saving entirely.

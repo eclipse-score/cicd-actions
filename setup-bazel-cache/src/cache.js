@@ -120,7 +120,7 @@ function cachePrefix(configuration, cacheConfiguration) {
   return `${configuration.baseKey}-${cacheConfiguration.name}-`;
 }
 
-/** Generate the readable, prune-compatible timestamp generation suffix. */
+/** Generate the readable timestamp generation suffix owned by this action. */
 function generationSuffix() {
   return Date.now().toString();
 }
@@ -306,8 +306,17 @@ async function save(configuration, cacheConfiguration, restoreResult) {
   return result;
 }
 
-/** Delete one prior repository cache generation without making cleanup required. */
+/** Return whether a key is one of this action's own timestamped generations. */
+function isOwnedGenerationKey(configuration, cacheConfiguration, cacheKey) {
+  if (!cacheConfiguration.generational || typeof cacheKey !== 'string') return false;
+  const prefix = cachePrefix(configuration, cacheConfiguration);
+  return cacheKey.startsWith(prefix) && /^\d+$/.test(cacheKey.slice(prefix.length));
+}
+
+/** Delete one prior generation without making cleanup required. */
 async function deleteCacheByKey(cacheKey, {
+  configuration,
+  cacheConfiguration,
   token = core.getInput('token'),
   apiUrl = process.env.GITHUB_API_URL || 'https://api.github.com',
   repository = process.env.GITHUB_REPOSITORY,
@@ -315,23 +324,36 @@ async function deleteCacheByKey(cacheKey, {
 } = {}) {
   const permissionHint =
     'Grant the action actions: write (for example, via permissions) to enable automatic cleanup.';
+  const cacheName = cacheConfiguration?.name || 'cache';
+
+  if (!configuration || !cacheConfiguration || !isOwnedGenerationKey(
+    configuration,
+    cacheConfiguration,
+    cacheKey,
+  )) {
+    core.info(
+      `${cacheName} cache cleanup skipped because the previous key is not an ` +
+      'owned setup-bazel-cache generation.',
+    );
+    return false;
+  }
 
   if (!token) {
-    core.info(`Repository cache cleanup skipped because no GitHub token is available. ${permissionHint}`);
+    core.info(`${cacheName} cache cleanup skipped because no GitHub token is available. ${permissionHint}`);
     return false;
   }
   if (!repository) {
-    core.info(`Repository cache cleanup skipped because GITHUB_REPOSITORY is not available. ${permissionHint}`);
+    core.info(`${cacheName} cache cleanup skipped because GITHUB_REPOSITORY is not available. ${permissionHint}`);
     return false;
   }
   if (!ref) {
-    core.info(`Repository cache cleanup skipped because GITHUB_REF is not available. ${permissionHint}`);
+    core.info(`${cacheName} cache cleanup skipped because GITHUB_REF is not available. ${permissionHint}`);
     return false;
   }
 
   const [owner, repo, ...unexpectedParts] = repository.split('/');
   if (!owner || !repo || unexpectedParts.length > 0) {
-    core.info(`Repository cache cleanup skipped because GITHUB_REPOSITORY is invalid. ${permissionHint}`);
+    core.info(`${cacheName} cache cleanup skipped because GITHUB_REPOSITORY is invalid. ${permissionHint}`);
     return false;
   }
 
@@ -353,22 +375,23 @@ async function deleteCacheByKey(cacheKey, {
     });
 
     if (response.ok) {
-      core.info(`Deleted previous repository cache generation ${cacheKey}`);
+      core.info(`Deleted previous ${cacheName} cache generation ${cacheKey}`);
       return true;
     }
 
     if (response.status === 401 || response.status === 403 || response.status === 404) {
       core.info(
-        `Repository cache cleanup skipped because the GitHub token lacks permission to delete caches. ${permissionHint}`,
+        `${cacheName} cache cleanup skipped because the GitHub token lacks permission ` +
+        `to delete caches. ${permissionHint}`,
       );
     } else {
       core.warning(
-        `Repository cache cleanup failed for ${cacheKey}: ` +
+        `${cacheName} cache cleanup failed for ${cacheKey}: ` +
         `GitHub API returned HTTP ${response.status} ${response.statusText}`,
       );
     }
   } catch (error) {
-    core.warning(`Repository cache cleanup failed for ${cacheKey}: ${error.message || error}`);
+    core.warning(`${cacheName} cache cleanup failed for ${cacheKey}: ${error.message || error}`);
   }
   return false;
 }
@@ -388,6 +411,7 @@ export {
   formatBytes,
   describeLocalCachePath,
   deleteCacheByKey,
+  isOwnedGenerationKey,
   logLocalCacheSize,
   localPathSize,
   repositoryCacheGrewByTenPercent,

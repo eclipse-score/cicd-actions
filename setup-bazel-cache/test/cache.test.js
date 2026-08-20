@@ -24,6 +24,7 @@ import {
   keyPlan,
   RESTORE_RESULT,
   formatBytes,
+  isOwnedGenerationKey,
   localPathSize,
   repositoryCacheGrewByTenPercent,
   restoreOutput,
@@ -253,14 +254,46 @@ test('restored cache keys use a stable post-action state name', () => {
   );
 });
 
-test('previous repository cache cleanup uses the current ref', async (context) => {
+test('only setup-bazel-cache generation keys are eligible for cleanup', () => {
+  const configuration = createConfiguration('/workspace', 'test');
+  const repositoryPrefix = cachePrefix(configuration, configuration.caches.repository);
+  const diskPrefix = cachePrefix(configuration, configuration.caches.disk);
+
+  assert.equal(
+    isOwnedGenerationKey(configuration, configuration.caches.repository, `${repositoryPrefix}1700000000000`),
+    true,
+  );
+  assert.equal(
+    isOwnedGenerationKey(configuration, configuration.caches.disk, `${diskPrefix}1700000000000`),
+    true,
+  );
+  assert.equal(
+    isOwnedGenerationKey(configuration, configuration.caches.repository, 'unrelated-cache-1700000000000'),
+    false,
+  );
+  assert.equal(
+    isOwnedGenerationKey(configuration, configuration.caches.repository, `${repositoryPrefix}not-a-generation`),
+    false,
+  );
+  assert.equal(
+    isOwnedGenerationKey(configuration, configuration.caches.bazelisk, `${configuration.baseKey}-bazelisk-1700000000000`),
+    false,
+  );
+});
+
+test('previous cache cleanup uses the current ref and exact cache family', async (context) => {
   let request;
   context.mock.method(globalThis, 'fetch', async (url, options) => {
     request = { url: String(url), options };
     return { ok: true, status: 200, statusText: 'OK' };
   });
 
-  assert.equal(await deleteCacheByKey('old-generation', {
+  const configuration = createConfiguration('/workspace', 'test');
+  const cacheConfiguration = configuration.caches.repository;
+  const oldKey = `${cachePrefix(configuration, cacheConfiguration)}1700000000000`;
+  assert.equal(await deleteCacheByKey(oldKey, {
+    configuration,
+    cacheConfiguration,
     token: 'token',
     apiUrl: 'https://api.example.test',
     repository: 'owner/repository',
@@ -268,19 +301,43 @@ test('previous repository cache cleanup uses the current ref', async (context) =
   }), true);
   assert.equal(
     request.url,
-    'https://api.example.test/repos/owner/repository/actions/caches?key=old-generation&ref=refs%2Fheads%2Fmain',
+    `https://api.example.test/repos/owner/repository/actions/caches?key=${oldKey}&ref=refs%2Fheads%2Fmain`,
   );
   assert.equal(request.options.method, 'DELETE');
 });
 
-test('insufficient repository cache cleanup permission is non-fatal', async (context) => {
+test('foreign cache keys are never sent to the delete API', async (context) => {
+  let requestCount = 0;
+  context.mock.method(globalThis, 'fetch', async () => {
+    requestCount += 1;
+    return { ok: true, status: 200, statusText: 'OK' };
+  });
+
+  const configuration = createConfiguration('/workspace', 'test');
+  assert.equal(await deleteCacheByKey('foreign-cache-1700000000000', {
+    configuration,
+    cacheConfiguration: configuration.caches.repository,
+    token: 'token',
+    apiUrl: 'https://api.example.test',
+    repository: 'owner/repository',
+    ref: 'refs/heads/main',
+  }), false);
+  assert.equal(requestCount, 0);
+});
+
+test('insufficient cache cleanup permission is non-fatal', async (context) => {
   context.mock.method(globalThis, 'fetch', async () => ({
     ok: false,
     status: 403,
     statusText: 'Forbidden',
   }));
 
-  await assert.doesNotReject(() => deleteCacheByKey('old-generation', {
+  const configuration = createConfiguration('/workspace', 'test');
+  const cacheConfiguration = configuration.caches.disk;
+  const oldKey = `${cachePrefix(configuration, cacheConfiguration)}1700000000000`;
+  await assert.doesNotReject(() => deleteCacheByKey(oldKey, {
+    configuration,
+    cacheConfiguration,
     token: 'token',
     apiUrl: 'https://api.example.test',
     repository: 'owner/repository',

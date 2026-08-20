@@ -70218,28 +70218,46 @@ async function save(configuration, cacheConfiguration, restoreResult) {
   }
   return result;
 }
+function isOwnedGenerationKey(configuration, cacheConfiguration, cacheKey) {
+  if (!cacheConfiguration.generational || typeof cacheKey !== "string") return false;
+  const prefix2 = cachePrefix(configuration, cacheConfiguration);
+  return cacheKey.startsWith(prefix2) && /^\d+$/.test(cacheKey.slice(prefix2.length));
+}
 async function deleteCacheByKey(cacheKey, {
+  configuration,
+  cacheConfiguration,
   token = getInput("token"),
   apiUrl = process.env.GITHUB_API_URL || "https://api.github.com",
   repository = process.env.GITHUB_REPOSITORY,
   ref = process.env.GITHUB_REF
 } = {}) {
   const permissionHint = "Grant the action actions: write (for example, via permissions) to enable automatic cleanup.";
+  const cacheName = cacheConfiguration?.name || "cache";
+  if (!configuration || !cacheConfiguration || !isOwnedGenerationKey(
+    configuration,
+    cacheConfiguration,
+    cacheKey
+  )) {
+    info(
+      `${cacheName} cache cleanup skipped because the previous key is not an owned setup-bazel-cache generation.`
+    );
+    return false;
+  }
   if (!token) {
-    info(`Repository cache cleanup skipped because no GitHub token is available. ${permissionHint}`);
+    info(`${cacheName} cache cleanup skipped because no GitHub token is available. ${permissionHint}`);
     return false;
   }
   if (!repository) {
-    info(`Repository cache cleanup skipped because GITHUB_REPOSITORY is not available. ${permissionHint}`);
+    info(`${cacheName} cache cleanup skipped because GITHUB_REPOSITORY is not available. ${permissionHint}`);
     return false;
   }
   if (!ref) {
-    info(`Repository cache cleanup skipped because GITHUB_REF is not available. ${permissionHint}`);
+    info(`${cacheName} cache cleanup skipped because GITHUB_REF is not available. ${permissionHint}`);
     return false;
   }
   const [owner, repo, ...unexpectedParts] = repository.split("/");
   if (!owner || !repo || unexpectedParts.length > 0) {
-    info(`Repository cache cleanup skipped because GITHUB_REPOSITORY is invalid. ${permissionHint}`);
+    info(`${cacheName} cache cleanup skipped because GITHUB_REPOSITORY is invalid. ${permissionHint}`);
     return false;
   }
   try {
@@ -70259,20 +70277,20 @@ async function deleteCacheByKey(cacheKey, {
       }
     });
     if (response.ok) {
-      info(`Deleted previous repository cache generation ${cacheKey}`);
+      info(`Deleted previous ${cacheName} cache generation ${cacheKey}`);
       return true;
     }
     if (response.status === 401 || response.status === 403 || response.status === 404) {
       info(
-        `Repository cache cleanup skipped because the GitHub token lacks permission to delete caches. ${permissionHint}`
+        `${cacheName} cache cleanup skipped because the GitHub token lacks permission to delete caches. ${permissionHint}`
       );
     } else {
       warning(
-        `Repository cache cleanup failed for ${cacheKey}: GitHub API returned HTTP ${response.status} ${response.statusText}`
+        `${cacheName} cache cleanup failed for ${cacheKey}: GitHub API returned HTTP ${response.status} ${response.statusText}`
       );
     }
   } catch (error2) {
-    warning(`Repository cache cleanup failed for ${cacheKey}: ${error2.message || error2}`);
+    warning(`${cacheName} cache cleanup failed for ${cacheKey}: ${error2.message || error2}`);
   }
   return false;
 }
@@ -70422,7 +70440,15 @@ async function run() {
       results.push(skippedSaveSummary(configuration.caches.bazelisk, "disabled"));
     }
     if (saves.disk) {
-      results.push(await save(configuration, configuration.caches.disk, restoreResults?.disk));
+      const diskResult = await save(
+        configuration,
+        configuration.caches.disk,
+        restoreResults?.disk
+      );
+      results.push(diskResult);
+      if (diskResult.uploaded) {
+        await cleanupPreviousGeneration(configuration, configuration.caches.disk);
+      }
     } else {
       info("Disk cache saving is disabled for this job");
       results.push(skippedSaveSummary(configuration.caches.disk, "disabled"));
@@ -70443,13 +70469,8 @@ async function run() {
         restoreResults?.repository
       );
       results.push(repositoryResult);
-      if (repositoryCacheSaveMode === "auto" && repositoryResult.uploaded) {
-        const previousKey = getState(restoredKeyState(configuration.caches.repository));
-        if (previousKey) {
-          await deleteCacheByKey(previousKey);
-        } else {
-          info("Repository cache cleanup skipped because no previous cache generation was restored");
-        }
+      if (repositoryResult.uploaded) {
+        await cleanupPreviousGeneration(configuration, configuration.caches.repository);
       }
     } else if (saves.repository && repositoryCacheSaveMode === "auto") {
       if (repositoryCacheStartSize === null || repositoryCacheSizeBeforeSave === null) {
@@ -70470,6 +70491,19 @@ async function run() {
   } catch (error2) {
     setFailed(error2.stack || error2.message);
   }
+}
+async function cleanupPreviousGeneration(configuration, cacheConfiguration) {
+  const previousKey = getState(restoredKeyState(cacheConfiguration));
+  if (!previousKey) {
+    info(
+      `${cacheConfiguration.name} cache cleanup skipped because no previous cache generation was restored`
+    );
+    return;
+  }
+  await deleteCacheByKey(previousKey, {
+    configuration,
+    cacheConfiguration
+  });
 }
 run();
 /*! Bundled license information:
