@@ -18,7 +18,9 @@ import path from 'node:path';
 import test from 'node:test';
 import {
   createConfiguration,
+  installManagedBazelrc,
   readBazeliskVersion,
+  removeManagedBazelrc,
   validateDiskCacheKey,
 } from '../src/config.js';
 
@@ -61,6 +63,38 @@ test('post-save configuration can use the version captured during setup', () => 
       .caches.bazelisk.keySuffix,
     '8.6.0',
   );
+});
+
+test('Bazel 8 compatibility import preserves and restores the user bazelrc', (context) => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'setup-bazel-cache-home-'));
+  const userBazelrc = path.join(home, '.bazelrc');
+  const original = '# existing user configuration\n';
+  fs.writeFileSync(userBazelrc, original);
+  context.after(() => fs.rmSync(home, { recursive: true, force: true }));
+
+  const configuration = {
+    userBazelrc,
+    bazelrcImport: [
+      '# setup-bazel-cache: begin managed import',
+      'try-import /tmp/setup-bazel-cache.bazelrc',
+      '# setup-bazel-cache: end managed import',
+      '',
+    ].join('\n'),
+  };
+
+  installManagedBazelrc(configuration);
+  const installed = fs.readFileSync(userBazelrc, 'utf8');
+  assert.match(installed, /# existing user configuration/);
+  assert.equal(
+    installed.match(/# setup-bazel-cache: begin managed import/g).length,
+    1,
+  );
+
+  installManagedBazelrc(configuration);
+  assert.equal(fs.readFileSync(userBazelrc, 'utf8'), installed);
+
+  removeManagedBazelrc(configuration);
+  assert.equal(fs.readFileSync(userBazelrc, 'utf8'), original);
 });
 
 test('disk cache keys are constrained to safe cache-key components', () => {

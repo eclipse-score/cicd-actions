@@ -70179,6 +70179,8 @@ var import_node_os3 = __toESM(require("node:os"), 1);
 var import_node_path2 = __toESM(require("node:path"), 1);
 var MAX_BAZELISK_VERSION_LENGTH = 400;
 var MAX_DISK_CACHE_KEY_LENGTH = 400;
+var BAZELRC_MARKER_START = "# setup-bazel-cache: begin managed import";
+var BAZELRC_MARKER_END = "# setup-bazel-cache: end managed import";
 function validateDiskCacheKey(value) {
   if (!value || value.length > MAX_DISK_CACHE_KEY_LENGTH || hasControlCharacter(value) || value.includes(",")) {
     throw new Error(
@@ -70212,6 +70214,31 @@ function readBazeliskVersion(workspace) {
   }
   return validateBazeliskVersion(version3);
 }
+function removeManagedBazelrcBlock(contents) {
+  const start = contents.indexOf(BAZELRC_MARKER_START);
+  if (start < 0) return contents;
+  const end = contents.indexOf(BAZELRC_MARKER_END, start);
+  if (end < 0) return contents;
+  const afterEnd = end + BAZELRC_MARKER_END.length;
+  const newlineAfterEnd = contents[afterEnd] === "\n" ? 1 : 0;
+  return contents.slice(0, start) + contents.slice(afterEnd + newlineAfterEnd);
+}
+function removeManagedBazelrc(configuration) {
+  let contents;
+  try {
+    contents = import_node_fs3.default.readFileSync(configuration.userBazelrc, "utf8");
+  } catch (error2) {
+    if (error2.code === "ENOENT") return;
+    throw error2;
+  }
+  const cleaned = removeManagedBazelrcBlock(contents);
+  if (cleaned === contents) return;
+  if (cleaned === "") {
+    import_node_fs3.default.unlinkSync(configuration.userBazelrc);
+  } else {
+    import_node_fs3.default.writeFileSync(configuration.userBazelrc, cleaned);
+  }
+}
 function createConfiguration(workspace, diskCacheKey, { bazeliskVersion } = {}) {
   validateDiskCacheKey(diskCacheKey);
   const resolvedBazeliskVersion = bazeliskVersion === void 0 ? readBazeliskVersion(workspace) : validateBazeliskVersion(bazeliskVersion);
@@ -70222,12 +70249,19 @@ function createConfiguration(workspace, diskCacheKey, { bazeliskVersion } = {}) 
   return {
     additiveCacheSaveEnvironment: "SETUP_BAZEL_CACHE_ADDITIVE_SAVE",
     bazelrc: import_node_path2.default.join(runnerTemp, "setup-bazel-cache.bazelrc"),
+    bazelrcImport: [
+      BAZELRC_MARKER_START,
+      `try-import ${import_node_path2.default.join(runnerTemp, "setup-bazel-cache.bazelrc")}`,
+      BAZELRC_MARKER_END,
+      ""
+    ].join("\n"),
     bazelrcContents: [
       `build --disk_cache=${import_node_path2.default.join(cacheRoot, "bazel-disk")}`,
       `common --repository_cache=${import_node_path2.default.join(cacheRoot, "bazel-repo")}`,
       ""
     ].join("\n"),
     cacheSaveState: "setup-bazel-cache-configuration",
+    userBazelrc: import_node_path2.default.join(home, ".bazelrc"),
     caches: {
       bazelisk: {
         name: "bazelisk",
@@ -70255,6 +70289,7 @@ function createConfiguration(workspace, diskCacheKey, { bazeliskVersion } = {}) 
 
 // src/post.js
 async function run() {
+  const userBazelrc = getState("setup-bazel-cache-user-bazelrc");
   try {
     const state3 = getState("setup-bazel-cache-configuration");
     if (!state3) {
@@ -70294,6 +70329,15 @@ async function run() {
     }
   } catch (error2) {
     setFailed(error2.stack || error2.message);
+  } finally {
+    if (userBazelrc) {
+      try {
+        removeManagedBazelrc({ userBazelrc });
+        info(`Removed Bazel 8 compatibility import from ${userBazelrc}`);
+      } catch (error2) {
+        warning(`Could not remove Bazel 8 compatibility import: ${error2.message || error2}`);
+      }
+    }
   }
 }
 run();

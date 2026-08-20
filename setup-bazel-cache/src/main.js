@@ -20,7 +20,7 @@ import {
   restore,
   restoreOutput,
 } from './cache.js';
-import { createConfiguration } from './config.js';
+import { createConfiguration, installManagedBazelrc } from './config.js';
 import {
   ensureComparisonHistory,
   lockFileChanged,
@@ -112,6 +112,10 @@ async function run() {
     const bazelrcFiles = [process.env.BAZELRC, configuration.bazelrc].filter(Boolean);
     core.exportVariable('BAZELRC', bazelrcFiles.join(','));
 
+    for (const cache of [configuration.caches.disk, configuration.caches.repository]) {
+      for (const cachePath of cache.paths) fs.mkdirSync(cachePath, { recursive: true });
+    }
+
     const restoreResults = {
       bazelisk: await restoreCache(configuration, configuration.caches.bazelisk, restores.bazelisk),
       disk: await restoreCache(configuration, configuration.caches.disk, restores.disk),
@@ -126,6 +130,10 @@ async function run() {
       `Restore summary: bazelisk=${restoreResults.bazelisk}, ` +
       `disk=${restoreResults.disk}, repository=${restoreResults.repository}`,
     );
+
+    core.saveState('setup-bazel-cache-user-bazelrc', configuration.userBazelrc);
+    installManagedBazelrc(configuration);
+    core.info(`Added Bazel 8 compatibility import to ${configuration.userBazelrc}`);
 
     const failedJobCacheSaveAllowed =
       cacheSaveAllowed && canSaveAfterFailure(restoreResults, saves);

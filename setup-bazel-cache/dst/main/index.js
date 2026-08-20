@@ -69653,6 +69653,8 @@ var import_node_os3 = __toESM(require("node:os"), 1);
 var import_node_path2 = __toESM(require("node:path"), 1);
 var MAX_BAZELISK_VERSION_LENGTH = 400;
 var MAX_DISK_CACHE_KEY_LENGTH = 400;
+var BAZELRC_MARKER_START = "# setup-bazel-cache: begin managed import";
+var BAZELRC_MARKER_END = "# setup-bazel-cache: end managed import";
 function validateDiskCacheKey(value) {
   if (!value || value.length > MAX_DISK_CACHE_KEY_LENGTH || hasControlCharacter(value) || value.includes(",")) {
     throw new Error(
@@ -69686,6 +69688,29 @@ function readBazeliskVersion(workspace) {
   }
   return validateBazeliskVersion(version3);
 }
+function removeManagedBazelrcBlock(contents) {
+  const start = contents.indexOf(BAZELRC_MARKER_START);
+  if (start < 0) return contents;
+  const end = contents.indexOf(BAZELRC_MARKER_END, start);
+  if (end < 0) return contents;
+  const afterEnd = end + BAZELRC_MARKER_END.length;
+  const newlineAfterEnd = contents[afterEnd] === "\n" ? 1 : 0;
+  return contents.slice(0, start) + contents.slice(afterEnd + newlineAfterEnd);
+}
+function installManagedBazelrc(configuration) {
+  let contents = "";
+  try {
+    contents = import_node_fs3.default.readFileSync(configuration.userBazelrc, "utf8");
+  } catch (error2) {
+    if (error2.code !== "ENOENT") throw error2;
+  }
+  const cleaned = removeManagedBazelrcBlock(contents);
+  const separator = cleaned && !cleaned.endsWith("\n") ? "\n" : "";
+  import_node_fs3.default.writeFileSync(
+    configuration.userBazelrc,
+    `${cleaned}${separator}${configuration.bazelrcImport}`
+  );
+}
 function createConfiguration(workspace, diskCacheKey, { bazeliskVersion } = {}) {
   validateDiskCacheKey(diskCacheKey);
   const resolvedBazeliskVersion = bazeliskVersion === void 0 ? readBazeliskVersion(workspace) : validateBazeliskVersion(bazeliskVersion);
@@ -69696,12 +69721,19 @@ function createConfiguration(workspace, diskCacheKey, { bazeliskVersion } = {}) 
   return {
     additiveCacheSaveEnvironment: "SETUP_BAZEL_CACHE_ADDITIVE_SAVE",
     bazelrc: import_node_path2.default.join(runnerTemp, "setup-bazel-cache.bazelrc"),
+    bazelrcImport: [
+      BAZELRC_MARKER_START,
+      `try-import ${import_node_path2.default.join(runnerTemp, "setup-bazel-cache.bazelrc")}`,
+      BAZELRC_MARKER_END,
+      ""
+    ].join("\n"),
     bazelrcContents: [
       `build --disk_cache=${import_node_path2.default.join(cacheRoot, "bazel-disk")}`,
       `common --repository_cache=${import_node_path2.default.join(cacheRoot, "bazel-repo")}`,
       ""
     ].join("\n"),
     cacheSaveState: "setup-bazel-cache-configuration",
+    userBazelrc: import_node_path2.default.join(home, ".bazelrc"),
     caches: {
       bazelisk: {
         name: "bazelisk",
@@ -69963,6 +69995,9 @@ async function run() {
     info(`Created ${configuration.bazelrc}`);
     const bazelrcFiles = [process.env.BAZELRC, configuration.bazelrc].filter(Boolean);
     exportVariable("BAZELRC", bazelrcFiles.join(","));
+    for (const cache of [configuration.caches.disk, configuration.caches.repository]) {
+      for (const cachePath of cache.paths) import_node_fs5.default.mkdirSync(cachePath, { recursive: true });
+    }
     const restoreResults = {
       bazelisk: await restoreCache2(configuration, configuration.caches.bazelisk, restores.bazelisk),
       disk: await restoreCache2(configuration, configuration.caches.disk, restores.disk),
@@ -69976,6 +70011,9 @@ async function run() {
     info(
       `Restore summary: bazelisk=${restoreResults.bazelisk}, disk=${restoreResults.disk}, repository=${restoreResults.repository}`
     );
+    saveState("setup-bazel-cache-user-bazelrc", configuration.userBazelrc);
+    installManagedBazelrc(configuration);
+    info(`Added Bazel 8 compatibility import to ${configuration.userBazelrc}`);
     const failedJobCacheSaveAllowed = cacheSaveAllowed && canSaveAfterFailure(restoreResults, saves);
     setOutput(
       "_failed-job-cache-save-allowed",

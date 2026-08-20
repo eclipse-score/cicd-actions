@@ -17,6 +17,8 @@ import path from 'node:path';
 
 const MAX_BAZELISK_VERSION_LENGTH = 400;
 const MAX_DISK_CACHE_KEY_LENGTH = 400;
+const BAZELRC_MARKER_START = '# setup-bazel-cache: begin managed import';
+const BAZELRC_MARKER_END = '# setup-bazel-cache: end managed import';
 
 /** Reject malformed key components before cache APIs can fail late in the job. */
 function validateDiskCacheKey(value) {
@@ -69,6 +71,55 @@ function readBazeliskVersion(workspace) {
   return validateBazeliskVersion(version);
 }
 
+/** Remove the action-managed import block while preserving user configuration. */
+function removeManagedBazelrcBlock(contents) {
+  const start = contents.indexOf(BAZELRC_MARKER_START);
+  if (start < 0) return contents;
+
+  const end = contents.indexOf(BAZELRC_MARKER_END, start);
+  if (end < 0) return contents;
+
+  const afterEnd = end + BAZELRC_MARKER_END.length;
+  const newlineAfterEnd = contents[afterEnd] === '\n' ? 1 : 0;
+  return contents.slice(0, start) + contents.slice(afterEnd + newlineAfterEnd);
+}
+
+/** Add the generated cache rc as an import to Bazel 8's standard user rc. */
+function installManagedBazelrc(configuration) {
+  let contents = '';
+  try {
+    contents = fs.readFileSync(configuration.userBazelrc, 'utf8');
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
+
+  const cleaned = removeManagedBazelrcBlock(contents);
+  const separator = cleaned && !cleaned.endsWith('\n') ? '\n' : '';
+  fs.writeFileSync(
+    configuration.userBazelrc,
+    `${cleaned}${separator}${configuration.bazelrcImport}`,
+  );
+}
+
+/** Remove the temporary import from the standard user rc after the job. */
+function removeManagedBazelrc(configuration) {
+  let contents;
+  try {
+    contents = fs.readFileSync(configuration.userBazelrc, 'utf8');
+  } catch (error) {
+    if (error.code === 'ENOENT') return;
+    throw error;
+  }
+
+  const cleaned = removeManagedBazelrcBlock(contents);
+  if (cleaned === contents) return;
+  if (cleaned === '') {
+    fs.unlinkSync(configuration.userBazelrc);
+  } else {
+    fs.writeFileSync(configuration.userBazelrc, cleaned);
+  }
+}
+
 /** Build the complete Linux cache configuration in one place. */
 function createConfiguration(workspace, diskCacheKey, { bazeliskVersion } = {}) {
   validateDiskCacheKey(diskCacheKey);
@@ -84,12 +135,19 @@ function createConfiguration(workspace, diskCacheKey, { bazeliskVersion } = {}) 
     additiveCacheSaveEnvironment:
       'SETUP_BAZEL_CACHE_ADDITIVE_SAVE',
     bazelrc: path.join(runnerTemp, 'setup-bazel-cache.bazelrc'),
+    bazelrcImport: [
+      BAZELRC_MARKER_START,
+      `try-import ${path.join(runnerTemp, 'setup-bazel-cache.bazelrc')}`,
+      BAZELRC_MARKER_END,
+      '',
+    ].join('\n'),
     bazelrcContents: [
       `build --disk_cache=${path.join(cacheRoot, 'bazel-disk')}`,
       `common --repository_cache=${path.join(cacheRoot, 'bazel-repo')}`,
       '',
     ].join('\n'),
     cacheSaveState: 'setup-bazel-cache-configuration',
+    userBazelrc: path.join(home, '.bazelrc'),
     caches: {
       bazelisk: {
         name: 'bazelisk',
@@ -115,4 +173,11 @@ function createConfiguration(workspace, diskCacheKey, { bazeliskVersion } = {}) 
   };
 }
 
-export { createConfiguration, readBazeliskVersion, validateDiskCacheKey };
+export {
+  createConfiguration,
+  installManagedBazelrc,
+  readBazeliskVersion,
+  removeManagedBazelrc,
+  removeManagedBazelrcBlock,
+  validateDiskCacheKey,
+};
