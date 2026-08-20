@@ -69534,9 +69534,6 @@ function localPathSize(root) {
   }
   return bytes;
 }
-function localCacheSize(cacheConfiguration) {
-  return cacheConfiguration.paths.reduce((bytes, cachePath) => bytes + localPathSize(cachePath), 0);
-}
 function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;
   const unitIndex = Math.min(
@@ -69547,25 +69544,23 @@ function formatBytes(bytes) {
   const precision = value >= 100 ? 0 : value >= 10 ? 1 : 2;
   return `${value.toFixed(precision)} ${BYTE_UNITS[unitIndex]}`;
 }
-function describeLocalCachePaths(cacheConfiguration) {
-  return cacheConfiguration.paths.map((cachePath) => {
-    try {
-      const entry = import_node_fs2.default.lstatSync(cachePath);
-      if (entry.isSymbolicLink()) return `${cachePath}: symlink (ignored)`;
-      if (!entry.isDirectory()) return `${cachePath}: file (${formatBytes(entry.size)})`;
-      const directEntries = import_node_fs2.default.readdirSync(cachePath).length;
-      if (directEntries === 0) return `${cachePath}: empty directory`;
-      return `${cachePath}: directory with ${directEntries} direct entries and ${formatBytes(localPathSize(cachePath))} recursive payload`;
-    } catch (error2) {
-      if (error2.code === "ENOENT") return `${cachePath}: missing`;
-      return `${cachePath}: unavailable (${error2.message || error2})`;
-    }
-  }).join("; ");
+function describeLocalCachePath(cachePath) {
+  try {
+    const entry = import_node_fs2.default.lstatSync(cachePath);
+    if (entry.isSymbolicLink()) return `${cachePath}: symlink (ignored)`;
+    if (!entry.isDirectory()) return `${cachePath}: file (${formatBytes(entry.size)})`;
+    const directEntries = import_node_fs2.default.readdirSync(cachePath).length;
+    if (directEntries === 0) return `${cachePath}: empty directory`;
+    return `${cachePath}: directory with ${directEntries} direct entries and ${formatBytes(localPathSize(cachePath))} recursive payload`;
+  } catch (error2) {
+    if (error2.code === "ENOENT") return `${cachePath}: missing`;
+    return `${cachePath}: unavailable (${error2.message || error2})`;
+  }
 }
 function logLocalCacheSize(cacheConfiguration, label) {
   try {
-    const bytes = localCacheSize(cacheConfiguration);
-    const details = bytes === 0 ? `; path status: ${describeLocalCachePaths(cacheConfiguration)}` : "";
+    const bytes = localPathSize(cacheConfiguration.path);
+    const details = bytes === 0 ? `; path status: ${describeLocalCachePath(cacheConfiguration.path)}` : "";
     info(`${label}: ${formatBytes(bytes)} uncompressed local data${details}`);
     return bytes;
   } catch (error2) {
@@ -69624,7 +69619,7 @@ async function restore(configuration, cacheConfiguration) {
   try {
     const { key, restoreKeys } = await keyPlan(configuration, cacheConfiguration);
     const restoredKey = await restoreCache(
-      cacheConfiguration.paths,
+      [cacheConfiguration.path],
       key,
       restoreKeys,
       { segmentTimeoutInMs: 3e5 }
@@ -69729,19 +69724,19 @@ function createConfiguration(workspace, diskCacheKey, { bazeliskVersion } = {}) 
         name: "bazelisk",
         files: [],
         keySuffix: resolvedBazeliskVersion,
-        paths: [import_node_path2.default.join(cacheRoot, "bazelisk")]
+        path: import_node_path2.default.join(cacheRoot, "bazelisk")
       },
       disk: {
         name: `disk-${diskCacheKey.length}-${diskCacheKey}`,
         generational: true,
         files: [],
-        paths: [import_node_path2.default.join(cacheRoot, "bazel-disk")]
+        path: import_node_path2.default.join(cacheRoot, "bazel-disk")
       },
       repository: {
         name: "repository",
         generational: true,
         files: [],
-        paths: [import_node_path2.default.join(cacheRoot, "bazel-repo")]
+        path: import_node_path2.default.join(cacheRoot, "bazel-repo")
       }
     },
     baseKey,
@@ -69986,7 +69981,7 @@ async function run() {
     const bazelrcFiles = [process.env.BAZELRC, configuration.bazelrc].filter(Boolean);
     exportVariable("BAZELRC", bazelrcFiles.join(","));
     for (const cache of [configuration.caches.disk, configuration.caches.repository]) {
-      for (const cachePath of cache.paths) import_node_fs5.default.mkdirSync(cachePath, { recursive: true });
+      import_node_fs5.default.mkdirSync(cache.path, { recursive: true });
     }
     const restoreResults = {
       bazelisk: await restoreCache2(configuration, configuration.caches.bazelisk, restores.bazelisk),
@@ -70072,7 +70067,7 @@ function logDecision({
   info(`Bazelisk version key: ${configuration.caches.bazelisk.keySuffix}`);
   info(`Bazelrc: ${configuration.bazelrc}`);
   info(
-    `Cache directories: bazelisk=${configuration.caches.bazelisk.paths.join(",")}, disk=${configuration.caches.disk.paths.join(",")}, repository=${configuration.caches.repository.paths.join(",")}`
+    `Cache directories: bazelisk=${configuration.caches.bazelisk.path}, disk=${configuration.caches.disk.path}, repository=${configuration.caches.repository.path}`
   );
   endGroup();
 }

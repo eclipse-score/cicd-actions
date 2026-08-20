@@ -12,8 +12,42 @@
 // *******************************************************************************
 
 import * as core from '@actions/core';
-import { save, shouldSaveRepositoryCache } from './cache.js';
+import {
+  formatBytes,
+  save,
+  shouldSaveRepositoryCache,
+  skippedSaveSummary,
+} from './cache.js';
 import { createConfiguration } from './config.js';
+
+/** Print one compact overview after all cache save attempts have completed. */
+function logSaveSummary(results) {
+  const headers = ['Cache', 'Before', 'After', 'Uploaded', 'Result'];
+  const size = (value) => value === null ? 'unknown' : formatBytes(value);
+  const rows = results.map((result) => [
+    result.cache,
+    size(result.sizeBefore),
+    size(result.sizeAfter),
+    result.uploaded ? 'yes' : 'no',
+    result.status,
+  ]);
+  const widths = headers.map((header, index) => Math.max(
+    header.length,
+    ...rows.map((row) => row[index].length),
+  ));
+  const border = `+${widths.map((width) => '-'.repeat(width + 2)).join('+')}+`;
+  const formatRow = (row) =>
+    `| ${row.map((value, index) => value.padEnd(widths[index])).join(' | ')} |`;
+
+  core.startGroup('Bazel cache save summary');
+  core.info('Sizes are uncompressed local payloads; uploading does not remove local data.');
+  core.info(border);
+  core.info(formatRow(headers));
+  core.info(border);
+  for (const row of rows) core.info(formatRow(row));
+  core.info(border);
+  core.endGroup();
+}
 
 /**
  * Save caches after the caller's steps. State written by main proves setup
@@ -42,26 +76,32 @@ async function run() {
     }
 
     const configuration = createConfiguration(workspace, diskCacheKey, { bazeliskVersion });
+    const results = [];
     if (saves.bazelisk) {
-      await save(configuration, configuration.caches.bazelisk, restoreResults?.bazelisk);
+      results.push(await save(configuration, configuration.caches.bazelisk, restoreResults?.bazelisk));
     } else {
       core.info('Bazelisk cache saving is disabled for this job');
+      results.push(skippedSaveSummary(configuration.caches.bazelisk, 'disabled'));
     }
     if (saves.disk) {
-      await save(configuration, configuration.caches.disk, restoreResults?.disk);
+      results.push(await save(configuration, configuration.caches.disk, restoreResults?.disk));
     } else {
       core.info('Disk cache saving is disabled for this job');
+      results.push(skippedSaveSummary(configuration.caches.disk, 'disabled'));
     }
     if (
       saves.repository &&
       shouldSaveRepositoryCache(repositoryCacheSaveMode, restoreResults?.repository)
     ) {
-      await save(configuration, configuration.caches.repository, restoreResults?.repository);
+      results.push(await save(configuration, configuration.caches.repository, restoreResults?.repository));
     } else if (saves.repository && repositoryCacheSaveMode === 'auto') {
       core.info('Repository cache automatic save skipped because an empty start-of-job cache was not confirmed');
+      results.push(skippedSaveSummary(configuration.caches.repository, 'existing cache preserved'));
     } else {
       core.info('Repository cache saving is disabled for this job');
+      results.push(skippedSaveSummary(configuration.caches.repository, 'disabled'));
     }
+    logSaveSummary(results);
   } catch (error) {
     core.setFailed(error.stack || error.message);
   }

@@ -70057,9 +70057,6 @@ function localPathSize(root) {
   }
   return bytes;
 }
-function localCacheSize(cacheConfiguration) {
-  return cacheConfiguration.paths.reduce((bytes, cachePath) => bytes + localPathSize(cachePath), 0);
-}
 function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;
   const unitIndex = Math.min(
@@ -70070,25 +70067,23 @@ function formatBytes(bytes) {
   const precision = value >= 100 ? 0 : value >= 10 ? 1 : 2;
   return `${value.toFixed(precision)} ${BYTE_UNITS[unitIndex]}`;
 }
-function describeLocalCachePaths(cacheConfiguration) {
-  return cacheConfiguration.paths.map((cachePath) => {
-    try {
-      const entry = import_node_fs2.default.lstatSync(cachePath);
-      if (entry.isSymbolicLink()) return `${cachePath}: symlink (ignored)`;
-      if (!entry.isDirectory()) return `${cachePath}: file (${formatBytes(entry.size)})`;
-      const directEntries = import_node_fs2.default.readdirSync(cachePath).length;
-      if (directEntries === 0) return `${cachePath}: empty directory`;
-      return `${cachePath}: directory with ${directEntries} direct entries and ${formatBytes(localPathSize(cachePath))} recursive payload`;
-    } catch (error2) {
-      if (error2.code === "ENOENT") return `${cachePath}: missing`;
-      return `${cachePath}: unavailable (${error2.message || error2})`;
-    }
-  }).join("; ");
+function describeLocalCachePath(cachePath) {
+  try {
+    const entry = import_node_fs2.default.lstatSync(cachePath);
+    if (entry.isSymbolicLink()) return `${cachePath}: symlink (ignored)`;
+    if (!entry.isDirectory()) return `${cachePath}: file (${formatBytes(entry.size)})`;
+    const directEntries = import_node_fs2.default.readdirSync(cachePath).length;
+    if (directEntries === 0) return `${cachePath}: empty directory`;
+    return `${cachePath}: directory with ${directEntries} direct entries and ${formatBytes(localPathSize(cachePath))} recursive payload`;
+  } catch (error2) {
+    if (error2.code === "ENOENT") return `${cachePath}: missing`;
+    return `${cachePath}: unavailable (${error2.message || error2})`;
+  }
 }
 function logLocalCacheSize(cacheConfiguration, label) {
   try {
-    const bytes = localCacheSize(cacheConfiguration);
-    const details = bytes === 0 ? `; path status: ${describeLocalCachePaths(cacheConfiguration)}` : "";
+    const bytes = localPathSize(cacheConfiguration.path);
+    const details = bytes === 0 ? `; path status: ${describeLocalCachePath(cacheConfiguration.path)}` : "";
     info(`${label}: ${formatBytes(bytes)} uncompressed local data${details}`);
     return bytes;
   } catch (error2) {
@@ -70109,6 +70104,17 @@ function shouldSaveRepositoryCache(mode, restoreResult) {
 }
 function shouldSave(cacheConfiguration, restoreResult) {
   return !(cacheConfiguration.generational && restoreResult === RESTORE_RESULT.UNKNOWN);
+}
+function skippedSaveSummary(cacheConfiguration, status) {
+  const sizeBefore = logLocalCacheSize(cacheConfiguration, "Local payload before save");
+  const sizeAfter = logLocalCacheSize(cacheConfiguration, "Local payload after save");
+  return {
+    cache: cacheConfiguration.name,
+    sizeBefore,
+    sizeAfter,
+    uploaded: false,
+    status
+  };
 }
 async function keyPlan(configuration, cacheConfiguration) {
   const prefix2 = cachePrefix(configuration, cacheConfiguration);
@@ -70140,37 +70146,55 @@ function hitState(cacheConfiguration) {
 }
 async function save(configuration, cacheConfiguration, restoreResult) {
   startGroup(`Save ${cacheConfiguration.name} cache`);
+  const result = {
+    cache: cacheConfiguration.name,
+    sizeBefore: logLocalCacheSize(cacheConfiguration, "Local payload before save"),
+    sizeAfter: null,
+    uploaded: false,
+    status: "not attempted"
+  };
   try {
-    const payloadSize = logLocalCacheSize(cacheConfiguration, "Local payload before save");
     if (!cacheConfiguration.generational && getState(hitState(cacheConfiguration)) === "true") {
       info(`Not saving exact ${cacheConfiguration.name} cache hit`);
-      return;
+      result.status = "exact cache hit";
+      return result;
     }
     if (!shouldSave(cacheConfiguration, restoreResult)) {
       info(
         `Not saving ${cacheConfiguration.name} cache because its restore failed; the existing generation is preserved.`
       );
-      return;
+      result.status = "restore failed";
+      return result;
     }
-    if (payloadSize === 0) {
+    if (result.sizeBefore === 0) {
       info(
         `Not saving ${cacheConfiguration.name} cache because its local payload is empty; there is no cache archive to upload.`
       );
-      return;
+      result.status = "empty payload";
+      return result;
     }
     const key = await exactKey(configuration, cacheConfiguration);
-    const cacheId = await saveCache2(cacheConfiguration.paths, key);
+    const cacheId = await saveCache2([cacheConfiguration.path], key);
     if (cacheId === -1) {
       info(`Cache save skipped for ${key}`);
-    } else {
-      const payload = payloadSize === null ? "size unavailable" : formatBytes(payloadSize);
+      result.status = "cache already exists";
+    } else if (typeof cacheId === "number" && cacheId >= 0) {
+      const payload = result.sizeBefore === null ? "size unavailable" : formatBytes(result.sizeBefore);
       info(`Saved ${key} (local payload: ${payload})`);
+      result.uploaded = true;
+      result.status = "uploaded";
+    } else {
+      warning(`Cache save returned an unexpected cache id for ${key}: ${cacheId}`);
+      result.status = "upload not confirmed";
     }
   } catch (error2) {
     warning(`Cache save failed: ${error2.stack || error2}`);
+    result.status = "upload failed";
   } finally {
+    result.sizeAfter = logLocalCacheSize(cacheConfiguration, "Local payload after save");
     endGroup();
   }
+  return result;
 }
 
 // src/config.js
@@ -70242,19 +70266,19 @@ function createConfiguration(workspace, diskCacheKey, { bazeliskVersion } = {}) 
         name: "bazelisk",
         files: [],
         keySuffix: resolvedBazeliskVersion,
-        paths: [import_node_path2.default.join(cacheRoot, "bazelisk")]
+        path: import_node_path2.default.join(cacheRoot, "bazelisk")
       },
       disk: {
         name: `disk-${diskCacheKey.length}-${diskCacheKey}`,
         generational: true,
         files: [],
-        paths: [import_node_path2.default.join(cacheRoot, "bazel-disk")]
+        path: import_node_path2.default.join(cacheRoot, "bazel-disk")
       },
       repository: {
         name: "repository",
         generational: true,
         files: [],
-        paths: [import_node_path2.default.join(cacheRoot, "bazel-repo")]
+        path: import_node_path2.default.join(cacheRoot, "bazel-repo")
       }
     },
     baseKey,
@@ -70263,6 +70287,31 @@ function createConfiguration(workspace, diskCacheKey, { bazeliskVersion } = {}) 
 }
 
 // src/post.js
+function logSaveSummary(results) {
+  const headers = ["Cache", "Before", "After", "Uploaded", "Result"];
+  const size = (value) => value === null ? "unknown" : formatBytes(value);
+  const rows = results.map((result) => [
+    result.cache,
+    size(result.sizeBefore),
+    size(result.sizeAfter),
+    result.uploaded ? "yes" : "no",
+    result.status
+  ]);
+  const widths = headers.map((header, index) => Math.max(
+    header.length,
+    ...rows.map((row) => row[index].length)
+  ));
+  const border = `+${widths.map((width) => "-".repeat(width + 2)).join("+")}+`;
+  const formatRow = (row) => `| ${row.map((value, index) => value.padEnd(widths[index])).join(" | ")} |`;
+  startGroup("Bazel cache save summary");
+  info("Sizes are uncompressed local payloads; uploading does not remove local data.");
+  info(border);
+  info(formatRow(headers));
+  info(border);
+  for (const row of rows) info(formatRow(row));
+  info(border);
+  endGroup();
+}
 async function run() {
   try {
     const state3 = getState("setup-bazel-cache-configuration");
@@ -70284,23 +70333,29 @@ async function run() {
       return;
     }
     const configuration = createConfiguration(workspace, diskCacheKey, { bazeliskVersion });
+    const results = [];
     if (saves.bazelisk) {
-      await save(configuration, configuration.caches.bazelisk, restoreResults?.bazelisk);
+      results.push(await save(configuration, configuration.caches.bazelisk, restoreResults?.bazelisk));
     } else {
       info("Bazelisk cache saving is disabled for this job");
+      results.push(skippedSaveSummary(configuration.caches.bazelisk, "disabled"));
     }
     if (saves.disk) {
-      await save(configuration, configuration.caches.disk, restoreResults?.disk);
+      results.push(await save(configuration, configuration.caches.disk, restoreResults?.disk));
     } else {
       info("Disk cache saving is disabled for this job");
+      results.push(skippedSaveSummary(configuration.caches.disk, "disabled"));
     }
     if (saves.repository && shouldSaveRepositoryCache(repositoryCacheSaveMode, restoreResults?.repository)) {
-      await save(configuration, configuration.caches.repository, restoreResults?.repository);
+      results.push(await save(configuration, configuration.caches.repository, restoreResults?.repository));
     } else if (saves.repository && repositoryCacheSaveMode === "auto") {
       info("Repository cache automatic save skipped because an empty start-of-job cache was not confirmed");
+      results.push(skippedSaveSummary(configuration.caches.repository, "existing cache preserved"));
     } else {
       info("Repository cache saving is disabled for this job");
+      results.push(skippedSaveSummary(configuration.caches.repository, "disabled"));
     }
+    logSaveSummary(results);
   } catch (error2) {
     setFailed(error2.stack || error2.message);
   }

@@ -19,12 +19,13 @@ import test from 'node:test';
 import {
   cachePrefix,
   canSaveAfterFailure,
-  describeLocalCachePaths,
+  describeLocalCachePath,
   keyPlan,
   RESTORE_RESULT,
   formatBytes,
-  localCacheSize,
+  localPathSize,
   restoreOutput,
+  skippedSaveSummary,
   shouldSaveRepositoryCache,
   shouldSave,
 } from '../src/cache.js';
@@ -82,7 +83,7 @@ test('local cache sizes are formatted compactly and ignore symlinks', (context) 
   fs.writeFileSync(path.join(workspace, 'nested', 'large'), 'x'.repeat(1024));
   fs.symlinkSync(path.join(workspace, 'small'), path.join(workspace, 'ignored-link'));
 
-  assert.equal(localCacheSize({ paths: [workspace] }), 1027);
+  assert.equal(localPathSize(workspace), 1027);
   assert.equal(formatBytes(0), '0 B');
   assert.equal(formatBytes(1024), '1.00 KiB');
   assert.equal(formatBytes(1024 * 1024), '1.00 MiB');
@@ -97,9 +98,26 @@ test('empty cache diagnostics distinguish missing and empty paths', (context) =>
   const missing = path.join(workspace, 'missing');
   fs.mkdirSync(empty);
 
-  assert.equal(
-    describeLocalCachePaths({ paths: [empty, missing] }),
-    `${empty}: empty directory; ${missing}: missing`,
+  assert.equal(describeLocalCachePath(empty), `${empty}: empty directory`);
+  assert.equal(describeLocalCachePath(missing), `${missing}: missing`);
+});
+
+test('skipped save summaries include before and after local sizes', (context) => {
+  const workspace = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'setup-bazel-cache-summary-test-'),
+  );
+  context.after(() => fs.rmSync(workspace, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(workspace, 'payload'), 'payload');
+
+  assert.deepEqual(
+    skippedSaveSummary({ name: 'disk', path: workspace }, 'disabled'),
+    {
+      cache: 'disk',
+      sizeBefore: 7,
+      sizeAfter: 7,
+      uploaded: false,
+      status: 'disabled',
+    },
   );
 });
 

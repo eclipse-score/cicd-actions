@@ -113,7 +113,7 @@ async function run() {
     core.exportVariable('BAZELRC', bazelrcFiles.join(','));
 
     for (const cache of [configuration.caches.disk, configuration.caches.repository]) {
-      for (const cachePath of cache.paths) fs.mkdirSync(cachePath, { recursive: true });
+      fs.mkdirSync(cache.path, { recursive: true });
     }
 
     const restoreResults = {
@@ -211,9 +211,9 @@ function logDecision({
   core.info(`Bazelisk version key: ${configuration.caches.bazelisk.keySuffix}`);
   core.info(`Bazelrc: ${configuration.bazelrc}`);
   core.info(
-    `Cache directories: bazelisk=${configuration.caches.bazelisk.paths.join(',')}, ` +
-    `disk=${configuration.caches.disk.paths.join(',')}, ` +
-    `repository=${configuration.caches.repository.paths.join(',')}`,
+    `Cache directories: bazelisk=${configuration.caches.bazelisk.path}, ` +
+    `disk=${configuration.caches.disk.path}, ` +
+    `repository=${configuration.caches.repository.path}`,
   );
   core.endGroup();
 }

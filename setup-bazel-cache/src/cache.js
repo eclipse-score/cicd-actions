@@ -27,7 +27,7 @@ const RESTORE_RESULT = Object.freeze({
 
 const BYTE_UNITS = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
 
-/** Return the uncompressed size of one local cache path without following symlinks. */
+/** Return the uncompressed size of one local path without following symlinks. */
 function localPathSize(root) {
   const pending = [root];
   let bytes = 0;
@@ -56,11 +56,6 @@ function localPathSize(root) {
   return bytes;
 }
 
-/** Measure all local paths belonging to a cache; missing paths count as empty. */
-function localCacheSize(cacheConfiguration) {
-  return cacheConfiguration.paths.reduce((bytes, cachePath) => bytes + localPathSize(cachePath), 0);
-}
-
 /** Format local cache sizes compactly for one-line action log messages. */
 function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -73,31 +68,29 @@ function formatBytes(bytes) {
   return `${value.toFixed(precision)} ${BYTE_UNITS[unitIndex]}`;
 }
 
-/** Describe cache paths when their aggregate payload is empty. */
-function describeLocalCachePaths(cacheConfiguration) {
-  return cacheConfiguration.paths.map((cachePath) => {
-    try {
-      const entry = fs.lstatSync(cachePath);
-      if (entry.isSymbolicLink()) return `${cachePath}: symlink (ignored)`;
-      if (!entry.isDirectory()) return `${cachePath}: file (${formatBytes(entry.size)})`;
+/** Describe a cache path when its aggregate payload is empty. */
+function describeLocalCachePath(cachePath) {
+  try {
+    const entry = fs.lstatSync(cachePath);
+    if (entry.isSymbolicLink()) return `${cachePath}: symlink (ignored)`;
+    if (!entry.isDirectory()) return `${cachePath}: file (${formatBytes(entry.size)})`;
 
-      const directEntries = fs.readdirSync(cachePath).length;
-      if (directEntries === 0) return `${cachePath}: empty directory`;
-      return `${cachePath}: directory with ${directEntries} direct entries and ` +
-        `${formatBytes(localPathSize(cachePath))} recursive payload`;
-    } catch (error) {
-      if (error.code === 'ENOENT') return `${cachePath}: missing`;
-      return `${cachePath}: unavailable (${error.message || error})`;
-    }
-  }).join('; ');
+    const directEntries = fs.readdirSync(cachePath).length;
+    if (directEntries === 0) return `${cachePath}: empty directory`;
+    return `${cachePath}: directory with ${directEntries} direct entries and ` +
+      `${formatBytes(localPathSize(cachePath))} recursive payload`;
+  } catch (error) {
+    if (error.code === 'ENOENT') return `${cachePath}: missing`;
+    return `${cachePath}: unavailable (${error.message || error})`;
+  }
 }
 
 /** Log a best-effort local size without allowing diagnostics to affect caching. */
 function logLocalCacheSize(cacheConfiguration, label) {
   try {
-    const bytes = localCacheSize(cacheConfiguration);
+    const bytes = localPathSize(cacheConfiguration.path);
     const details = bytes === 0
-      ? `; path status: ${describeLocalCachePaths(cacheConfiguration)}`
+      ? `; path status: ${describeLocalCachePath(cacheConfiguration.path)}`
       : '';
     core.info(`${label}: ${formatBytes(bytes)} uncompressed local data${details}`);
     return bytes;
@@ -151,6 +144,19 @@ function shouldSave(cacheConfiguration, restoreResult) {
   );
 }
 
+/** Record a cache that was deliberately not selected for upload. */
+function skippedSaveSummary(cacheConfiguration, status) {
+  const sizeBefore = logLocalCacheSize(cacheConfiguration, 'Local payload before save');
+  const sizeAfter = logLocalCacheSize(cacheConfiguration, 'Local payload after save');
+  return {
+    cache: cacheConfiguration.name,
+    sizeBefore,
+    sizeAfter,
+    uploaded: false,
+    status,
+  };
+}
+
 /** Build the primary key and ordered fallback prefixes for one cache. */
 async function keyPlan(configuration, cacheConfiguration) {
   const prefix = cachePrefix(configuration, cacheConfiguration);
@@ -197,7 +203,7 @@ async function restore(configuration, cacheConfiguration) {
   try {
     const { key, restoreKeys } = await keyPlan(configuration, cacheConfiguration);
     const restoredKey = await cache.restoreCache(
-      cacheConfiguration.paths,
+      [cacheConfiguration.path],
       key,
       restoreKeys,
       { segmentTimeoutInMs: 300000 }
@@ -226,40 +232,58 @@ async function restore(configuration, cacheConfiguration) {
  */
 async function save(configuration, cacheConfiguration, restoreResult) {
   core.startGroup(`Save ${cacheConfiguration.name} cache`);
+  const result = {
+    cache: cacheConfiguration.name,
+    sizeBefore: logLocalCacheSize(cacheConfiguration, 'Local payload before save'),
+    sizeAfter: null,
+    uploaded: false,
+    status: 'not attempted',
+  };
   try {
-    const payloadSize = logLocalCacheSize(cacheConfiguration, 'Local payload before save');
     if (!cacheConfiguration.generational && core.getState(hitState(cacheConfiguration)) === 'true') {
       core.info(`Not saving exact ${cacheConfiguration.name} cache hit`);
-      return;
+      result.status = 'exact cache hit';
+      return result;
     }
     if (!shouldSave(cacheConfiguration, restoreResult)) {
       core.info(
         `Not saving ${cacheConfiguration.name} cache because its restore failed; ` +
         'the existing generation is preserved.',
       );
-      return;
+      result.status = 'restore failed';
+      return result;
     }
-    if (payloadSize === 0) {
+    if (result.sizeBefore === 0) {
       core.info(
         `Not saving ${cacheConfiguration.name} cache because its local payload is empty; ` +
         'there is no cache archive to upload.',
       );
-      return;
+      result.status = 'empty payload';
+      return result;
     }
 
     const key = await exactKey(configuration, cacheConfiguration);
-    const cacheId = await cache.saveCache(cacheConfiguration.paths, key);
+    const cacheId = await cache.saveCache([cacheConfiguration.path], key);
     if (cacheId === -1) {
       core.info(`Cache save skipped for ${key}`);
-    } else {
-      const payload = payloadSize === null ? 'size unavailable' : formatBytes(payloadSize);
+      result.status = 'cache already exists';
+    } else if (typeof cacheId === 'number' && cacheId >= 0) {
+      const payload = result.sizeBefore === null ? 'size unavailable' : formatBytes(result.sizeBefore);
       core.info(`Saved ${key} (local payload: ${payload})`);
+      result.uploaded = true;
+      result.status = 'uploaded';
+    } else {
+      core.warning(`Cache save returned an unexpected cache id for ${key}: ${cacheId}`);
+      result.status = 'upload not confirmed';
     }
   } catch (error) {
     core.warning(`Cache save failed: ${error.stack || error}`);
+    result.status = 'upload failed';
   } finally {
+    result.sizeAfter = logLocalCacheSize(cacheConfiguration, 'Local payload after save');
     core.endGroup();
   }
+  return result;
 }
 
 export {
@@ -271,10 +295,11 @@ export {
   restore,
   restoreOutput,
   save,
+  skippedSaveSummary,
   shouldSaveRepositoryCache,
   shouldSave,
   formatBytes,
-  describeLocalCachePaths,
+  describeLocalCachePath,
   logLocalCacheSize,
-  localCacheSize,
+  localPathSize,
 };

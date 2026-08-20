@@ -39,6 +39,7 @@ test('configuration uses readable Linux cache names and a temporary bazelrc', ()
   assert.doesNotMatch(configuration.bazelrcContents, /output_base/);
   assert.equal(configuration.caches.disk.generational, true);
   assert.equal(configuration.caches.repository.generational, true);
+  assert.match(configuration.caches.disk.path, /bazel-disk$/);
   assert.equal(configuration.caches.bazelisk.keySuffix, 'default');
   assert.deepEqual(configuration.caches.repository.files, []);
   assert.equal(
