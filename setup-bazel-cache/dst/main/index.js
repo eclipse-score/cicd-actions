@@ -69688,15 +69688,6 @@ function readBazeliskVersion(workspace) {
   }
   return validateBazeliskVersion(version3);
 }
-function removeManagedBazelrcBlock(contents) {
-  const start = contents.indexOf(BAZELRC_MARKER_START);
-  if (start < 0) return contents;
-  const end = contents.indexOf(BAZELRC_MARKER_END, start);
-  if (end < 0) return contents;
-  const afterEnd = end + BAZELRC_MARKER_END.length;
-  const newlineAfterEnd = contents[afterEnd] === "\n" ? 1 : 0;
-  return contents.slice(0, start) + contents.slice(afterEnd + newlineAfterEnd);
-}
 function installManagedBazelrc(configuration) {
   let contents = "";
   try {
@@ -69704,11 +69695,10 @@ function installManagedBazelrc(configuration) {
   } catch (error2) {
     if (error2.code !== "ENOENT") throw error2;
   }
-  const cleaned = removeManagedBazelrcBlock(contents);
-  const separator = cleaned && !cleaned.endsWith("\n") ? "\n" : "";
-  import_node_fs3.default.writeFileSync(
+  const separator = contents && !contents.endsWith("\n") ? "\n" : "";
+  import_node_fs3.default.appendFileSync(
     configuration.userBazelrc,
-    `${cleaned}${separator}${configuration.bazelrcImport}`
+    `${separator}${configuration.bazelrcImport}`
   );
 }
 function createConfiguration(workspace, diskCacheKey, { bazeliskVersion } = {}) {
@@ -70011,7 +70001,6 @@ async function run() {
     info(
       `Restore summary: bazelisk=${restoreResults.bazelisk}, disk=${restoreResults.disk}, repository=${restoreResults.repository}`
     );
-    saveState("setup-bazel-cache-user-bazelrc", configuration.userBazelrc);
     installManagedBazelrc(configuration);
     info(`Added Bazel 8 compatibility import to ${configuration.userBazelrc}`);
     const failedJobCacheSaveAllowed = cacheSaveAllowed && canSaveAfterFailure(restoreResults, saves);

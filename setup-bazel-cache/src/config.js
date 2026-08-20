@@ -71,19 +71,6 @@ function readBazeliskVersion(workspace) {
   return validateBazeliskVersion(version);
 }
 
-/** Remove the action-managed import block while preserving user configuration. */
-function removeManagedBazelrcBlock(contents) {
-  const start = contents.indexOf(BAZELRC_MARKER_START);
-  if (start < 0) return contents;
-
-  const end = contents.indexOf(BAZELRC_MARKER_END, start);
-  if (end < 0) return contents;
-
-  const afterEnd = end + BAZELRC_MARKER_END.length;
-  const newlineAfterEnd = contents[afterEnd] === '\n' ? 1 : 0;
-  return contents.slice(0, start) + contents.slice(afterEnd + newlineAfterEnd);
-}
-
 /** Add the generated cache rc as an import to Bazel 8's standard user rc. */
 function installManagedBazelrc(configuration) {
   let contents = '';
@@ -93,31 +80,11 @@ function installManagedBazelrc(configuration) {
     if (error.code !== 'ENOENT') throw error;
   }
 
-  const cleaned = removeManagedBazelrcBlock(contents);
-  const separator = cleaned && !cleaned.endsWith('\n') ? '\n' : '';
-  fs.writeFileSync(
+  const separator = contents && !contents.endsWith('\n') ? '\n' : '';
+  fs.appendFileSync(
     configuration.userBazelrc,
-    `${cleaned}${separator}${configuration.bazelrcImport}`,
+    `${separator}${configuration.bazelrcImport}`,
   );
-}
-
-/** Remove the temporary import from the standard user rc after the job. */
-function removeManagedBazelrc(configuration) {
-  let contents;
-  try {
-    contents = fs.readFileSync(configuration.userBazelrc, 'utf8');
-  } catch (error) {
-    if (error.code === 'ENOENT') return;
-    throw error;
-  }
-
-  const cleaned = removeManagedBazelrcBlock(contents);
-  if (cleaned === contents) return;
-  if (cleaned === '') {
-    fs.unlinkSync(configuration.userBazelrc);
-  } else {
-    fs.writeFileSync(configuration.userBazelrc, cleaned);
-  }
 }
 
 /** Build the complete Linux cache configuration in one place. */
@@ -177,7 +144,5 @@ export {
   createConfiguration,
   installManagedBazelrc,
   readBazeliskVersion,
-  removeManagedBazelrc,
-  removeManagedBazelrcBlock,
   validateDiskCacheKey,
 };

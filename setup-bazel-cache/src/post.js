@@ -13,14 +13,13 @@
 
 import * as core from '@actions/core';
 import { save, shouldSaveRepositoryCache } from './cache.js';
-import { createConfiguration, removeManagedBazelrc } from './config.js';
+import { createConfiguration } from './config.js';
 
 /**
  * Save caches after the caller's steps. State written by main proves setup
  * completed and carries the already-resolved permission to write caches.
  */
 async function run() {
-  const userBazelrc = core.getState('setup-bazel-cache-user-bazelrc');
   try {
     const state = core.getState('setup-bazel-cache-configuration');
     if (!state) {
@@ -65,15 +64,6 @@ async function run() {
     }
   } catch (error) {
     core.setFailed(error.stack || error.message);
-  } finally {
-    if (userBazelrc) {
-      try {
-        removeManagedBazelrc({ userBazelrc });
-        core.info(`Removed Bazel 8 compatibility import from ${userBazelrc}`);
-      } catch (error) {
-        core.warning(`Could not remove Bazel 8 compatibility import: ${error.message || error}`);
-      }
-    }
   }
 }
 

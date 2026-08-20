@@ -131,7 +131,6 @@ async function run() {
       `disk=${restoreResults.disk}, repository=${restoreResults.repository}`,
     );
 
-    core.saveState('setup-bazel-cache-user-bazelrc', configuration.userBazelrc);
     installManagedBazelrc(configuration);
     core.info(`Added Bazel 8 compatibility import to ${configuration.userBazelrc}`);
 
