@@ -1,0 +1,171 @@
+# *******************************************************************************
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+name: Setup QEMU latest
+description: Build, install, validate, and cache QEMU from source.
+
+inputs:
+  qemu-version:
+    description: QEMU release version to build from source.
+    required: false
+    default: "10.2.4"
+  qemu-targets:
+    description: Comma-separated list passed to QEMU's --target-list configure option.
+    required: false
+    default: "aarch64-softmmu"
+  install-prefix:
+    description: Base directory QEMU is installed under; the version is appended.
+    required: false
+    default: "/opt/qemu"
+  configure-args:
+    description: Extra flags appended to the ./configure invocation.
+    required: false
+    default: ""
+  extra-build-deps:
+    description: Extra space-separated apt packages appended to the build dependencies.
+    required: false
+    default: ""
+  nproc:
+    description: Number of parallel jobs used to build QEMU; defaults to the runner CPU count.
+    required: false
+    default: ""
+  validation-target:
+    description: QEMU target to validate with -machine help (e.g., aarch64);  empty disables validation.
+    required: false
+    default: "aarch64"
+  kvm-mode:
+    description: Access mode for the /dev/kvm device udev rule.
+    required: false
+    default: "0666"
+
+outputs:
+  install-prefix:
+    description: Full path QEMU was installed under.
+    value: ${{ steps.vars.outputs.install-prefix }}
+  cache-key:
+    description: Cache key used for this QEMU build.
+    value: ${{ steps.vars.outputs.cache-key }}
+  bin-path:
+    description: Path to the QEMU bin directory.
+    value: ${{ steps.vars.outputs.bin-path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Compute cache key and paths
+      id: vars
+      shell: bash
+      run: |
+        set -euo pipefail
+        install_prefix="${{ inputs.install-prefix }}/${{ inputs.qemu-version }}"
+        config_hash="$(printf '%s' "${{ inputs.qemu-targets }}|${{ inputs.configure-args }}|${{ inputs.extra-build-deps }}" | sha256sum | cut -d' ' -f1)"
+        cache_key="qemu-${{ runner.os }}-${{ inputs.qemu-version }}-${config_hash}"
+
+        echo "install-prefix=$install_prefix" >> "$GITHUB_OUTPUT"
+        echo "cache-key=$cache_key" >> "$GITHUB_OUTPUT"
+        echo "bin-path=$install_prefix/bin" >> "$GITHUB_OUTPUT"
+
+    - name: Prepare QEMU install prefix
+      shell: bash
+      run: |
+        set -euo pipefail
+        sudo install -d -o "$(id -u)" -g "$(id -g)" "${{ steps.vars.outputs.install-prefix }}"
+
+    - name: Restore or save QEMU build cache
+      id: cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.vars.outputs.install-prefix }}
+        key: ${{ steps.vars.outputs.cache-key }}
+
+    - name: Remove apt-installed QEMU
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: sudo apt-get remove -y --purge 'qemu-system*' 'qemu-utils' || true
+
+    - name: Install build dependencies
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          ninja-build build-essential libglib2.0-dev libpixman-1-dev \
+          libfdt-dev zlib1g-dev flex bison pkg-config python3 python3-venv gnupg \
+          ${{ inputs.extra-build-deps }}
+
+    - name: Download, verify, extract QEMU source and cleanup downloads.
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        qemu_signing_key_fingerprint="CEACC9E15534EBABB82D3FA03353C9CEF108B584"
+        export GNUPGHOME="$(mktemp -d)"
+        chmod 700 "$GNUPGHOME"
+        trap 'rm -rf "$GNUPGHOME"' EXIT
+
+        curl -fsSLO "https://download.qemu.org/qemu-${{ inputs.qemu-version }}.tar.xz"
+        curl -fsSLO "https://download.qemu.org/qemu-${{ inputs.qemu-version }}.tar.xz.sig"
+        curl -fsSL "https://keys.openpgp.org/vks/v1/by-fingerprint/${qemu_signing_key_fingerprint}" | gpg --batch --import
+        actual_fingerprint="$(gpg --batch --with-colons --fingerprint "$qemu_signing_key_fingerprint" | awk -F: '/^fpr:/ { print $10; exit }')"
+        if [[ "$actual_fingerprint" != "$qemu_signing_key_fingerprint" ]]; then
+          echo "Imported QEMU signing key fingerprint '$actual_fingerprint' does not match expected '$qemu_signing_key_fingerprint'." >&2
+          exit 1
+        fi
+        gpg --batch --verify "qemu-${{ inputs.qemu-version }}.tar.xz.sig" "qemu-${{ inputs.qemu-version }}.tar.xz"
+        tar xf "qemu-${{ inputs.qemu-version }}.tar.xz"
+        rm -rf "qemu-${{ inputs.qemu-version }}.tar.xz" "qemu-${{ inputs.qemu-version }}.tar.xz.sig"
+
+    - name: Build and install QEMU and cleanup QEMU sources.
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      working-directory: qemu-${{ inputs.qemu-version }}
+      run: |
+        set -euo pipefail
+        ./configure \
+          --prefix="${{ steps.vars.outputs.install-prefix }}" \
+          --target-list="${{ inputs.qemu-targets }}" \
+          --disable-docs --disable-gtk --disable-sdl \
+          ${{ inputs.configure-args }}
+        build_jobs="${{ inputs.nproc }}"
+        if [[ -z "$build_jobs" ]]; then
+          build_jobs="$(nproc)"
+        fi
+        make -j"$build_jobs"
+        make install
+
+    - name: Clean QEMU source
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: rm -rf "qemu-${{ inputs.qemu-version }}"
+
+    - name: Add QEMU to PATH
+      shell: bash
+      run: echo "${{ steps.vars.outputs.bin-path }}" >> "$GITHUB_PATH"
+
+    - name: Validate the installation
+      if: inputs.validation-target != ''
+      shell: bash
+      run: "${{ steps.vars.outputs.bin-path }}/qemu-system-${{ inputs.validation-target }} -machine help"
+
+    - name: Enable KVM group permissions
+      shell: bash
+      env:
+        KVM_MODE: ${{ inputs.kvm-mode }}
+      run: |
+        if [[ ! "$KVM_MODE" =~ ^[0-7]{4}$ ]]; then
+          echo "Invalid kvm-mode value: '$KVM_MODE'. Expected a four-digit octal mode." >&2
+          exit 1
+        fi
+        echo "KERNEL==\"kvm\", GROUP=\"kvm\", MODE=\"$KVM_MODE\", OPTIONS+=\"static_node=kvm\"" | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+        sudo udevadm control --reload-rules
+        sudo udevadm trigger --name-match=kvm

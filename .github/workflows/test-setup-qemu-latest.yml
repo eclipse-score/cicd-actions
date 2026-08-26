@@ -1,0 +1,91 @@
+# *******************************************************************************
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+name: Test Setup QEMU Latest
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  setup-qemu-latest:
+    name: Build and validate QEMU
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Run setup-qemu-latest action
+        id: setup-qemu
+        uses: ./setup-qemu-latest
+        with:
+          qemu-targets: aarch64-softmmu
+          validation-target: aarch64
+          kvm-mode: "0660"
+          nproc: "2"
+
+      - name: Verify outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${{ steps.setup-qemu.outputs.install-prefix }}" ]]; then
+            echo "ERROR: install-prefix output is empty"
+            exit 1
+          fi
+
+          if [[ -z "${{ steps.setup-qemu.outputs.bin-path }}" ]]; then
+            echo "ERROR: bin-path output is empty"
+            exit 1
+          fi
+
+          if [[ -z "${{ steps.setup-qemu.outputs.cache-key }}" ]]; then
+            echo "ERROR: cache-key output is empty"
+            exit 1
+          fi
+
+      - name: Verify QEMU executable
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          qemu_bin="${{ steps.setup-qemu.outputs.bin-path }}/qemu-system-aarch64"
+          if [[ ! -x "$qemu_bin" ]]; then
+            echo "ERROR: expected QEMU binary not found: $qemu_bin"
+            exit 1
+          fi
+
+          "$qemu_bin" --version
+
+      - name: Verify KVM udev mode was applied
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          rule_file="/etc/udev/rules.d/99-kvm4all.rules"
+          if [[ ! -f "$rule_file" ]]; then
+            echo "ERROR: KVM rule file not found: $rule_file"
+            exit 1
+          fi
+
+          if ! grep -Fq 'MODE="0660"' "$rule_file"; then
+            echo "ERROR: expected MODE=\"0660\" in $rule_file"
+            echo "Actual file contents:"
+            cat "$rule_file"
+            exit 1
+          fi
+
+          cat "$rule_file"
