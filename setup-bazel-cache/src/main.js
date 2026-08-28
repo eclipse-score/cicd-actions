@@ -14,6 +14,7 @@
 import * as core from '@actions/core';
 import fs from 'node:fs';
 import {
+  cacheLabel,
   canSaveAfterFailure,
   logLocalCacheSize,
   RESTORE_RESULT,
@@ -131,6 +132,7 @@ async function run() {
       `disk=${restoreResults.disk}, repository=${restoreResults.repository}`,
     );
     const repositoryCacheStartSize = logLocalCacheSize(
+      configuration,
       configuration.caches.repository,
       'Repository cache baseline after restore',
     );
@@ -169,8 +171,8 @@ async function run() {
 
 async function restoreCache(configuration, cacheConfiguration, shouldRestore) {
   if (!shouldRestore) {
-    core.info(`Skipping ${cacheConfiguration.name} cache restore`);
-    logLocalCacheSize(cacheConfiguration, 'Local size without restore');
+    core.info(`Skipping ${cacheLabel(configuration, cacheConfiguration)} cache restore`);
+    logLocalCacheSize(configuration, cacheConfiguration, 'Local size without restore');
     return RESTORE_RESULT.SKIPPED;
   }
   return restore(configuration, cacheConfiguration);

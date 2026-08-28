@@ -92,7 +92,7 @@ function describeLocalCachePath(cachePath) {
 }
 
 /** Log a best-effort local size without allowing diagnostics to affect caching. */
-function logLocalCacheSize(cacheConfiguration, label) {
+function logLocalCacheSize(configuration, cacheConfiguration, label) {
   try {
     const bytes = localPathSize(cacheConfiguration.path);
     const details = bytes === 0
@@ -102,7 +102,8 @@ function logLocalCacheSize(cacheConfiguration, label) {
     return bytes;
   } catch (error) {
     core.warning(
-      `Could not measure ${cacheConfiguration.name} cache size: ${error.message || error}`,
+      `Could not measure ${cacheLabel(configuration, cacheConfiguration)} cache size: ` +
+      `${error.message || error}`,
     );
     return null;
   }
@@ -118,6 +119,11 @@ function restoreOutput(result) {
 /** Return the stable cache-family prefix used for fallback restores. */
 function cachePrefix(configuration, cacheConfiguration) {
   return `${configuration.baseKey}-${cacheConfiguration.name}-`;
+}
+
+/** The real, stable cache-key prefix shown in logs instead of the internal short name. */
+function cacheLabel(configuration, cacheConfiguration) {
+  return cachePrefix(configuration, cacheConfiguration).replace(/-$/, '');
 }
 
 /** Generate the readable timestamp generation suffix owned by this action. */
@@ -164,11 +170,11 @@ function shouldSave(cacheConfiguration, restoreResult) {
 }
 
 /** Record a cache that was deliberately not selected for upload. */
-function skippedSaveSummary(cacheConfiguration, status) {
-  const sizeBefore = logLocalCacheSize(cacheConfiguration, 'Local payload before save');
-  const sizeAfter = logLocalCacheSize(cacheConfiguration, 'Local payload after save');
+function skippedSaveSummary(configuration, cacheConfiguration, status) {
+  const sizeBefore = logLocalCacheSize(configuration, cacheConfiguration, 'Local payload before save');
+  const sizeAfter = logLocalCacheSize(configuration, cacheConfiguration, 'Local payload after save');
   return {
-    cache: cacheConfiguration.name,
+    cache: cacheLabel(configuration, cacheConfiguration),
     sizeBefore,
     sizeAfter,
     uploaded: false,
@@ -217,8 +223,8 @@ function hitState(cacheConfiguration) {
  * Cache outages are warnings because caching must never make a build unusable.
  */
 async function restore(configuration, cacheConfiguration) {
-  core.startGroup(`Restore ${cacheConfiguration.name} cache`);
-  logLocalCacheSize(cacheConfiguration, 'Local size before restore');
+  core.startGroup(`Restore ${cacheLabel(configuration, cacheConfiguration)} cache`);
+  logLocalCacheSize(configuration, cacheConfiguration, 'Local size before restore');
   try {
     const { key, restoreKeys } = await keyPlan(configuration, cacheConfiguration);
     const restoredKey = await cache.restoreCache(
@@ -241,7 +247,7 @@ async function restore(configuration, cacheConfiguration) {
     core.warning(`Cache restore failed: ${error.stack || error}`);
     return RESTORE_RESULT.UNKNOWN;
   } finally {
-    logLocalCacheSize(cacheConfiguration, 'Local size after restore');
+    logLocalCacheSize(configuration, cacheConfiguration, 'Local size after restore');
     core.endGroup();
   }
 }
@@ -251,23 +257,24 @@ async function restore(configuration, cacheConfiguration) {
  * are not uploaded again, while additive caches always receive a new generation.
  */
 async function save(configuration, cacheConfiguration, restoreResult) {
-  core.startGroup(`Save ${cacheConfiguration.name} cache`);
+  const label = cacheLabel(configuration, cacheConfiguration);
+  core.startGroup(`Save ${label} cache`);
   const result = {
-    cache: cacheConfiguration.name,
-    sizeBefore: logLocalCacheSize(cacheConfiguration, 'Local payload before save'),
+    cache: label,
+    sizeBefore: logLocalCacheSize(configuration, cacheConfiguration, 'Local payload before save'),
     sizeAfter: null,
     uploaded: false,
     status: 'not attempted',
   };
   try {
     if (!cacheConfiguration.generational && core.getState(hitState(cacheConfiguration)) === 'true') {
-      core.info(`Not saving exact ${cacheConfiguration.name} cache hit`);
+      core.info(`Not saving exact ${label} cache hit`);
       result.status = 'exact cache hit';
       return result;
     }
     if (!shouldSave(cacheConfiguration, restoreResult)) {
       core.info(
-        `Not saving ${cacheConfiguration.name} cache because its restore failed; ` +
+        `Not saving ${label} cache because its restore failed; ` +
         'the existing generation is preserved.',
       );
       result.status = 'restore failed';
@@ -275,7 +282,7 @@ async function save(configuration, cacheConfiguration, restoreResult) {
     }
     if (result.sizeBefore === 0) {
       core.info(
-        `Not saving ${cacheConfiguration.name} cache because its local payload is empty; ` +
+        `Not saving ${label} cache because its local payload is empty; ` +
         'there is no cache archive to upload.',
       );
       result.status = 'empty payload';
@@ -300,7 +307,7 @@ async function save(configuration, cacheConfiguration, restoreResult) {
     core.warning(`Cache save failed: ${error.stack || error}`);
     result.status = 'upload failed';
   } finally {
-    result.sizeAfter = logLocalCacheSize(cacheConfiguration, 'Local payload after save');
+    result.sizeAfter = logLocalCacheSize(configuration, cacheConfiguration, 'Local payload after save');
     core.endGroup();
   }
   return result;
@@ -324,7 +331,9 @@ async function deleteCacheByKey(cacheKey, {
 } = {}) {
   const permissionHint =
     'Grant the action actions: write (for example, via permissions) to enable automatic cleanup.';
-  const cacheName = cacheConfiguration?.name || 'cache';
+  const cacheName = configuration && cacheConfiguration
+    ? cacheLabel(configuration, cacheConfiguration)
+    : (cacheConfiguration?.name || 'cache');
 
   if (!configuration || !cacheConfiguration || !isOwnedGenerationKey(
     configuration,
@@ -375,7 +384,7 @@ async function deleteCacheByKey(cacheKey, {
     });
 
     if (response.ok) {
-      core.info(`Deleted previous ${cacheName} cache generation ${cacheKey}`);
+      core.info(`Deleted previous cache generation ${cacheKey}`);
       return true;
     }
 
@@ -386,17 +395,18 @@ async function deleteCacheByKey(cacheKey, {
       );
     } else {
       core.warning(
-        `${cacheName} cache cleanup failed for ${cacheKey}: ` +
+        `Cache cleanup failed for ${cacheKey}: ` +
         `GitHub API returned HTTP ${response.status} ${response.statusText}`,
       );
     }
   } catch (error) {
-    core.warning(`${cacheName} cache cleanup failed for ${cacheKey}: ${error.message || error}`);
+    core.warning(`Cache cleanup failed for ${cacheKey}: ${error.message || error}`);
   }
   return false;
 }
 
 export {
+  cacheLabel,
   cachePrefix,
   canSaveAfterFailure,
   exactKey,

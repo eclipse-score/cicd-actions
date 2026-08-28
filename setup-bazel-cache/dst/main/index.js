@@ -69560,7 +69560,7 @@ function describeLocalCachePath(cachePath) {
     return `${cachePath}: unavailable (${error2.message || error2})`;
   }
 }
-function logLocalCacheSize(cacheConfiguration, label) {
+function logLocalCacheSize(configuration, cacheConfiguration, label) {
   try {
     const bytes = localPathSize(cacheConfiguration.path);
     const details = bytes === 0 ? `; path status: ${describeLocalCachePath(cacheConfiguration.path)}` : "";
@@ -69568,7 +69568,7 @@ function logLocalCacheSize(cacheConfiguration, label) {
     return bytes;
   } catch (error2) {
     warning(
-      `Could not measure ${cacheConfiguration.name} cache size: ${error2.message || error2}`
+      `Could not measure ${cacheLabel(configuration, cacheConfiguration)} cache size: ${error2.message || error2}`
     );
     return null;
   }
@@ -69578,6 +69578,9 @@ function restoreOutput(result) {
 }
 function cachePrefix(configuration, cacheConfiguration) {
   return `${configuration.baseKey}-${cacheConfiguration.name}-`;
+}
+function cacheLabel(configuration, cacheConfiguration) {
+  return cachePrefix(configuration, cacheConfiguration).replace(/-$/, "");
 }
 function generationSuffix() {
   return Date.now().toString();
@@ -69617,8 +69620,8 @@ function hitState(cacheConfiguration) {
   return `cache-hit-${cacheConfiguration.name}`;
 }
 async function restore(configuration, cacheConfiguration) {
-  startGroup(`Restore ${cacheConfiguration.name} cache`);
-  logLocalCacheSize(cacheConfiguration, "Local size before restore");
+  startGroup(`Restore ${cacheLabel(configuration, cacheConfiguration)} cache`);
+  logLocalCacheSize(configuration, cacheConfiguration, "Local size before restore");
   try {
     const { key, restoreKeys } = await keyPlan(configuration, cacheConfiguration);
     const restoredKey = await restoreCache(
@@ -69641,7 +69644,7 @@ async function restore(configuration, cacheConfiguration) {
     warning(`Cache restore failed: ${error2.stack || error2}`);
     return RESTORE_RESULT.UNKNOWN;
   } finally {
-    logLocalCacheSize(cacheConfiguration, "Local size after restore");
+    logLocalCacheSize(configuration, cacheConfiguration, "Local size after restore");
     endGroup();
   }
 }
@@ -70001,6 +70004,7 @@ async function run() {
       `Restore summary: bazelisk=${restoreResults.bazelisk}, disk=${restoreResults.disk}, repository=${restoreResults.repository}`
     );
     const repositoryCacheStartSize = logLocalCacheSize(
+      configuration,
       configuration.caches.repository,
       "Repository cache baseline after restore"
     );
@@ -70035,8 +70039,8 @@ async function run() {
 }
 async function restoreCache2(configuration, cacheConfiguration, shouldRestore) {
   if (!shouldRestore) {
-    info(`Skipping ${cacheConfiguration.name} cache restore`);
-    logLocalCacheSize(cacheConfiguration, "Local size without restore");
+    info(`Skipping ${cacheLabel(configuration, cacheConfiguration)} cache restore`);
+    logLocalCacheSize(configuration, cacheConfiguration, "Local size without restore");
     return RESTORE_RESULT.SKIPPED;
   }
   return restore(configuration, cacheConfiguration);

@@ -13,6 +13,7 @@
 
 import * as core from '@actions/core';
 import {
+  cacheLabel,
   deleteCacheByKey,
   formatBytes,
   logLocalCacheSize,
@@ -85,7 +86,7 @@ async function run() {
       results.push(await save(configuration, configuration.caches.bazelisk, restoreResults?.bazelisk));
     } else {
       core.info('Bazelisk cache saving is disabled for this job');
-      results.push(skippedSaveSummary(configuration.caches.bazelisk, 'disabled'));
+      results.push(skippedSaveSummary(configuration, configuration.caches.bazelisk, 'disabled'));
     }
     if (saves.disk) {
       const diskResult = await save(
@@ -99,10 +100,11 @@ async function run() {
       }
     } else {
       core.info('Disk cache saving is disabled for this job');
-      results.push(skippedSaveSummary(configuration.caches.disk, 'disabled'));
+      results.push(skippedSaveSummary(configuration, configuration.caches.disk, 'disabled'));
     }
     const repositoryCacheSizeBeforeSave = repositoryCacheSaveMode === 'auto'
       ? logLocalCacheSize(
+        configuration,
         configuration.caches.repository,
         'Repository cache size before automatic save decision',
       )
@@ -136,10 +138,10 @@ async function run() {
           `(${formatBytes(repositoryCacheStartSize)} -> ${formatBytes(repositoryCacheSizeBeforeSave)})`,
         );
       }
-      results.push(skippedSaveSummary(configuration.caches.repository, 'existing cache preserved'));
+      results.push(skippedSaveSummary(configuration, configuration.caches.repository, 'existing cache preserved'));
     } else {
       core.info('Repository cache saving is disabled for this job');
-      results.push(skippedSaveSummary(configuration.caches.repository, 'disabled'));
+      results.push(skippedSaveSummary(configuration, configuration.caches.repository, 'disabled'));
     }
     logSaveSummary(results);
   } catch (error) {
@@ -152,7 +154,7 @@ async function cleanupPreviousGeneration(configuration, cacheConfiguration) {
   const previousKey = core.getState(restoredKeyState(cacheConfiguration));
   if (!previousKey) {
     core.info(
-      `${cacheConfiguration.name} cache cleanup skipped because no previous ` +
+      `${cacheLabel(configuration, cacheConfiguration)} cache cleanup skipped because no previous ` +
       'cache generation was restored',
     );
     return;

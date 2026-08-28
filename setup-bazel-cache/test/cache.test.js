@@ -17,6 +17,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import {
+  cacheLabel,
   cachePrefix,
   canSaveAfterFailure,
   describeLocalCachePath,
@@ -112,11 +113,13 @@ test('skipped save summaries include before and after local sizes', (context) =>
   );
   context.after(() => fs.rmSync(workspace, { recursive: true, force: true }));
   fs.writeFileSync(path.join(workspace, 'payload'), 'payload');
+  const configuration = createConfiguration('/workspace', 'linux-debug');
+  const cacheConfiguration = { name: 'disk', path: workspace };
 
   assert.deepEqual(
-    skippedSaveSummary({ name: 'disk', path: workspace }, 'disabled'),
+    skippedSaveSummary(configuration, cacheConfiguration, 'disabled'),
     {
-      cache: 'disk',
+      cache: cacheLabel(configuration, cacheConfiguration),
       sizeBefore: 7,
       sizeAfter: 7,
       uploaded: false,
