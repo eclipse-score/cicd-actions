@@ -16,6 +16,7 @@ import fs from 'node:fs';
 import {
   cacheLabel,
   canSaveAfterFailure,
+  formatBytes,
   logLocalCacheSize,
   RESTORE_RESULT,
   restore,
@@ -117,7 +118,7 @@ async function run() {
       fs.mkdirSync(cache.path, { recursive: true });
     }
 
-    const restoreResults = {
+    const restoreDetails = {
       bazelisk: await restoreCache(configuration, configuration.caches.bazelisk, restores.bazelisk),
       disk: await restoreCache(configuration, configuration.caches.disk, restores.disk),
       repository: await restoreCache(
@@ -126,11 +127,13 @@ async function run() {
         restores.repository,
       ),
     };
+    const restoreResults = {
+      bazelisk: restoreDetails.bazelisk.result,
+      disk: restoreDetails.disk.result,
+      repository: restoreDetails.repository.result,
+    };
     setRestoreOutputs(restoreResults);
-    core.info(
-      `Restore summary: bazelisk=${restoreResults.bazelisk}, ` +
-      `disk=${restoreResults.disk}, repository=${restoreResults.repository}`,
-    );
+    logRestoreSummary(configuration, restoreDetails);
     const repositoryCacheStartSize = logLocalCacheSize(
       configuration,
       configuration.caches.repository,
@@ -172,8 +175,8 @@ async function run() {
 async function restoreCache(configuration, cacheConfiguration, shouldRestore) {
   if (!shouldRestore) {
     core.info(`Skipping ${cacheLabel(configuration, cacheConfiguration)} cache restore`);
-    logLocalCacheSize(configuration, cacheConfiguration, 'Local size without restore');
-    return RESTORE_RESULT.SKIPPED;
+    const size = logLocalCacheSize(configuration, cacheConfiguration, 'Local size without restore');
+    return { result: RESTORE_RESULT.SKIPPED, sizeBefore: size, sizeAfter: size };
   }
   return restore(configuration, cacheConfiguration);
 }
@@ -225,6 +228,24 @@ function logDecision({
   core.endGroup();
 }
 
+/** Print a bordered, column-aligned table of pre-stringified cell values. */
+function printTable(title, headers, rows) {
+  const widths = headers.map((header, index) => Math.max(
+    header.length,
+    ...rows.map((row) => row[index].length),
+  ));
+  const border = `+${widths.map((width) => '-'.repeat(width + 2)).join('+')}+`;
+  const formatRow = (row) =>
+    `| ${row.map((value, index) => value.padEnd(widths[index])).join(' | ')} |`;
+
+  core.info(title);
+  core.info(border);
+  core.info(formatRow(headers));
+  core.info(border);
+  for (const row of rows) core.info(formatRow(row));
+  core.info(border);
+}
+
 function logModeTable(cacheModes, restores, saves) {
   const headers = [
     'Cache',
@@ -238,20 +259,32 @@ function logModeTable(cacheModes, restores, saves) {
     ['disk', cacheModes.restore.disk, restores.disk, cacheModes.save.disk, saves.disk],
     ['repository', cacheModes.restore.repository, restores.repository, cacheModes.save.repository, saves.repository],
   ].map((row) => row.map((value) => value.toString()));
-  const widths = headers.map((header, index) => Math.max(
-    header.length,
-    ...rows.map((row) => row[index].length),
-  ));
-  const border = `+${widths.map((width) => '-'.repeat(width + 2)).join('+')}+`;
-  const formatRow = (row) =>
-    `| ${row.map((value, index) => value.padEnd(widths[index])).join(' | ')} |`;
+  printTable('Mode matrix:', headers, rows);
+}
 
-  core.info('Mode matrix:');
-  core.info(border);
-  core.info(formatRow(headers));
-  core.info(border);
-  for (const row of rows) core.info(formatRow(row));
-  core.info(border);
+/** Describe a restore result with the plain-language reason shown alongside it. */
+function describeRestoreResult(result) {
+  switch (result) {
+    case RESTORE_RESULT.TRUE: return 'true (exact hit)';
+    case RESTORE_RESULT.PARTIAL: return 'partial (older generation)';
+    case RESTORE_RESULT.FALSE: return 'false (miss)';
+    case RESTORE_RESULT.SKIPPED: return 'skipped (disabled)';
+    case RESTORE_RESULT.UNKNOWN: return 'unknown (restore error)';
+    default: return result;
+  }
+}
+
+/** Print one compact overview of all three restores once they have completed. */
+function logRestoreSummary(configuration, restoreDetails) {
+  const headers = ['Cache', 'Result', 'Before', 'After'];
+  const size = (value) => value === null ? 'unknown' : formatBytes(value);
+  const rows = Object.entries(restoreDetails).map(([name, detail]) => [
+    cacheLabel(configuration, configuration.caches[name]),
+    describeRestoreResult(detail.result),
+    size(detail.sizeBefore),
+    size(detail.sizeAfter),
+  ]);
+  printTable('Restore summary:', headers, rows);
 }
 
 function setRestoreOutputs({ bazelisk, disk, repository }) {

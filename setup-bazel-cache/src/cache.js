@@ -221,10 +221,14 @@ function hitState(cacheConfiguration) {
 /**
  * Restore the exact generation or the newest cache in the same family.
  * Cache outages are warnings because caching must never make a build unusable.
+ * Sizes are returned alongside the result so callers can report a combined
+ * restore summary without re-measuring the cache directory.
  */
 async function restore(configuration, cacheConfiguration) {
   core.startGroup(`Restore ${cacheLabel(configuration, cacheConfiguration)} cache`);
-  logLocalCacheSize(configuration, cacheConfiguration, 'Local size before restore');
+  const sizeBefore = logLocalCacheSize(configuration, cacheConfiguration, 'Local size before restore');
+  let result;
+  let sizeAfter;
   try {
     const { key, restoreKeys } = await keyPlan(configuration, cacheConfiguration);
     const restoredKey = await cache.restoreCache(
@@ -235,21 +239,23 @@ async function restore(configuration, cacheConfiguration) {
     );
     if (!restoredKey) {
       core.info('No matching cache found');
-      return RESTORE_RESULT.FALSE;
+      result = RESTORE_RESULT.FALSE;
+    } else {
+      core.info(`Restored ${restoredKey}`);
+      core.saveState(restoredKeyState(cacheConfiguration), restoredKey);
+      if (!cacheConfiguration.generational && restoredKey === key) {
+        core.saveState(hitState(cacheConfiguration), 'true');
+      }
+      result = restoredKey === key ? RESTORE_RESULT.TRUE : RESTORE_RESULT.PARTIAL;
     }
-    core.info(`Restored ${restoredKey}`);
-    core.saveState(restoredKeyState(cacheConfiguration), restoredKey);
-    if (!cacheConfiguration.generational && restoredKey === key) {
-      core.saveState(hitState(cacheConfiguration), 'true');
-    }
-    return restoredKey === key ? RESTORE_RESULT.TRUE : RESTORE_RESULT.PARTIAL;
   } catch (error) {
     core.warning(`Cache restore failed: ${error.stack || error}`);
-    return RESTORE_RESULT.UNKNOWN;
+    result = RESTORE_RESULT.UNKNOWN;
   } finally {
-    logLocalCacheSize(configuration, cacheConfiguration, 'Local size after restore');
+    sizeAfter = logLocalCacheSize(configuration, cacheConfiguration, 'Local size after restore');
     core.endGroup();
   }
+  return { result, sizeBefore, sizeAfter };
 }
 
 /**
