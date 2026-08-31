@@ -201,7 +201,9 @@ jobs:
         run: |
           set -euo pipefail
           [[ "${{ steps.setup-bazel-cache.outcome }}" == "success" ]]
-          [[ "$(cat "${HOME}/.bazelrc")" == "existing-home-marker" ]]
+          grep -Fxq 'existing-home-marker' "${HOME}/.bazelrc"
+          [[ "$(grep -Fc '# setup-bazel-cache: begin managed import' "${HOME}/.bazelrc")" == "1" ]]
+          grep -Fq -- "try-import ${RUNNER_TEMP}/setup-bazel-cache.bazelrc" "${HOME}/.bazelrc"
           [[ "$(cat "${RUNNER_TEMP}/existing.bazelrc")" == "existing-environment-marker" ]]
           generated_bazelrc="${RUNNER_TEMP}/setup-bazel-cache.bazelrc"
           [[ "$BAZELRC" == "${RUNNER_TEMP}/existing.bazelrc,${generated_bazelrc}" ]]

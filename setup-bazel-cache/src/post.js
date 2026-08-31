@@ -12,6 +12,8 @@
 // *******************************************************************************
 
 import * as core from '@actions/core';
+import { DefaultArtifactClient } from '@actions/artifact';
+import path from 'node:path';
 import {
   cacheLabel,
   deleteCacheByKey,
@@ -23,6 +25,9 @@ import {
   skippedSaveSummary,
 } from './cache.js';
 import { createConfiguration } from './config.js';
+import { existingProfiles, profilePaths, profilingEnabled } from './profiling.js';
+
+const PROFILE_ARTIFACT_NAME = 'bazel-profiles';
 
 /** Print one compact overview after all cache save attempts have completed. */
 function logSaveSummary(results) {
@@ -64,6 +69,8 @@ async function run() {
       core.info('Setup did not complete; caches will not be saved');
       return;
     }
+
+    await uploadProfiles();
 
     const {
       cacheSaveAllowed,
@@ -146,6 +153,34 @@ async function run() {
     logSaveSummary(results);
   } catch (error) {
     core.setFailed(error.stack || error.message);
+  }
+}
+
+/** Upload the last build and test profiles without analyzing them in CI. */
+async function uploadProfiles() {
+  if (!profilingEnabled(core.getInput('enable-profiling'))) return;
+
+  const profiles = profilePaths();
+  const files = existingProfiles(profiles);
+  if (files.length === 0) {
+    core.info('Bazel profiling enabled, but no build or test profile was produced');
+    return;
+  }
+
+  try {
+    const artifact = new DefaultArtifactClient();
+    const result = await artifact.uploadArtifact(
+      PROFILE_ARTIFACT_NAME,
+      files,
+      path.dirname(files[0]),
+      { compressionLevel: 0 },
+    );
+    core.info(
+      `Uploaded ${files.length} Bazel profile(s) as '${PROFILE_ARTIFACT_NAME}' ` +
+      `(artifact ${result.id ?? 'unknown'}, ${result.size ?? 'unknown'} bytes)`,
+    );
+  } catch (error) {
+    core.warning(`Bazel profile upload failed: ${error.stack || error}`);
   }
 }
 

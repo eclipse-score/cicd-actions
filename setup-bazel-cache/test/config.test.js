@@ -65,6 +65,22 @@ test('post-save configuration can use the version captured during setup', () => 
   );
 });
 
+test('profiling adds separate fixed paths for build and test', () => {
+  const configuration = createConfiguration('/workspace', 'test', {
+    enableProfiling: true,
+  });
+
+  assert.match(
+    configuration.bazelrcContents,
+    /^build --profile=.*setup-bazel-cache-build\.profile\.gz$/m,
+  );
+  assert.match(
+    configuration.bazelrcContents,
+    /^test --profile=.*setup-bazel-cache-test\.profile\.gz$/m,
+  );
+  assert.deepEqual(Object.keys(configuration.profiles), ['build', 'test']);
+});
+
 test('Bazel 8 compatibility import preserves the user bazelrc', (context) => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'setup-bazel-cache-home-'));
   const userBazelrc = path.join(home, '.bazelrc');

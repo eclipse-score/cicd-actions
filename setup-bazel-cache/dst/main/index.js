@@ -1068,14 +1068,14 @@ var require_util = __commonJS({
         }
         const port = url2.port != null ? url2.port : url2.protocol === "https:" ? 443 : 80;
         let origin = url2.origin != null ? url2.origin : `${url2.protocol || ""}//${url2.hostname || ""}:${port}`;
-        let path15 = url2.path != null ? url2.path : `${url2.pathname || ""}${url2.search || ""}`;
+        let path16 = url2.path != null ? url2.path : `${url2.pathname || ""}${url2.search || ""}`;
         if (origin[origin.length - 1] === "/") {
           origin = origin.slice(0, origin.length - 1);
         }
-        if (path15 && path15[0] !== "/") {
-          path15 = `/${path15}`;
+        if (path16 && path16[0] !== "/") {
+          path16 = `/${path16}`;
         }
-        return new URL(`${origin}${path15}`);
+        return new URL(`${origin}${path16}`);
       }
       if (!isHttpOrHttpsPrefixed(url2.origin || url2.protocol)) {
         throw new InvalidArgumentError("Invalid URL protocol: the URL must start with `http:` or `https:`.");
@@ -1526,39 +1526,39 @@ var require_diagnostics = __commonJS({
       });
       diagnosticsChannel.channel("undici:client:sendHeaders").subscribe((evt) => {
         const {
-          request: { method, path: path15, origin }
+          request: { method, path: path16, origin }
         } = evt;
-        debuglog("sending request to %s %s/%s", method, origin, path15);
+        debuglog("sending request to %s %s/%s", method, origin, path16);
       });
       diagnosticsChannel.channel("undici:request:headers").subscribe((evt) => {
         const {
-          request: { method, path: path15, origin },
+          request: { method, path: path16, origin },
           response: { statusCode }
         } = evt;
         debuglog(
           "received response to %s %s/%s - HTTP %d",
           method,
           origin,
-          path15,
+          path16,
           statusCode
         );
       });
       diagnosticsChannel.channel("undici:request:trailers").subscribe((evt) => {
         const {
-          request: { method, path: path15, origin }
+          request: { method, path: path16, origin }
         } = evt;
-        debuglog("trailers received from %s %s/%s", method, origin, path15);
+        debuglog("trailers received from %s %s/%s", method, origin, path16);
       });
       diagnosticsChannel.channel("undici:request:error").subscribe((evt) => {
         const {
-          request: { method, path: path15, origin },
+          request: { method, path: path16, origin },
           error: error2
         } = evt;
         debuglog(
           "request to %s %s/%s errored - %s",
           method,
           origin,
-          path15,
+          path16,
           error2.message
         );
       });
@@ -1607,9 +1607,9 @@ var require_diagnostics = __commonJS({
         });
         diagnosticsChannel.channel("undici:client:sendHeaders").subscribe((evt) => {
           const {
-            request: { method, path: path15, origin }
+            request: { method, path: path16, origin }
           } = evt;
-          debuglog("sending request to %s %s/%s", method, origin, path15);
+          debuglog("sending request to %s %s/%s", method, origin, path16);
         });
       }
       diagnosticsChannel.channel("undici:websocket:open").subscribe((evt) => {
@@ -1672,7 +1672,7 @@ var require_request = __commonJS({
     var kHandler = Symbol("handler");
     var Request = class {
       constructor(origin, {
-        path: path15,
+        path: path16,
         method,
         body: body2,
         headers,
@@ -1687,11 +1687,11 @@ var require_request = __commonJS({
         expectContinue,
         servername
       }, handler) {
-        if (typeof path15 !== "string") {
+        if (typeof path16 !== "string") {
           throw new InvalidArgumentError("path must be a string");
-        } else if (path15[0] !== "/" && !(path15.startsWith("http://") || path15.startsWith("https://")) && method !== "CONNECT") {
+        } else if (path16[0] !== "/" && !(path16.startsWith("http://") || path16.startsWith("https://")) && method !== "CONNECT") {
           throw new InvalidArgumentError("path must be an absolute URL or start with a slash");
-        } else if (invalidPathRegex.test(path15)) {
+        } else if (invalidPathRegex.test(path16)) {
           throw new InvalidArgumentError("invalid request path");
         }
         if (typeof method !== "string") {
@@ -1757,7 +1757,7 @@ var require_request = __commonJS({
         this.completed = false;
         this.aborted = false;
         this.upgrade = upgrade || null;
-        this.path = query ? buildURL(path15, query) : path15;
+        this.path = query ? buildURL(path16, query) : path16;
         this.origin = origin;
         this.idempotent = idempotent == null ? method === "HEAD" || method === "GET" : idempotent;
         this.blocking = blocking == null ? false : blocking;
@@ -6387,7 +6387,7 @@ var require_client_h1 = __commonJS({
       return method !== "GET" && method !== "HEAD" && method !== "OPTIONS" && method !== "TRACE" && method !== "CONNECT";
     }
     function writeH1(client, request) {
-      const { method, path: path15, host, upgrade, blocking, reset } = request;
+      const { method, path: path16, host, upgrade, blocking, reset } = request;
       let { body: body2, headers, contentLength: contentLength2 } = request;
       const expectsPayload = method === "PUT" || method === "POST" || method === "PATCH" || method === "QUERY" || method === "PROPFIND" || method === "PROPPATCH";
       if (util6.isFormDataLike(body2)) {
@@ -6462,7 +6462,7 @@ var require_client_h1 = __commonJS({
       if (blocking) {
         socket[kBlocking] = true;
       }
-      let header = `${method} ${path15} HTTP/1.1\r
+      let header = `${method} ${path16} HTTP/1.1\r
 `;
       if (typeof host === "string") {
         header += `host: ${host}\r
@@ -6988,7 +6988,7 @@ var require_client_h2 = __commonJS({
     }
     function writeH2(client, request) {
       const session = client[kHTTP2Session];
-      const { method, path: path15, host, upgrade, expectContinue, signal, headers: reqHeaders } = request;
+      const { method, path: path16, host, upgrade, expectContinue, signal, headers: reqHeaders } = request;
       let { body: body2 } = request;
       if (upgrade) {
         util6.errorRequest(client, request, new Error("Upgrade not supported for H2"));
@@ -7055,7 +7055,7 @@ var require_client_h2 = __commonJS({
         });
         return true;
       }
-      headers[HTTP2_HEADER_PATH] = path15;
+      headers[HTTP2_HEADER_PATH] = path16;
       headers[HTTP2_HEADER_SCHEME] = "https";
       const expectsPayload = method === "PUT" || method === "POST" || method === "PATCH";
       if (body2 && typeof body2.read === "function") {
@@ -7408,9 +7408,9 @@ var require_redirect_handler = __commonJS({
           return this.handler.onHeaders(statusCode, headers, resume, statusText);
         }
         const { origin, pathname, search } = util6.parseURL(new URL(this.location, this.opts.origin && new URL(this.opts.path, this.opts.origin)));
-        const path15 = search ? `${pathname}${search}` : pathname;
+        const path16 = search ? `${pathname}${search}` : pathname;
         this.opts.headers = cleanRequestHeaders(this.opts.headers, statusCode === 303, this.opts.origin !== origin);
-        this.opts.path = path15;
+        this.opts.path = path16;
         this.opts.origin = origin;
         this.opts.maxRedirections = 0;
         this.opts.query = null;
@@ -8645,10 +8645,10 @@ var require_proxy_agent = __commonJS({
         };
         const {
           origin,
-          path: path15 = "/",
+          path: path16 = "/",
           headers = {}
         } = opts;
-        opts.path = origin + path15;
+        opts.path = origin + path16;
         if (!("host" in headers) && !("Host" in headers)) {
           const { host } = new URL3(origin);
           headers.host = host;
@@ -10597,20 +10597,20 @@ var require_mock_utils = __commonJS({
       }
       return true;
     }
-    function safeUrl(path15) {
-      if (typeof path15 !== "string") {
-        return path15;
+    function safeUrl(path16) {
+      if (typeof path16 !== "string") {
+        return path16;
       }
-      const pathSegments = path15.split("?");
+      const pathSegments = path16.split("?");
       if (pathSegments.length !== 2) {
-        return path15;
+        return path16;
       }
       const qp = new URLSearchParams(pathSegments.pop());
       qp.sort();
       return [...pathSegments, qp.toString()].join("?");
     }
-    function matchKey(mockDispatch2, { path: path15, method, body: body2, headers }) {
-      const pathMatch = matchValue(mockDispatch2.path, path15);
+    function matchKey(mockDispatch2, { path: path16, method, body: body2, headers }) {
+      const pathMatch = matchValue(mockDispatch2.path, path16);
       const methodMatch = matchValue(mockDispatch2.method, method);
       const bodyMatch = typeof mockDispatch2.body !== "undefined" ? matchValue(mockDispatch2.body, body2) : true;
       const headersMatch = matchHeaders(mockDispatch2, headers);
@@ -10632,7 +10632,7 @@ var require_mock_utils = __commonJS({
     function getMockDispatch(mockDispatches, key) {
       const basePath = key.query ? buildURL(key.path, key.query) : key.path;
       const resolvedPath = typeof basePath === "string" ? safeUrl(basePath) : basePath;
-      let matchedMockDispatches = mockDispatches.filter(({ consumed }) => !consumed).filter(({ path: path15 }) => matchValue(safeUrl(path15), resolvedPath));
+      let matchedMockDispatches = mockDispatches.filter(({ consumed }) => !consumed).filter(({ path: path16 }) => matchValue(safeUrl(path16), resolvedPath));
       if (matchedMockDispatches.length === 0) {
         throw new MockNotMatchedError(`Mock dispatch not matched for path '${resolvedPath}'`);
       }
@@ -10670,9 +10670,9 @@ var require_mock_utils = __commonJS({
       }
     }
     function buildKey(opts) {
-      const { path: path15, method, body: body2, headers, query } = opts;
+      const { path: path16, method, body: body2, headers, query } = opts;
       return {
-        path: path15,
+        path: path16,
         method,
         body: body2,
         headers,
@@ -11135,10 +11135,10 @@ var require_pending_interceptors_formatter = __commonJS({
       }
       format(pendingInterceptors) {
         const withPrettyHeaders = pendingInterceptors.map(
-          ({ method, path: path15, data: { statusCode }, persist, times, timesInvoked, origin }) => ({
+          ({ method, path: path16, data: { statusCode }, persist, times, timesInvoked, origin }) => ({
             Method: method,
             Origin: origin,
-            Path: path15,
+            Path: path16,
             "Status code": statusCode,
             Persistent: persist ? PERSISTENT : NOT_PERSISTENT,
             Invocations: timesInvoked,
@@ -16019,9 +16019,9 @@ var require_util6 = __commonJS({
         }
       }
     }
-    function validateCookiePath(path15) {
-      for (let i = 0; i < path15.length; ++i) {
-        const code = path15.charCodeAt(i);
+    function validateCookiePath(path16) {
+      for (let i = 0; i < path16.length; ++i) {
+        const code = path16.charCodeAt(i);
         if (code < 32 || // exclude CTLs (0-31)
         code > 126 || // exclude DEL and non-ascii
         code === 59) {
@@ -18752,11 +18752,11 @@ var require_undici = __commonJS({
           if (typeof opts.path !== "string") {
             throw new InvalidArgumentError("invalid opts.path");
           }
-          let path15 = opts.path;
+          let path16 = opts.path;
           if (!opts.path.startsWith("/")) {
-            path15 = `/${path15}`;
+            path16 = `/${path16}`;
           }
-          url2 = new URL(util6.parseOrigin(url2).origin + path15);
+          url2 = new URL(util6.parseOrigin(url2).origin + path16);
         } else {
           if (!opts) {
             opts = typeof url2 === "object" ? url2 : {};
@@ -19146,7 +19146,7 @@ var require_minimatch = __commonJS({
   "node_modules/@actions/cache/node_modules/minimatch/minimatch.js"(exports2, module2) {
     module2.exports = minimatch3;
     minimatch3.Minimatch = Minimatch3;
-    var path15 = (function() {
+    var path16 = (function() {
       try {
         return require("path");
       } catch (e) {
@@ -19154,7 +19154,7 @@ var require_minimatch = __commonJS({
     })() || {
       sep: "/"
     };
-    minimatch3.sep = path15.sep;
+    minimatch3.sep = path16.sep;
     var GLOBSTAR2 = minimatch3.GLOBSTAR = Minimatch3.GLOBSTAR = {};
     var expand2 = require_brace_expansion();
     var plTypes = {
@@ -19243,8 +19243,8 @@ var require_minimatch = __commonJS({
       assertValidPattern2(pattern);
       if (!options) options = {};
       pattern = pattern.trim();
-      if (!options.allowWindowsEscape && path15.sep !== "/") {
-        pattern = pattern.split(path15.sep).join("/");
+      if (!options.allowWindowsEscape && path16.sep !== "/") {
+        pattern = pattern.split(path16.sep).join("/");
       }
       this.options = options;
       this.maxGlobstarRecursion = options.maxGlobstarRecursion !== void 0 ? options.maxGlobstarRecursion : 200;
@@ -19615,8 +19615,8 @@ var require_minimatch = __commonJS({
       if (this.empty) return f === "";
       if (f === "/" && partial) return true;
       var options = this.options;
-      if (path15.sep !== "/") {
-        f = f.split(path15.sep).join("/");
+      if (path16.sep !== "/") {
+        f = f.split(path16.sep).join("/");
       }
       f = f.split(slashSplit);
       this.debug(this.pattern, "split", f);
@@ -22287,7 +22287,7 @@ var require_has_flag = __commonJS({
 var require_supports_color = __commonJS({
   "node_modules/supports-color/index.js"(exports2, module2) {
     "use strict";
-    var os9 = require("os");
+    var os10 = require("os");
     var tty = require("tty");
     var hasFlag = require_has_flag();
     var { env } = process;
@@ -22335,7 +22335,7 @@ var require_supports_color = __commonJS({
         return min;
       }
       if (process.platform === "win32") {
-        const osRelease = os9.release().split(".");
+        const osRelease = os10.release().split(".");
         if (Number(osRelease[0]) >= 10 && Number(osRelease[2]) >= 10586) {
           return Number(osRelease[2]) >= 14931 ? 3 : 2;
         }
@@ -29449,7 +29449,7 @@ function saveState(name, value) {
 }
 
 // src/main.js
-var import_node_fs5 = __toESM(require("node:fs"), 1);
+var import_node_fs6 = __toESM(require("node:fs"), 1);
 
 // node_modules/@actions/cache/lib/cache.js
 var path6 = __toESM(require("path"), 1);
@@ -33701,15 +33701,15 @@ function getRequestUrl(baseUri, operationSpec, operationArguments, fallbackObjec
   let isAbsolutePath = false;
   let requestUrl = replaceAll(baseUri, urlReplacements);
   if (operationSpec.path) {
-    let path15 = replaceAll(operationSpec.path, urlReplacements);
-    if (operationSpec.path === "/{nextLink}" && path15.startsWith("/")) {
-      path15 = path15.substring(1);
+    let path16 = replaceAll(operationSpec.path, urlReplacements);
+    if (operationSpec.path === "/{nextLink}" && path16.startsWith("/")) {
+      path16 = path16.substring(1);
     }
-    if (isAbsoluteUrl(path15)) {
-      requestUrl = path15;
+    if (isAbsoluteUrl(path16)) {
+      requestUrl = path16;
       isAbsolutePath = true;
     } else {
-      requestUrl = appendPath(requestUrl, path15);
+      requestUrl = appendPath(requestUrl, path16);
     }
   }
   const { queryParams, sequenceParams } = calculateQueryParameters(operationSpec, operationArguments, fallbackObject);
@@ -33755,9 +33755,9 @@ function appendPath(url2, pathToAppend) {
   }
   const searchStart = pathToAppend.indexOf("?");
   if (searchStart !== -1) {
-    const path15 = pathToAppend.substring(0, searchStart);
+    const path16 = pathToAppend.substring(0, searchStart);
     const search = pathToAppend.substring(searchStart + 1);
-    newPath = newPath + path15;
+    newPath = newPath + path16;
     if (search) {
       parsedUrl.search = parsedUrl.search ? `${parsedUrl.search}&${search}` : search;
     }
@@ -36565,16 +36565,16 @@ var MatcherView = class {
    * @returns {string|undefined}
    */
   getCurrentTag() {
-    const path15 = this._matcher.path;
-    return path15.length > 0 ? path15[path15.length - 1].tag : void 0;
+    const path16 = this._matcher.path;
+    return path16.length > 0 ? path16[path16.length - 1].tag : void 0;
   }
   /**
    * Get current namespace.
    * @returns {string|undefined}
    */
   getCurrentNamespace() {
-    const path15 = this._matcher.path;
-    return path15.length > 0 ? path15[path15.length - 1].namespace : void 0;
+    const path16 = this._matcher.path;
+    return path16.length > 0 ? path16[path16.length - 1].namespace : void 0;
   }
   /**
    * Get current node's attribute value.
@@ -36582,9 +36582,9 @@ var MatcherView = class {
    * @returns {*}
    */
   getAttrValue(attrName) {
-    const path15 = this._matcher.path;
-    if (path15.length === 0) return void 0;
-    return path15[path15.length - 1].values?.[attrName];
+    const path16 = this._matcher.path;
+    if (path16.length === 0) return void 0;
+    return path16[path16.length - 1].values?.[attrName];
   }
   /**
    * Check if current node has an attribute.
@@ -36592,9 +36592,9 @@ var MatcherView = class {
    * @returns {boolean}
    */
   hasAttr(attrName) {
-    const path15 = this._matcher.path;
-    if (path15.length === 0) return false;
-    const current = path15[path15.length - 1];
+    const path16 = this._matcher.path;
+    if (path16.length === 0) return false;
+    const current = path16[path16.length - 1];
     return current.values !== void 0 && attrName in current.values;
   }
   /**
@@ -36620,18 +36620,18 @@ var MatcherView = class {
    * @returns {number}
    */
   getPosition() {
-    const path15 = this._matcher.path;
-    if (path15.length === 0) return -1;
-    return path15[path15.length - 1].position ?? 0;
+    const path16 = this._matcher.path;
+    if (path16.length === 0) return -1;
+    return path16[path16.length - 1].position ?? 0;
   }
   /**
    * Get current node's repeat counter (occurrence count of this tag name).
    * @returns {number}
    */
   getCounter() {
-    const path15 = this._matcher.path;
-    if (path15.length === 0) return -1;
-    return path15[path15.length - 1].counter ?? 0;
+    const path16 = this._matcher.path;
+    if (path16.length === 0) return -1;
+    return path16[path16.length - 1].counter ?? 0;
   }
   /**
    * Get current node's sibling index (alias for getPosition).
@@ -39789,11 +39789,11 @@ var NativeCRC64 = (() => {
       throw new Error("Module.ENVIRONMENT has been deprecated. To force the environment, use the ENVIRONMENT compile-time option (for example, -sENVIRONMENT=web or -sENVIRONMENT=node)");
     }
     var scriptDirectory = "";
-    function locateFile(path15) {
+    function locateFile(path16) {
       if (Module["locateFile"]) {
-        return Module["locateFile"](path15, scriptDirectory);
+        return Module["locateFile"](path16, scriptDirectory);
       }
-      return scriptDirectory + path15;
+      return scriptDirectory + path16;
     }
     var read_, readAsync, readBinary, setWindowTitle;
     function logExceptionOnExit(e) {
@@ -43276,9 +43276,9 @@ var StorageSharedKeyCredentialPolicy = class extends CredentialPolicy {
    * @param request -
    */
   getCanonicalizedResourceString(request) {
-    const path15 = getURLPath(request.url) || "/";
+    const path16 = getURLPath(request.url) || "/";
     let canonicalizedResourceString = "";
-    canonicalizedResourceString += `/${this.factory.accountName}${path15}`;
+    canonicalizedResourceString += `/${this.factory.accountName}${path16}`;
     const queries = getURLQueries(request.url);
     const lowercaseQueries = {};
     if (queries) {
@@ -43760,9 +43760,9 @@ function storageSharedKeyCredentialPolicy(options) {
     return canonicalizedHeadersStringToSign;
   }
   function getCanonicalizedResourceString(request) {
-    const path15 = getURLPath(request.url) || "/";
+    const path16 = getURLPath(request.url) || "/";
     let canonicalizedResourceString = "";
-    canonicalizedResourceString += `/${options.accountName}${path15}`;
+    canonicalizedResourceString += `/${options.accountName}${path16}`;
     const queries = getURLQueries(request.url);
     const lowercaseQueries = {};
     if (queries) {
@@ -57907,10 +57907,10 @@ var accountNameSuffixes = [
 ];
 function escapeURLPath(url2) {
   const urlParsed = new URL(url2);
-  let path15 = urlParsed.pathname;
-  path15 = path15 || "/";
-  path15 = escape(path15);
-  urlParsed.pathname = path15;
+  let path16 = urlParsed.pathname;
+  path16 = path16 || "/";
+  path16 = escape(path16);
+  urlParsed.pathname = path16;
   return urlParsed.toString();
 }
 function getProxyUriFromDevConnString(connectionString) {
@@ -57995,9 +57995,9 @@ function escape(text) {
 }
 function appendToURLPath(url2, name) {
   const urlParsed = new URL(url2);
-  let path15 = urlParsed.pathname;
-  path15 = path15 ? path15.endsWith("/") ? `${path15}${name}` : `${path15}/${name}` : name;
-  urlParsed.pathname = path15;
+  let path16 = urlParsed.pathname;
+  path16 = path16 ? path16.endsWith("/") ? `${path16}${name}` : `${path16}/${name}` : name;
+  urlParsed.pathname = path16;
   return urlParsed.toString();
 }
 function setURLParameter2(url2, name, value) {
@@ -69109,8 +69109,8 @@ var Pattern2 = class _Pattern {
 
 // node_modules/@actions/glob/lib/internal-search-state.js
 var SearchState2 = class {
-  constructor(path15, level) {
-    this.path = path15;
+  constructor(path16, level) {
+    this.path = path16;
     this.level = level;
   }
 };
@@ -69654,9 +69654,40 @@ async function restore(configuration, cacheConfiguration) {
 }
 
 // src/config.js
+var import_node_fs4 = __toESM(require("node:fs"), 1);
+var import_node_os4 = __toESM(require("node:os"), 1);
+var import_node_path3 = __toESM(require("node:path"), 1);
+
+// src/profiling.js
 var import_node_fs3 = __toESM(require("node:fs"), 1);
 var import_node_os3 = __toESM(require("node:os"), 1);
 var import_node_path2 = __toESM(require("node:path"), 1);
+var PROFILE_NAMES = Object.freeze({
+  build: "setup-bazel-cache-build.profile.gz",
+  test: "setup-bazel-cache-test.profile.gz"
+});
+function profilingEnabled(value, runnerDebug = process.env.RUNNER_DEBUG === "1") {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "auto") return runnerDebug;
+  if (normalized === "true") return true;
+  if (normalized === "false") return false;
+  throw new Error("Input 'enable-profiling' must be one of: auto, true, false");
+}
+function profilePaths(runnerTemp = process.env.RUNNER_TEMP || import_node_os3.default.tmpdir()) {
+  return Object.fromEntries(
+    Object.entries(PROFILE_NAMES).map(([command, fileName]) => [
+      command,
+      import_node_path2.default.join(runnerTemp, fileName)
+    ])
+  );
+}
+function clearProfiles(profiles) {
+  for (const profile of Object.values(profiles)) {
+    import_node_fs3.default.rmSync(profile, { force: true });
+  }
+}
+
+// src/config.js
 var MAX_BAZELISK_VERSION_LENGTH = 400;
 var MAX_DISK_CACHE_KEY_LENGTH = 400;
 var BAZELRC_MARKER_START = "# setup-bazel-cache: begin managed import";
@@ -69684,10 +69715,10 @@ function validateBazeliskVersion(value) {
   return value;
 }
 function readBazeliskVersion(workspace) {
-  const versionFile = import_node_path2.default.join(workspace, ".bazelversion");
+  const versionFile = import_node_path3.default.join(workspace, ".bazelversion");
   let version3;
   try {
-    version3 = import_node_fs3.default.readFileSync(versionFile, "utf8").trim();
+    version3 = import_node_fs4.default.readFileSync(versionFile, "utf8").trim();
   } catch (error2) {
     if (error2.code === "ENOENT") return "default";
     throw error2;
@@ -69697,67 +69728,76 @@ function readBazeliskVersion(workspace) {
 function installManagedBazelrc(configuration) {
   let contents = "";
   try {
-    contents = import_node_fs3.default.readFileSync(configuration.userBazelrc, "utf8");
+    contents = import_node_fs4.default.readFileSync(configuration.userBazelrc, "utf8");
   } catch (error2) {
     if (error2.code !== "ENOENT") throw error2;
   }
   const separator = contents && !contents.endsWith("\n") ? "\n" : "";
-  import_node_fs3.default.appendFileSync(
+  import_node_fs4.default.appendFileSync(
     configuration.userBazelrc,
     `${separator}${configuration.bazelrcImport}`
   );
 }
-function createConfiguration(workspace, diskCacheKey, { bazeliskVersion } = {}) {
+function createConfiguration(workspace, diskCacheKey, { bazeliskVersion, enableProfiling = false } = {}) {
   validateDiskCacheKey(diskCacheKey);
   const resolvedBazeliskVersion = bazeliskVersion === void 0 ? readBazeliskVersion(workspace) : validateBazeliskVersion(bazeliskVersion);
-  const home = import_node_os3.default.homedir();
-  const cacheRoot = import_node_path2.default.join(home, ".cache");
-  const runnerTemp = process.env.RUNNER_TEMP || import_node_os3.default.tmpdir();
-  const baseKey = `setup-bazel-cache-v1-linux-${import_node_os3.default.arch()}`;
+  const home = import_node_os4.default.homedir();
+  const cacheRoot = import_node_path3.default.join(home, ".cache");
+  const runnerTemp = process.env.RUNNER_TEMP || import_node_os4.default.tmpdir();
+  const baseKey = `setup-bazel-cache-v1-linux-${import_node_os4.default.arch()}`;
+  const profiles = enableProfiling ? profilePaths(runnerTemp) : null;
+  const bazelrcLines = [
+    `build --disk_cache=${import_node_path3.default.join(cacheRoot, "bazel-disk")}`,
+    `common --repository_cache=${import_node_path3.default.join(cacheRoot, "bazel-repo")}`
+  ];
+  if (profiles) {
+    bazelrcLines.push(
+      `build --profile=${profiles.build}`,
+      `test --profile=${profiles.test}`
+    );
+  }
   return {
     additiveCacheSaveEnvironment: "SETUP_BAZEL_CACHE_ADDITIVE_SAVE",
-    bazelrc: import_node_path2.default.join(runnerTemp, "setup-bazel-cache.bazelrc"),
+    bazelrc: import_node_path3.default.join(runnerTemp, "setup-bazel-cache.bazelrc"),
     bazelrcImport: [
       BAZELRC_MARKER_START,
-      `try-import ${import_node_path2.default.join(runnerTemp, "setup-bazel-cache.bazelrc")}`,
+      `try-import ${import_node_path3.default.join(runnerTemp, "setup-bazel-cache.bazelrc")}`,
       BAZELRC_MARKER_END,
       ""
     ].join("\n"),
-    bazelrcContents: [
-      `build --disk_cache=${import_node_path2.default.join(cacheRoot, "bazel-disk")}`,
-      `common --repository_cache=${import_node_path2.default.join(cacheRoot, "bazel-repo")}`,
-      ""
-    ].join("\n"),
+    bazelrcContents: `${bazelrcLines.join("\n")}
+`,
     cacheSaveState: "setup-bazel-cache-configuration",
-    userBazelrc: import_node_path2.default.join(home, ".bazelrc"),
+    userBazelrc: import_node_path3.default.join(home, ".bazelrc"),
     caches: {
       bazelisk: {
         name: "bazelisk",
         files: [],
         keySuffix: resolvedBazeliskVersion,
-        path: import_node_path2.default.join(cacheRoot, "bazelisk")
+        path: import_node_path3.default.join(cacheRoot, "bazelisk")
       },
       disk: {
         name: `disk-${diskCacheKey.length}-${diskCacheKey}`,
         generational: true,
         files: [],
-        path: import_node_path2.default.join(cacheRoot, "bazel-disk")
+        path: import_node_path3.default.join(cacheRoot, "bazel-disk")
       },
       repository: {
         name: "repository",
         generational: true,
         files: [],
-        path: import_node_path2.default.join(cacheRoot, "bazel-repo")
+        path: import_node_path3.default.join(cacheRoot, "bazel-repo")
       }
     },
     baseKey,
+    profiles,
     workspace
   };
 }
 
 // src/git.js
 var childProcess = __toESM(require("node:child_process"), 1);
-var import_node_fs4 = __toESM(require("node:fs"), 1);
+var import_node_fs5 = __toESM(require("node:fs"), 1);
 var FALLBACK_COMPARISON_BASE = "HEAD^";
 var NULL_SHA = "0".repeat(40);
 var SHA_PATTERN = /^[0-9a-f]{40}$/;
@@ -69771,7 +69811,7 @@ function runGit(workspace, args, options = {}) {
 function succeeds(result) {
   return result.status === 0;
 }
-function resolveDefaultBranch(eventPath = process.env.GITHUB_EVENT_PATH, readFile = import_node_fs4.default.readFileSync) {
+function resolveDefaultBranch(eventPath = process.env.GITHUB_EVENT_PATH, readFile = import_node_fs5.default.readFileSync) {
   if (!eventPath) {
     throw new Error(
       "GITHUB_EVENT_PATH is not set; set cache-save-branch-patterns explicitly when running outside GitHub Actions."
@@ -69786,7 +69826,7 @@ function resolveDefaultBranch(eventPath = process.env.GITHUB_EVENT_PATH, readFil
   }
   return defaultBranch;
 }
-function resolveComparisonBase(eventName = process.env.GITHUB_EVENT_NAME, eventPath = process.env.GITHUB_EVENT_PATH, readFile = import_node_fs4.default.readFileSync) {
+function resolveComparisonBase(eventName = process.env.GITHUB_EVENT_NAME, eventPath = process.env.GITHUB_EVENT_PATH, readFile = import_node_fs5.default.readFileSync) {
   if (eventName !== "push") return FALLBACK_COMPARISON_BASE;
   if (!eventPath) {
     throw new Error("GITHUB_EVENT_PATH is not set for this push event.");
@@ -69941,6 +69981,7 @@ async function run() {
     const workspace = process.env.GITHUB_WORKSPACE;
     if (!workspace) throw new Error("GITHUB_WORKSPACE is not set.");
     const diskCacheKey = getInput("disk-cache-key", { required: true });
+    const enableProfiling = profilingEnabled(getInput("enable-profiling"));
     const rawCacheSaveBranchPatterns = getInput("cache-save-branch-patterns");
     const cacheSaveBranchPatterns = parseCacheSaveBranchPatterns(
       rawCacheSaveBranchPatterns,
@@ -69954,7 +69995,11 @@ async function run() {
       repositoryCacheRestore: getInput("repository-cache-restore"),
       repositoryCacheSave: getInput("repository-cache-save")
     });
-    const configuration = createConfiguration(workspace, diskCacheKey);
+    const configuration = createConfiguration(workspace, diskCacheKey, { enableProfiling });
+    if (configuration.profiles) {
+      clearProfiles(configuration.profiles);
+      info("Bazel profiling enabled; later build/test invocations overwrite their profiles.");
+    }
     const ref = process.env.GITHUB_REF || "";
     const cacheSaveAllowed = isCacheSaveRef(ref, cacheSaveBranchPatterns);
     const cacheSaveReason = cacheSaveDisallowReason(ref, cacheSaveBranchPatterns);
@@ -69987,12 +70032,12 @@ async function run() {
       checkoutHistory,
       changed
     });
-    import_node_fs5.default.writeFileSync(configuration.bazelrc, configuration.bazelrcContents, { flag: "wx" });
+    import_node_fs6.default.writeFileSync(configuration.bazelrc, configuration.bazelrcContents, { flag: "wx" });
     info(`Created ${configuration.bazelrc}`);
     const bazelrcFiles = [process.env.BAZELRC, configuration.bazelrc].filter(Boolean);
     exportVariable("BAZELRC", bazelrcFiles.join(","));
     for (const cache of [configuration.caches.disk, configuration.caches.repository]) {
-      import_node_fs5.default.mkdirSync(cache.path, { recursive: true });
+      import_node_fs6.default.mkdirSync(cache.path, { recursive: true });
     }
     const restoreDetails = {
       bazelisk: await restoreCache2(configuration, configuration.caches.bazelisk, restores.bazelisk),

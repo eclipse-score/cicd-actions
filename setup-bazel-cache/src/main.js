@@ -23,6 +23,7 @@ import {
   restoreOutput,
 } from './cache.js';
 import { createConfiguration, installManagedBazelrc } from './config.js';
+import { clearProfiles, profilingEnabled } from './profiling.js';
 import {
   ensureComparisonHistory,
   lockFileChanged,
@@ -56,6 +57,7 @@ async function run() {
     if (!workspace) throw new Error('GITHUB_WORKSPACE is not set.');
 
     const diskCacheKey = core.getInput('disk-cache-key', { required: true });
+    const enableProfiling = profilingEnabled(core.getInput('enable-profiling'));
     const rawCacheSaveBranchPatterns = core.getInput('cache-save-branch-patterns');
     const cacheSaveBranchPatterns = parseCacheSaveBranchPatterns(
       rawCacheSaveBranchPatterns,
@@ -70,7 +72,11 @@ async function run() {
       repositoryCacheSave: core.getInput('repository-cache-save'),
     });
 
-    const configuration = createConfiguration(workspace, diskCacheKey);
+    const configuration = createConfiguration(workspace, diskCacheKey, { enableProfiling });
+    if (configuration.profiles) {
+      clearProfiles(configuration.profiles);
+      core.info('Bazel profiling enabled; later build/test invocations overwrite their profiles.');
+    }
 
     const ref = process.env.GITHUB_REF || '';
     const cacheSaveAllowed = isCacheSaveRef(ref, cacheSaveBranchPatterns);
