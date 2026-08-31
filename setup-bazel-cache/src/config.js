@@ -14,6 +14,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { profilePaths } from './profiling.js';
 
 const MAX_BAZELISK_VERSION_LENGTH = 400;
 const MAX_DISK_CACHE_KEY_LENGTH = 400;
@@ -88,7 +89,11 @@ function installManagedBazelrc(configuration) {
 }
 
 /** Build the complete Linux cache configuration in one place. */
-function createConfiguration(workspace, diskCacheKey, { bazeliskVersion } = {}) {
+function createConfiguration(
+  workspace,
+  diskCacheKey,
+  { bazeliskVersion, enableProfiling = false } = {},
+) {
   validateDiskCacheKey(diskCacheKey);
   const resolvedBazeliskVersion = bazeliskVersion === undefined
     ? readBazeliskVersion(workspace)
@@ -97,6 +102,17 @@ function createConfiguration(workspace, diskCacheKey, { bazeliskVersion } = {}) 
   const cacheRoot = path.join(home, '.cache');
   const runnerTemp = process.env.RUNNER_TEMP || os.tmpdir();
   const baseKey = `setup-bazel-cache-v1-linux-${os.arch()}`;
+  const profiles = enableProfiling ? profilePaths(runnerTemp) : null;
+  const bazelrcLines = [
+    `build --disk_cache=${path.join(cacheRoot, 'bazel-disk')}`,
+    `common --repository_cache=${path.join(cacheRoot, 'bazel-repo')}`,
+  ];
+  if (profiles) {
+    bazelrcLines.push(
+      `build --profile=${profiles.build}`,
+      `test --profile=${profiles.test}`,
+    );
+  }
 
   return {
     additiveCacheSaveEnvironment:
@@ -108,11 +124,7 @@ function createConfiguration(workspace, diskCacheKey, { bazeliskVersion } = {}) 
       BAZELRC_MARKER_END,
       '',
     ].join('\n'),
-    bazelrcContents: [
-      `build --disk_cache=${path.join(cacheRoot, 'bazel-disk')}`,
-      `common --repository_cache=${path.join(cacheRoot, 'bazel-repo')}`,
-      '',
-    ].join('\n'),
+    bazelrcContents: `${bazelrcLines.join('\n')}\n`,
     cacheSaveState: 'setup-bazel-cache-configuration',
     userBazelrc: path.join(home, '.bazelrc'),
     caches: {
@@ -136,6 +148,7 @@ function createConfiguration(workspace, diskCacheKey, { bazeliskVersion } = {}) 
       },
     },
     baseKey,
+    profiles,
     workspace,
   };
 }

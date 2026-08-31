@@ -32,6 +32,25 @@ steps:
   Globbing: `*` matches within one branch path component and `**` also crosses `/`,
   so `release/*` matches `release/1.0` and `release/**` matches `release/1/0` and `release/2.0`.
 
+### Optional Bazel profiling
+
+Profiling defaults to `auto`, which enables it automatically for GitHub Actions
+debug runs. Set `enable-profiling: true` to enable it for every run:
+
+```yaml
+- uses: eclipse-score/cicd-actions/setup-bazel-cache@<sha>
+  with:
+    disk-cache-key: ${{ github.workflow }}-${{ github.job }}
+    enable-profiling: true
+```
+
+The action uploads the raw profiles as the `bazel-profiles` artifact in its post
+step. It does not analyze the profiles in the workflow log. There is one fixed
+profile for `build` and one for `test`; if a command is invoked more than once,
+the later invocation overwrites the earlier profile. If neither command runs,
+no profiling artifact is created. Set `enable-profiling: false` to disable
+profiling, including for debug runs.
+
 ### Advanced
 
 Further parameters to configure cache behavior:

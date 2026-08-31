@@ -33,6 +33,14 @@ inputs:
     required: false
     default: ""
 
+  enable-profiling:
+    description: >
+      Add fixed build and test profile paths to the managed Bazelrc and upload
+      the last profiles in the post step. Accepts auto, true, or false. With
+      auto, profiling is enabled when GitHub Actions debug logging is enabled.
+    required: false
+    default: "auto"
+
   # cache flags:
 
   bazelisk-cache-restore:
