@@ -18,18 +18,21 @@ giving candidate code access to the default branch's caches.
 The persistence workflow uses three jobs because GitHub runs a JavaScript
 action's post step only after its job has finished:
 
-1. A successful job seeds a baseline for all three caches.
-2. A second job restores that baseline, verifies
-   `_failed-job-cache-save-allowed: "true"`, and adds disk and repository markers.
-   Automatic runs complete successfully. A manual run can enable
-   `exercise-failed-job` to fail intentionally and exercise the
-   failure-sensitive post condition.
-3. A final job restores the next generation and verifies the added markers.
+1. A successful job seeds a baseline for all four cache families.
+2. A second job restores that baseline and adds disk, repository, and
+   extracted external-repository markers. Automatic runs complete successfully
+   and publish those additions. A manual run can enable `exercise-failed-job` to
+   fail intentionally; external saving disables the failure-sensitive post
+   condition, so no additions are published.
+3. A final job verifies that successful-job additions were published, or that
+   the baseline was preserved after the intentionally failed job.
 
 Unit tests separately verify that misses, skipped restores, and cache API
-failures produce `_failed-job-cache-save-allowed: "false"`. The action exports that
-decision for its failure-sensitive `post-if` condition; the pull-request action
-test verifies that the exported value matches the public output.
+failures produce `_failed-job-cache-save-allowed: "false"`. External-cache-enabled
+runs also produce `false`, because external caches are saved only after successful
+jobs. The action exports that decision for its failure-sensitive `post-if`
+condition; the pull-request action test verifies that the exported value matches
+the public output.
 
 The marker keys contain the workflow run ID and attempt, so this test cannot
 pass using a cache from an earlier run.

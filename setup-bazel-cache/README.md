@@ -1,7 +1,8 @@
 # Setup Bazel Cache
 
 This Linux-only action configures Bazelisk, Bazel disk, and Bazel repository
-caches with opinionated defaults for Bazel 8.6 or newer. Branch and
+caches with opinionated defaults for Bazel 8.6 or newer. It can also cache
+large extracted external repositories. Branch and
 pull-request jobs restore caches; only configured cache-saving branches save
 them. If no cache-save branch patterns are configured, the repository's default
 branch is used automatically.
@@ -31,6 +32,36 @@ steps:
   default branch.
   Globbing: `*` matches within one branch path component and `**` also crosses `/`,
   so `release/*` matches `release/1.0` and `release/**` matches `release/1/0` and `release/2.0`.
+
+### Extracted external-repository cache
+
+Bazel's repository cache stores downloaded archive contents. It does not store
+the extracted repositories that Bazel materializes under
+`$(bazel info output_base)/external`. The external cache stores those extracted
+repositories as separate GitHub Actions cache entries, so a hit can avoid both
+the download and extraction steps. This is action-level caching; Bazel itself
+does not provide an `external-cache` flag.
+
+```yaml
+- uses: eclipse-score/cicd-actions/setup-bazel-cache@<sha>
+  with:
+    disk-cache-key: ${{ github.job }}
+    external-cache-restore: true
+    external-cache-save: true
+```
+
+The action discovers the output base with `bazel info output_base` before
+restoring external repositories. It caches real extracted directories of at
+least 500 MiB and skips symlinked local repositories. The cache key is independent
+of `disk-cache-key`; it is based on the repository name, runner architecture,
+the Bazel version, `MODULE.bazel.lock`, and any existing legacy `WORKSPACE*`
+files. If no lockfile exists, `MODULE.bazel` is used as a fallback. The manifest is cached separately so
+the action knows which repository names to restore before the build.
+
+External caching can be used without the repository cache. In that mode, an
+external-cache hit avoids the download and extraction; a miss falls back to
+Bazel's normal network fetch. Enabling both caches provides a repository-cache
+fallback for external-cache misses but stores more data.
 
 ### Optional Bazel profiling
 
@@ -73,13 +104,18 @@ Further parameters to configure cache behavior:
   other refs restore the latest available cache.
   Save inputs only take effect on configured cache-saving branches; `false`
   disables saving for that cache.
+  `external-cache-restore` and `external-cache-save` accept `true` or `false`
+  and default to `true`. External saves are also limited to configured
+  cache-saving branches.
 
 ## Cache security
 
 GitHub makes default-branch caches readable from pull-request workflows,
-including workflows triggered by forks. Do not allow Bazel's disk or repository
-cache to contain secrets, credentials, private dependencies, or other artifacts
-that pull-request authors must not be able to read.
+including workflows triggered by forks. Do not allow Bazel's disk, repository,
+or external cache to contain secrets, credentials, private dependencies, or
+other artifacts that pull-request authors must not be able to read. Extracted
+repositories may contain generated credentials or downloaded private content,
+depending on the repository rule.
 
 ## Automatic mode and checkout history
 
@@ -116,14 +152,16 @@ permissions:
 
 - `cache-save-branch-evaluated`: whether this ref can save caches in the post
   action
-- `bazelisk-cache-restored`, `disk-cache-restored`, and
-  `repository-cache-restored`: `true` for an exact or fallback cache hit;
+- `bazelisk-cache-restored`, `disk-cache-restored`,
+  `repository-cache-restored`, and `external-cache-restored`: `true` for an
+  exact or fallback cache hit;
   `false` for a miss, disabled restore, or restore error
 
 The following outputs are intended for the action's internal diagnostics:
 
-- `_failed-job-cache-save-allowed`: whether every selected cache was restored
-  sufficiently to allow an additive save if a later step fails
+- `_failed-job-cache-save-allowed`: whether the selected standard caches were
+  restored sufficiently to allow an additive save if a later step fails. It is
+  false when external cache saving is enabled.
 - `_checkout-history`: `skipped`, `existing`, `deepened`, or `fetched`
 - `_lock-file-changed`: `true`, `false`, or `unknown`
 
@@ -135,7 +173,7 @@ the effective restore and save decisions, branch-save eligibility, automatic
 Bazelisk version key.
 
 Each restore is shown in its own expandable log group with the result and the
-local cache size before and after the restore. Once all three restores
+local cache size before and after the restore. Once all selected restores
 complete, a restore summary table reports the result and before/after size for
 every cache in one place, so a hit, a partial (older-generation) restore, or a
 miss is visible without expanding any group. The post action reports the local
@@ -159,19 +197,23 @@ Bazel repository-cache entries are content-addressed, so
 `MODULE.bazel.lock` and individual Bazel configs are not correctness boundaries
 for this cache. Builds, fetch jobs, platforms, and configs all restore and
 augment the same snapshot. Disk caches use timestamped generations and include
-`disk-cache-key`. Cache API failures are reported as warnings so a transient
-cache outage does not fail the build.
+`disk-cache-key`. External repository caches use separate immutable keys based
+on the repository name and dependency-content hash, so unchanged extracted
+repositories are not uploaded again. The manifest remains a small rolling
+generation that records which repositories to restore. Cache API failures are
+reported as warnings so a transient cache outage does not fail the build.
 
-Successful jobs may publish new cache baselines. A failed job publishes only
-when every selected cache was restored with an exact `true` result or, for
-generational caches, an internal `partial` result. When the Bazelisk cache is selected,
-requiring an exact Bazelisk hit prevents a failed job from publishing an old
-binary under a new Bazelisk version key. The generational-cache results prove that
-their snapshots extend existing caches. A restore result of `false`, `skipped`,
-or `unknown` suppresses the entire failed-job save because the incomplete
-snapshot would likely be worse than the existing generation. When
-`repository-cache-save` is disabled, the repository restore does not participate
-in this decision. Cancelled jobs never save.
+External repository caches are discovered after the workflow's Bazel commands
+finish. The manifest records only repositories that meet the size threshold;
+repositories that miss the external cache are still fetched normally by Bazel
+and become eligible for the next successful save.
+
+Successful jobs may publish new cache baselines. The action can add to existing
+standard caches after a failed job, but only when every selected standard cache
+was restored with an exact `true` result or, for generational caches, an internal
+`partial` result. When external cache saving is enabled, the failed-job path is
+disabled entirely, so extracted external repositories are published only after
+a successful job. Cancelled jobs never save.
 
 On a successful job, a generational cache is also left untouched when its restore
 failed with an `unknown` result. This prevents a transient cache-service or

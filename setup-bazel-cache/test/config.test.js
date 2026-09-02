@@ -65,6 +65,25 @@ test('post-save configuration can use the version captured during setup', () => 
   );
 });
 
+test('external identity prefers the Bzlmod lockfile and includes legacy workspace files when present', (context) => {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'setup-bazel-cache-external-config-'));
+  context.after(() => fs.rmSync(workspace, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(workspace, '.bazelversion'), '8.6.0\n');
+  fs.writeFileSync(path.join(workspace, 'MODULE.bazel'), 'module(name = "test")\n');
+  fs.writeFileSync(path.join(workspace, 'MODULE.bazel.lock'), '{}\n');
+  fs.writeFileSync(path.join(workspace, 'WORKSPACE.bazel'), '# legacy definitions\n');
+
+  const configuration = createConfiguration(workspace, 'test', {
+    externalCacheEnabled: true,
+  });
+
+  assert.deepEqual(configuration.external.identityFiles, [
+    path.join(workspace, '.bazelversion'),
+    path.join(workspace, 'MODULE.bazel.lock'),
+    path.join(workspace, 'WORKSPACE.bazel'),
+  ]);
+});
+
 test('profiling adds separate fixed paths for build and test', () => {
   const configuration = createConfiguration('/workspace', 'test', {
     enableProfiling: true,

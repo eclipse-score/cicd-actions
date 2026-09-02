@@ -29,9 +29,9 @@
 # Saving and restoring require separate jobs because JavaScript action post
 # steps run only when their job ends. A successful seed job creates a baseline.
 # A second job restores that baseline and adds markers. Automatic runs keep the
-# job green; manual diagnostics can opt into a real failure to exercise the
-# failure-sensitive post condition. The third job proves that the disk and
-# repository additions survived.
+# job green and publish the additions; manual diagnostics can opt into a real
+# failure. With external caching enabled, that failed job does not run the post
+# action, so the third job proves that the baseline remains intact.
 
 name: Test Setup Bazel Cache Persistence
 
@@ -88,6 +88,8 @@ jobs:
           disk-cache-save: "true"
           repository-cache-restore: "true"
           repository-cache-save: "true"
+          external-cache-restore: "true"
+          external-cache-save: "true"
 
       - name: Add baseline cache markers
         shell: bash
@@ -104,6 +106,12 @@ jobs:
             mkdir -p "${HOME}/.cache/${cache}"
             echo "$marker" > "${HOME}/.cache/${cache}/${marker}"
           done
+
+          external_root="$(bazel info output_base)/external"
+          bazel shutdown
+          mkdir -p "$external_root/external-baseline"
+          truncate -s 500M "$external_root/external-baseline/payload"
+          echo "$marker" > "$external_root/@external-baseline.marker"
 
   save-additions-after-failure:
     name: Save additive cache entries
@@ -132,38 +140,51 @@ jobs:
           disk-cache-save: "true"
           repository-cache-restore: "true"
           repository-cache-save: "true"
+          external-cache-restore: "true"
+          external-cache-save: "true"
 
-      - name: Verify additive restore and add markers
+      - name: Verify restore and add markers
         shell: bash
         env:
           BAZELISK_RESTORE: ${{ steps.restore.outputs.bazelisk-cache-restored }}
           DISK_RESTORE: ${{ steps.restore.outputs.disk-cache-restored }}
+          EXTERNAL_RESTORE: ${{ steps.restore.outputs.external-cache-restored }}
           FAILED_JOB_CACHE_SAVE_ALLOWED: ${{ steps.restore.outputs._failed-job-cache-save-allowed }}
           REPOSITORY_RESTORE: ${{ steps.restore.outputs.repository-cache-restored }}
         run: |
           set -euo pipefail
           [[ "$BAZELISK_RESTORE" == "true" ]]
           [[ "$DISK_RESTORE" == "true" ]]
+          [[ "$EXTERNAL_RESTORE" == "true" ]]
           [[ "$REPOSITORY_RESTORE" == "true" ]]
-          [[ "$FAILED_JOB_CACHE_SAVE_ALLOWED" == "true" ]]
+          [[ "$FAILED_JOB_CACHE_SAVE_ALLOWED" == "false" ]]
 
           marker="baseline-${{ github.run_id }}-${{ github.run_attempt }}"
           for cache in bazelisk bazel-disk bazel-repo; do
             test "$(cat "${HOME}/.cache/${cache}/${marker}")" = "$marker"
           done
 
+          external_root="$(bazel info output_base)/external"
+          bazel shutdown
+          test "$(stat --format=%s "$external_root/external-baseline/payload")" -eq $((500 * 1024 * 1024))
+          test "$(cat "$external_root/@external-baseline.marker")" = "$marker"
+
           marker="addition-${{ github.run_id }}-${{ github.run_attempt }}"
           for cache in bazel-disk bazel-repo; do
             echo "$marker" > "${HOME}/.cache/${cache}/${marker}"
           done
+
+          mkdir -p "$external_root/external-addition"
+          truncate -s 500M "$external_root/external-addition/payload"
+          echo "$marker" > "$external_root/@external-addition.marker"
 
       - name: Fail after adding to restored caches
         if: inputs.exercise-failed-job
         shell: bash
         run: exit 1
 
-  restore-failed-job-additions:
-    name: Restore saved additive entries
+  verify-cache-generations:
+    name: Verify cache generations
     if: always()
     needs: save-additions-after-failure
     runs-on: ubuntu-latest
@@ -179,7 +200,7 @@ jobs:
           echo '{"persistence":"${{ github.run_id }}-${{ github.run_attempt }}"}' > MODULE.bazel.lock
           echo "8.6.0-persistence-${{ github.run_id }}-${{ github.run_attempt }}" > .bazelversion
 
-      - name: Restore caches extended by the failed job
+      - name: Restore caches written by the previous job
         id: restore
         uses: ./setup-bazel-cache
         with:
@@ -189,20 +210,48 @@ jobs:
           disk-cache-save: "true"
           repository-cache-restore: "true"
           repository-cache-save: "true"
+          external-cache-restore: "true"
+          external-cache-save: "true"
 
-      - name: Verify failed-job additions
+      - name: Verify successful-job additions
+        if: ${{ !inputs.exercise-failed-job }}
         shell: bash
         env:
           BAZELISK_RESTORE: ${{ steps.restore.outputs.bazelisk-cache-restored }}
           DISK_RESTORE: ${{ steps.restore.outputs.disk-cache-restored }}
+          EXTERNAL_RESTORE: ${{ steps.restore.outputs.external-cache-restored }}
           REPOSITORY_RESTORE: ${{ steps.restore.outputs.repository-cache-restored }}
         run: |
           set -euo pipefail
           [[ "$BAZELISK_RESTORE" == "true" ]]
           [[ "$DISK_RESTORE" == "true" ]]
+          [[ "$EXTERNAL_RESTORE" == "true" ]]
           [[ "$REPOSITORY_RESTORE" == "true" ]]
 
           marker="addition-${{ github.run_id }}-${{ github.run_attempt }}"
           for cache in bazel-disk bazel-repo; do
             test "$(cat "${HOME}/.cache/${cache}/${marker}")" = "$marker"
           done
+
+          external_root="$(bazel info output_base)/external"
+          bazel shutdown
+          test "$(stat --format=%s "$external_root/external-addition/payload")" -eq $((500 * 1024 * 1024))
+          test "$(cat "$external_root/@external-addition.marker")" = "$marker"
+
+      - name: Verify failed job did not publish additions
+        if: inputs.exercise-failed-job
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          marker="baseline-${{ github.run_id }}-${{ github.run_attempt }}"
+          for cache in bazel-disk bazel-repo; do
+            test "$(cat "${HOME}/.cache/${cache}/${marker}")" = "$marker"
+          done
+
+          external_root="$(bazel info output_base)/external"
+          bazel shutdown
+          test "$(stat --format=%s "$external_root/external-baseline/payload")" -eq $((500 * 1024 * 1024))
+          test "$(cat "$external_root/@external-baseline.marker")" = "$marker"
+          test ! -e "$external_root/external-addition"
+          test ! -e "$external_root/@external-addition.marker"

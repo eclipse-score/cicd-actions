@@ -23,6 +23,12 @@ import {
   restoreOutput,
 } from './cache.js';
 import { createConfiguration, installManagedBazelrc } from './config.js';
+import {
+  configureExternalCache,
+  externalCacheLabel,
+  resolveOutputBase,
+  restoreExternalCaches,
+} from './external.js';
 import { clearProfiles, profilingEnabled } from './profiling.js';
 import {
   ensureComparisonHistory,
@@ -68,11 +74,16 @@ async function run() {
       bazeliskCacheSave: core.getInput('bazelisk-cache-save'),
       diskCacheRestore: core.getInput('disk-cache-restore'),
       diskCacheSave: core.getInput('disk-cache-save'),
+      externalCacheRestore: core.getInput('external-cache-restore'),
+      externalCacheSave: core.getInput('external-cache-save'),
       repositoryCacheRestore: core.getInput('repository-cache-restore'),
       repositoryCacheSave: core.getInput('repository-cache-save'),
     });
 
-    const configuration = createConfiguration(workspace, diskCacheKey, { enableProfiling });
+    const configuration = createConfiguration(workspace, diskCacheKey, {
+      enableProfiling,
+      externalCacheEnabled: cacheModes.restore.external || cacheModes.save.external,
+    });
     if (configuration.profiles) {
       clearProfiles(configuration.profiles);
       core.info('Bazel profiling enabled; later build/test invocations overwrite their profiles.');
@@ -95,6 +106,26 @@ async function run() {
       changed === true,
     );
 
+    fs.writeFileSync(configuration.bazelrc, configuration.bazelrcContents, { flag: 'wx' });
+    core.info(`Created ${configuration.bazelrc}`);
+    // Bazel supports the BAZELRC environment RC file starting with Bazel 9;
+    // Bazel 8 and earlier require a standard rc file or an explicit --bazelrc.
+    const bazelrcFiles = [process.env.BAZELRC, configuration.bazelrc].filter(Boolean);
+    core.exportVariable('BAZELRC', bazelrcFiles.join(','));
+
+    if (configuration.external) {
+      installManagedBazelrc(configuration);
+      core.info(`Added Bazel 8 compatibility import to ${configuration.userBazelrc}`);
+      try {
+        configureExternalCache(configuration, resolveOutputBase(workspace));
+      } catch (error) {
+        core.warning(`External cache disabled because Bazel output_base could not be resolved: ${error.stack || error}`);
+        configuration.external = null;
+        restores.external = false;
+        saves.external = false;
+      }
+    }
+
     logDecision({
       cacheModes,
       cacheSaveAllowed,
@@ -113,13 +144,6 @@ async function run() {
       changed,
     });
 
-    fs.writeFileSync(configuration.bazelrc, configuration.bazelrcContents, { flag: 'wx' });
-    core.info(`Created ${configuration.bazelrc}`);
-    // Bazel supports the BAZELRC environment RC file starting with Bazel 9;
-    // Bazel 8 and earlier require a standard rc file or an explicit --bazelrc.
-    const bazelrcFiles = [process.env.BAZELRC, configuration.bazelrc].filter(Boolean);
-    core.exportVariable('BAZELRC', bazelrcFiles.join(','));
-
     for (const cache of [configuration.caches.disk, configuration.caches.repository]) {
       fs.mkdirSync(cache.path, { recursive: true });
     }
@@ -133,10 +157,20 @@ async function run() {
         restores.repository,
       ),
     };
+    restoreDetails.external = restores.external && configuration.external
+      ? await restoreExternalCaches(configuration)
+      : {
+        result: RESTORE_RESULT.SKIPPED,
+        sizeBefore: 0,
+        sizeAfter: 0,
+        manifest: null,
+        repositories: {},
+      };
     const restoreResults = {
       bazelisk: restoreDetails.bazelisk.result,
       disk: restoreDetails.disk.result,
       repository: restoreDetails.repository.result,
+      external: restoreDetails.external.result,
     };
     setRestoreOutputs(restoreResults);
     logRestoreSummary(configuration, restoreDetails);
@@ -146,11 +180,16 @@ async function run() {
       'Repository cache baseline after restore',
     );
 
-    installManagedBazelrc(configuration);
-    core.info(`Added Bazel 8 compatibility import to ${configuration.userBazelrc}`);
+    if (!configuration.external) {
+      installManagedBazelrc(configuration);
+      core.info(`Added Bazel 8 compatibility import to ${configuration.userBazelrc}`);
+    }
 
+    // The post condition is shared by all cache families. If external saving
+    // is selected, suppress the whole failed-job path so external repositories
+    // can only be published after a successful workflow.
     const failedJobCacheSaveAllowed =
-      cacheSaveAllowed && canSaveAfterFailure(restoreResults, saves);
+      cacheSaveAllowed && !saves.external && canSaveAfterFailure(restoreResults, saves);
     core.setOutput(
       '_failed-job-cache-save-allowed',
       failedJobCacheSaveAllowed.toString(),
@@ -169,6 +208,12 @@ async function run() {
         diskCacheKey,
         workspace,
         bazeliskVersion: configuration.caches.bazelisk.keySuffix,
+        externalCacheEnabled: Boolean(configuration.external),
+        externalManifestRestoreResult: restoreDetails.external.manifest?.result || RESTORE_RESULT.SKIPPED,
+        externalRepositoryRestoreResults: Object.fromEntries(
+          Object.entries(restoreDetails.external.repositories).map(([name, detail]) => [name, detail.result]),
+        ),
+        outputBase: configuration.external?.outputBase || null,
         restoreResults,
         repositoryCacheStartSize,
       }),
@@ -229,7 +274,8 @@ function logDecision({
   core.info(
     `Cache directories: bazelisk=${configuration.caches.bazelisk.path}, ` +
     `disk=${configuration.caches.disk.path}, ` +
-    `repository=${configuration.caches.repository.path}`,
+    `repository=${configuration.caches.repository.path}` +
+    (configuration.external ? `, external=${configuration.external.root}` : ''),
   );
   core.endGroup();
 }
@@ -263,6 +309,7 @@ function logModeTable(cacheModes, restores, saves) {
   const rows = [
     ['bazelisk', cacheModes.restore.bazelisk, restores.bazelisk, cacheModes.save.bazelisk, saves.bazelisk],
     ['disk', cacheModes.restore.disk, restores.disk, cacheModes.save.disk, saves.disk],
+    ['external', cacheModes.restore.external, restores.external, cacheModes.save.external, saves.external],
     ['repository', cacheModes.restore.repository, restores.repository, cacheModes.save.repository, saves.repository],
   ].map((row) => row.map((value) => value.toString()));
   printTable('Mode matrix:', headers, rows);
@@ -285,7 +332,9 @@ function logRestoreSummary(configuration, restoreDetails) {
   const headers = ['Cache', 'Result', 'Before', 'After'];
   const size = (value) => value === null ? 'unknown' : formatBytes(value);
   const rows = Object.entries(restoreDetails).map(([name, detail]) => [
-    cacheLabel(configuration, configuration.caches[name]),
+    name === 'external'
+      ? externalCacheLabel(configuration)
+      : cacheLabel(configuration, configuration.caches[name]),
     describeRestoreResult(detail.result),
     size(detail.sizeBefore),
     size(detail.sizeAfter),
@@ -293,10 +342,11 @@ function logRestoreSummary(configuration, restoreDetails) {
   printTable('Restore summary:', headers, rows);
 }
 
-function setRestoreOutputs({ bazelisk, disk, repository }) {
+function setRestoreOutputs({ bazelisk, disk, repository, external }) {
   core.setOutput('bazelisk-cache-restored', restoreOutput(bazelisk));
   core.setOutput('disk-cache-restored', restoreOutput(disk));
   core.setOutput('repository-cache-restored', restoreOutput(repository));
+  core.setOutput('external-cache-restored', restoreOutput(external));
 }
 
 run();

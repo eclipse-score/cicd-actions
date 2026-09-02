@@ -30,8 +30,10 @@ function raw(overrides = {}) {
     bazeliskCacheRestore: '',
     bazeliskCacheSave: '',
     diskCacheRestore: '',
+    externalCacheRestore: '',
     repositoryCacheRestore: '',
     diskCacheSave: '',
+    externalCacheSave: '',
     repositoryCacheSave: '',
     ...overrides,
   };
@@ -87,11 +89,13 @@ test('new cache API uses the requested defaults', () => {
     restore: {
       bazelisk: 'true',
       disk: 'auto',
+      external: 'true',
       repository: 'true',
     },
     save: {
       bazelisk: 'true',
       disk: 'false',
+      external: 'true',
       repository: 'auto',
     },
   });
@@ -100,11 +104,13 @@ test('new cache API uses the requested defaults', () => {
     bazelisk: true,
     disk: false,
     repository: true,
+    external: true,
   });
   assert.deepEqual(resolveSaveModes(configuration.save, true), {
     bazelisk: true,
     disk: false,
     repository: true,
+    external: true,
   });
 });
 
@@ -114,6 +120,7 @@ test('automatic disk restore mode restores outside the cache-writing branch', ()
   assert.deepEqual(resolveRestoreModes(configuration.restore, false, true), {
     bazelisk: true,
     disk: true,
+    external: true,
     repository: true,
   });
 });
@@ -128,6 +135,7 @@ test('explicit modes do not need the lock-file comparison', () => {
     bazelisk: true,
     disk: false,
     repository: false,
+    external: true,
   });
 });
 
@@ -156,6 +164,14 @@ test('invalid modes are rejected', () => {
     () => parseCacheConfiguration(raw({ bazeliskCacheSave: 'yes' })),
     /Invalid bazelisk-cache-save/
   );
+  assert.throws(
+    () => parseCacheConfiguration(raw({ externalCacheRestore: 'yes' })),
+    /Invalid external-cache-restore/
+  );
+  assert.throws(
+    () => parseCacheConfiguration(raw({ externalCacheSave: 'yes' })),
+    /Invalid external-cache-save/
+  );
 });
 
 test('Bazelisk uses boolean modes independently of lock-file policy', () => {
@@ -167,15 +183,18 @@ test('Bazelisk uses boolean modes independently of lock-file policy', () => {
     bazelisk: true,
     disk: false,
     repository: true,
+    external: true,
   });
   assert.deepEqual(resolveSaveModes(configuration.save, true), {
     bazelisk: false,
     disk: false,
+    external: true,
     repository: true,
   });
   assert.deepEqual(resolveRestoreModes({ ...configuration.restore, bazelisk: 'false' }, true, false), {
     bazelisk: false,
     disk: true,
+    external: true,
     repository: true,
   });
   assert.throws(

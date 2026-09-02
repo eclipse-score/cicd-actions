@@ -25,6 +25,7 @@ import {
   skippedSaveSummary,
 } from './cache.js';
 import { createConfiguration } from './config.js';
+import { configureExternalCache, saveExternalCaches } from './external.js';
 import { existingProfiles, profilePaths, profilingEnabled } from './profiling.js';
 
 const PROFILE_ARTIFACT_NAME = 'bazel-profiles';
@@ -81,13 +82,22 @@ async function run() {
       bazeliskVersion,
       restoreResults,
       repositoryCacheStartSize = null,
+      externalCacheEnabled = false,
+      externalManifestRestoreResult = 'skipped',
+      externalRepositoryRestoreResults = {},
+      outputBase = null,
     } = JSON.parse(state);
     if (!cacheSaveAllowed) {
       core.info('Cache saving is disabled on this ref');
       return;
     }
 
-    const configuration = createConfiguration(workspace, diskCacheKey, { bazeliskVersion });
+    const configuration = createConfiguration(workspace, diskCacheKey, {
+      bazeliskVersion,
+      externalCacheEnabled,
+      outputBase,
+    });
+    if (configuration.external) configureExternalCache(configuration, outputBase);
     const results = [];
     if (saves.bazelisk) {
       results.push(await save(configuration, configuration.caches.bazelisk, restoreResults?.bazelisk));
@@ -149,6 +159,16 @@ async function run() {
     } else {
       core.info('Repository cache saving is disabled for this job');
       results.push(skippedSaveSummary(configuration, configuration.caches.repository, 'disabled'));
+    }
+    if (saves.external && configuration.external) {
+      results.push(...await saveExternalCaches(
+        configuration,
+        externalManifestRestoreResult,
+        externalRepositoryRestoreResults,
+        cleanupPreviousGeneration,
+      ));
+    } else if (saves.external) {
+      core.info('External cache saving is disabled because its output base was not resolved');
     }
     logSaveSummary(results);
   } catch (error) {

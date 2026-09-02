@@ -245,12 +245,13 @@ jobs:
           FAILED_JOB_CACHE_SAVE_ALLOWED: ${{ steps.setup-bazel-cache.outputs._failed-job-cache-save-allowed }}
           BAZELISK_RESTORE: ${{ steps.setup-bazel-cache.outputs.bazelisk-cache-restored }}
           DISK_RESTORE: ${{ steps.setup-bazel-cache.outputs.disk-cache-restored }}
+          EXTERNAL_RESTORE: ${{ steps.setup-bazel-cache.outputs.external-cache-restored }}
           REPOSITORY_RESTORE: ${{ steps.setup-bazel-cache.outputs.repository-cache-restored }}
         run: |
           set -euo pipefail
           [[ "$CACHE_SAVE_ALLOWED" == "$EXPECTED_CACHE_SAVE" ]]
           [[ "$SETUP_BAZEL_CACHE_ADDITIVE_SAVE" == "$FAILED_JOB_CACHE_SAVE_ALLOWED" ]]
-          for result in "$BAZELISK_RESTORE" "$DISK_RESTORE" "$REPOSITORY_RESTORE"; do
+          for result in "$BAZELISK_RESTORE" "$DISK_RESTORE" "$EXTERNAL_RESTORE" "$REPOSITORY_RESTORE"; do
             case "$result" in
               true|false) ;;
               *)

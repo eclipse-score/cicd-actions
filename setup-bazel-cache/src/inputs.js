@@ -30,19 +30,23 @@ function parseCacheConfiguration(raw) {
   const restore = {
     bazelisk: raw.bazeliskCacheRestore.trim() || 'true',
     disk: raw.diskCacheRestore.trim() || 'auto',
+    external: raw.externalCacheRestore.trim() || 'true',
     repository: raw.repositoryCacheRestore.trim() || 'true',
   };
   const save = {
     bazelisk: raw.bazeliskCacheSave.trim() || 'true',
     disk: raw.diskCacheSave.trim() || 'false',
+    external: raw.externalCacheSave.trim() || 'true',
     repository: raw.repositoryCacheSave.trim() || 'auto',
   };
 
   validateMode('bazelisk-cache-restore', restore.bazelisk, BOOLEAN_MODES);
   validateMode('bazelisk-cache-save', save.bazelisk, BOOLEAN_MODES);
   validateMode('disk-cache-restore', restore.disk, DISK_RESTORE_MODES);
+  validateMode('external-cache-restore', restore.external, BOOLEAN_MODES);
   validateMode('repository-cache-restore', restore.repository, BOOLEAN_MODES);
   validateMode('disk-cache-save', save.disk, BOOLEAN_MODES);
+  validateMode('external-cache-save', save.external, BOOLEAN_MODES);
   validateMode('repository-cache-save', save.repository, REPOSITORY_SAVE_MODES);
   return {
     restore,
@@ -99,6 +103,7 @@ function resolveRestoreModes(configuration, cacheSaveAllowed, lockFileChanged) {
   return {
     bazelisk: configuration.bazelisk === 'true',
     disk: resolveRestoreMode(configuration.disk, cacheSaveAllowed, lockFileChanged),
+    external: configuration.external === 'true',
     repository: configuration.repository === 'true',
   };
 }
@@ -108,6 +113,7 @@ function resolveSaveModes(configuration, cacheSaveAllowed) {
   return {
     bazelisk: cacheSaveAllowed && configuration.bazelisk === 'true',
     disk: cacheSaveAllowed && configuration.disk === 'true',
+    external: cacheSaveAllowed && configuration.external === 'true',
     repository: cacheSaveAllowed && configuration.repository !== 'false',
   };
 }

@@ -62,6 +62,17 @@ function localPathSize(root) {
   return bytes;
 }
 
+/** Return the paths that make up a cache payload, supporting one or many paths. */
+function cachePaths(cacheConfiguration) {
+  return cacheConfiguration.paths || [cacheConfiguration.path];
+}
+
+/** Measure all paths in a cache payload without double-counting identical paths. */
+function localCacheSize(cacheConfiguration) {
+  return [...new Set(cachePaths(cacheConfiguration))]
+    .reduce((total, cachePath) => total + localPathSize(cachePath), 0);
+}
+
 /** Format local cache sizes compactly for one-line action log messages. */
 function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -94,9 +105,10 @@ function describeLocalCachePath(cachePath) {
 /** Log a best-effort local size without allowing diagnostics to affect caching. */
 function logLocalCacheSize(configuration, cacheConfiguration, label) {
   try {
-    const bytes = localPathSize(cacheConfiguration.path);
+    const paths = cachePaths(cacheConfiguration);
+    const bytes = localCacheSize(cacheConfiguration);
     const details = bytes === 0
-      ? `; path status: ${describeLocalCachePath(cacheConfiguration.path)}`
+      ? `; path status: ${paths.map(describeLocalCachePath).join(', ')}`
       : '';
     core.info(`${label}: ${formatBytes(bytes)} uncompressed local data${details}`);
     return bytes;
@@ -149,7 +161,7 @@ function repositoryCacheGrewByTenPercent(startSize, endSize) {
   return (endSize - startSize) * 100 >= startSize * REPOSITORY_CACHE_GROWTH_PERCENT;
 }
 
-/** A failed job may publish only caches that extend successfully restored snapshots. */
+/** A failed job may publish only the standard caches that extend restored snapshots. */
 function canSaveAfterFailure(restoreResults, saves) {
   if (saves.bazelisk && restoreResults.bazelisk !== RESTORE_RESULT.TRUE) return false;
 
@@ -202,9 +214,12 @@ async function keyPlan(configuration, cacheConfiguration) {
   }
 
   const generationPrefix = `${contentPrefix}${contentPrefix === prefix ? '' : '-'}`;
+  const restoreKeys = generationPrefix === prefix
+    ? [prefix]
+    : [generationPrefix, prefix];
   return {
     key: `${generationPrefix}${generationSuffix()}`,
-    restoreKeys: generationPrefix === prefix ? [prefix] : [generationPrefix, prefix],
+    restoreKeys,
   };
 }
 
@@ -232,7 +247,7 @@ async function restore(configuration, cacheConfiguration) {
   try {
     const { key, restoreKeys } = await keyPlan(configuration, cacheConfiguration);
     const restoredKey = await cache.restoreCache(
-      [cacheConfiguration.path],
+      cachePaths(cacheConfiguration),
       key,
       restoreKeys,
       { segmentTimeoutInMs: 300000 }
@@ -296,7 +311,7 @@ async function save(configuration, cacheConfiguration, restoreResult) {
     }
 
     const key = await exactKey(configuration, cacheConfiguration);
-    const cacheId = await cache.saveCache([cacheConfiguration.path], key);
+    const cacheId = await cache.saveCache(cachePaths(cacheConfiguration), key);
     if (cacheId === -1) {
       core.info(`Cache save skipped for ${key}`);
       result.status = 'cache already exists';
@@ -430,6 +445,8 @@ export {
   isOwnedGenerationKey,
   logLocalCacheSize,
   localPathSize,
+  localCacheSize,
+  cachePaths,
   repositoryCacheGrewByTenPercent,
   restoredKeyState,
 };

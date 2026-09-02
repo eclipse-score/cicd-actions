@@ -128,7 +128,7 @@ test('skipped save summaries include before and after local sizes', (context) =>
   );
 });
 
-test('failed jobs may save only when every selected cache restore was additive', () => {
+test('failed jobs may save standard caches only when every selected restore was additive', () => {
   const additive = {
     bazelisk: RESTORE_RESULT.TRUE,
     disk: RESTORE_RESULT.PARTIAL,
@@ -173,6 +173,12 @@ test('failed jobs may save only when every selected cache restore was additive',
   assert.equal(canSaveAfterFailure(additive, {
     bazelisk: false,
     disk: false,
+    repository: false,
+  }), false);
+  assert.equal(canSaveAfterFailure({ ...additive, external: RESTORE_RESULT.PARTIAL }, {
+    bazelisk: false,
+    disk: false,
+    external: true,
     repository: false,
   }), false);
 });

@@ -72,6 +72,26 @@ function readBazeliskVersion(workspace) {
   return validateBazeliskVersion(version);
 }
 
+/** Select only files that can change the external repository definitions. */
+function externalIdentityFiles(workspace) {
+  const files = [path.join(workspace, '.bazelversion')];
+  const moduleLock = path.join(workspace, 'MODULE.bazel.lock');
+  const moduleFile = path.join(workspace, 'MODULE.bazel');
+  if (fs.existsSync(moduleLock)) {
+    files.push(moduleLock);
+  } else if (fs.existsSync(moduleFile)) {
+    // A missing lockfile must not collapse every uncommitted Bzlmod workspace
+    // onto the same external cache key.
+    files.push(moduleFile);
+  }
+
+  for (const file of ['WORKSPACE', 'WORKSPACE.bazel', 'WORKSPACE.bzlmod']) {
+    const workspaceFile = path.join(workspace, file);
+    if (fs.existsSync(workspaceFile)) files.push(workspaceFile);
+  }
+  return files;
+}
+
 /** Add the generated cache rc as an import to Bazel 8's standard user rc. */
 function installManagedBazelrc(configuration) {
   let contents = '';
@@ -92,7 +112,7 @@ function installManagedBazelrc(configuration) {
 function createConfiguration(
   workspace,
   diskCacheKey,
-  { bazeliskVersion, enableProfiling = false } = {},
+  { bazeliskVersion, enableProfiling = false, externalCacheEnabled = false, outputBase = null } = {},
 ) {
   validateDiskCacheKey(diskCacheKey);
   const resolvedBazeliskVersion = bazeliskVersion === undefined
@@ -148,6 +168,20 @@ function createConfiguration(
       },
     },
     baseKey,
+    external: externalCacheEnabled
+      ? {
+        identityFiles: externalIdentityFiles(workspace),
+        manifest: {
+          files: [],
+          generational: true,
+          name: 'external-manifest',
+          path: path.join(runnerTemp, 'setup-bazel-cache-external-manifest.txt'),
+        },
+        minSize: 500 * 1024 * 1024,
+        outputBase,
+        root: outputBase ? path.join(outputBase, 'external') : null,
+      }
+      : null,
     profiles,
     workspace,
   };

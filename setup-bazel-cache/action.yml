@@ -92,6 +92,21 @@ inputs:
     required: false
     default: "true"
 
+  external-cache-restore:
+    description: >
+      Restore extracted Bazel external repositories from per-repository caches.
+      Accepts true or false. Defaults to true.
+    required: false
+    default: "true"
+
+  external-cache-save:
+    description: >
+      Save extracted Bazel external repositories.
+      Accepts true or false. Defaults to true. Saving is limited to configured
+      cache-saving branches.
+    required: false
+    default: "true"
+
 outputs:
   cache-save-branch-evaluated:
     description: >
@@ -113,6 +128,11 @@ outputs:
       Whether the bazel repository cache was restored.
       Reports true or false.
 
+  external-cache-restored:
+    description: >
+      Whether the extracted external repository cache manifest and all listed
+      repositories were restored. Reports true or false.
+
   # potentially internal? not sure yet.
 
   _checkout-history:
@@ -126,8 +146,10 @@ outputs:
 
   _failed-job-cache-save-allowed:
     description: >
-      Whether every selected cache was restored sufficiently for an additive
-      save after a later workflow step fails.
+      Whether the selected standard caches were restored sufficiently for an
+      additive save after a later workflow step fails. False when external
+      cache saving is enabled, because external caches are saved only after
+      successful jobs.
 
 runs:
   using: node24
