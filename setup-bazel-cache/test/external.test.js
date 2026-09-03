@@ -108,7 +108,7 @@ test('external repository keys encode dots and do not fall back to a different d
   assert.deepEqual(plan.restoreKeys, []);
   assert.match(
     plan.key,
-    new RegExp(`^${configuration.baseKey}\\.external\\.${configuration.platform}\\.rules__cc\\.[0-9a-f]{8,64}$`),
+    new RegExp(`^${configuration.baseKey}\\.${configuration.platform}\\.external\\.rules__cc\\.[0-9a-f]{8,64}$`),
   );
 });
 

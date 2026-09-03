@@ -38,9 +38,9 @@ function formatCacheComponent(value, label = 'cache component') {
   return value.replaceAll('.', '__');
 }
 
-/** Build the stable prefix shared by all keys in one cache family. */
-function formatCacheKeyPrefix(baseKey, family, platform, components = []) {
-  return [baseKey, family, platform, ...components].join('.') + '.';
+/** Build the stable platform prefix shared by all keys in one cache family. */
+function formatCacheKeyPrefix(baseKey, platform, family, components = []) {
+  return [baseKey, platform, family, ...components].join('.') + '.';
 }
 
 export {

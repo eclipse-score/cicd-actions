@@ -107457,8 +107457,8 @@ function formatCacheComponent(value, label = "cache component") {
   }
   return value.replaceAll(".", "__");
 }
-function formatCacheKeyPrefix(baseKey, family, platform2, components = []) {
-  return [baseKey, family, platform2, ...components].join(".") + ".";
+function formatCacheKeyPrefix(baseKey, platform2, family, components = []) {
+  return [baseKey, platform2, family, ...components].join(".") + ".";
 }
 
 // src/cache.js
@@ -107546,8 +107546,8 @@ function logLocalCacheSize(configuration, cacheConfiguration, label) {
 function cachePrefix(configuration, cacheConfiguration) {
   return formatCacheKeyPrefix(
     configuration.baseKey,
-    cacheConfiguration.name,
     configuration.platform,
+    cacheConfiguration.name,
     cacheConfiguration.keyComponents
   );
 }

@@ -138,8 +138,8 @@ function restoreOutput(result) {
 function cachePrefix(configuration, cacheConfiguration) {
   return formatCacheKeyPrefix(
     configuration.baseKey,
-    cacheConfiguration.name,
     configuration.platform,
+    cacheConfiguration.name,
     cacheConfiguration.keyComponents,
   );
 }
