@@ -70170,6 +70170,57 @@ function needsLockFileCheck(configuration, cacheSaveAllowed) {
   return cacheSaveAllowed && configuration.disk === "auto";
 }
 
+// src/summary.js
+function describeRestoreResult(result) {
+  switch (result) {
+    case RESTORE_RESULT.TRUE:
+      return "true (exact hit)";
+    case RESTORE_RESULT.PARTIAL:
+      return "partial (older generation)";
+    case RESTORE_RESULT.FALSE:
+      return "false (miss)";
+    case RESTORE_RESULT.SKIPPED:
+      return "skipped (disabled)";
+    case RESTORE_RESULT.UNKNOWN:
+      return "unknown (restore error)";
+    default:
+      return result;
+  }
+}
+function restoreSummaryRows(configuration, restoreDetails) {
+  const size = (value) => value === null ? "unknown" : formatBytes(value);
+  const row = (label, detail) => [
+    label,
+    describeRestoreResult(detail.result),
+    size(detail.sizeAfter)
+  ];
+  const rows = Object.entries(restoreDetails).filter(([name]) => name !== "external").map(([name, detail]) => row(
+    cacheLabel(configuration, configuration.caches[name]),
+    detail
+  ));
+  const external = restoreDetails.external;
+  if (!external) return rows;
+  if (external.manifest) {
+    rows.push(row(
+      cacheLabel(configuration, configuration.caches.externalManifest),
+      external.manifest
+    ));
+  }
+  for (const [name, detail] of Object.entries(external.repositories)) {
+    rows.push(row(
+      cacheLabel(configuration, externalRepositoryCache(configuration, name)),
+      detail
+    ));
+  }
+  if (external.result === RESTORE_RESULT.UNKNOWN) {
+    rows.push(row(externalCacheLabel(configuration), external));
+  }
+  if (!external.manifest && Object.keys(external.repositories).length === 0) {
+    rows.push(row(externalCacheLabel(configuration), external));
+  }
+  return rows;
+}
+
 // src/main.js
 async function run() {
   try {
@@ -70399,32 +70450,12 @@ function logModeTable(cacheModes, restores, saves) {
   ].map((row) => row.map((value) => value.toString()));
   printTable("Mode matrix:", headers, rows);
 }
-function describeRestoreResult(result) {
-  switch (result) {
-    case RESTORE_RESULT.TRUE:
-      return "true (exact hit)";
-    case RESTORE_RESULT.PARTIAL:
-      return "partial (older generation)";
-    case RESTORE_RESULT.FALSE:
-      return "false (miss)";
-    case RESTORE_RESULT.SKIPPED:
-      return "skipped (disabled)";
-    case RESTORE_RESULT.UNKNOWN:
-      return "unknown (restore error)";
-    default:
-      return result;
-  }
-}
 function logRestoreSummary(configuration, restoreDetails) {
-  const headers = ["Cache", "Result", "Before", "After"];
-  const size = (value) => value === null ? "unknown" : formatBytes(value);
-  const rows = Object.entries(restoreDetails).map(([name, detail]) => [
-    name === "external" ? externalCacheLabel(configuration) : cacheLabel(configuration, configuration.caches[name]),
-    describeRestoreResult(detail.result),
-    size(detail.sizeBefore),
-    size(detail.sizeAfter)
-  ]);
-  printTable("Restore summary:", headers, rows);
+  printTable(
+    "Restore summary (local uncompressed size after restore):",
+    ["Cache", "Result", "Local size"],
+    restoreSummaryRows(configuration, restoreDetails)
+  );
 }
 function setRestoreOutputs({ bazelisk, disk, repository, external }) {
   setOutput("bazelisk-cache-restored", restoreOutput(bazelisk));

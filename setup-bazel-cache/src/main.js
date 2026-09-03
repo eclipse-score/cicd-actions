@@ -16,7 +16,6 @@ import fs from 'node:fs';
 import {
   cacheLabel,
   canSaveAfterFailure,
-  formatBytes,
   logLocalCacheSize,
   RESTORE_RESULT,
   restore,
@@ -25,7 +24,6 @@ import {
 import { createConfiguration, installManagedBazelrc } from './config.js';
 import {
   configureExternalCache,
-  externalCacheLabel,
   resolveOutputBase,
   restoreExternalCaches,
 } from './external.js';
@@ -45,6 +43,7 @@ import {
   resolveRestoreModes,
   resolveSaveModes,
 } from './inputs.js';
+import { restoreSummaryRows } from './summary.js';
 
 /**
  * Configure Bazel and restore the selected caches before the caller's build.
@@ -315,31 +314,13 @@ function logModeTable(cacheModes, restores, saves) {
   printTable('Mode matrix:', headers, rows);
 }
 
-/** Describe a restore result with the plain-language reason shown alongside it. */
-function describeRestoreResult(result) {
-  switch (result) {
-    case RESTORE_RESULT.TRUE: return 'true (exact hit)';
-    case RESTORE_RESULT.PARTIAL: return 'partial (older generation)';
-    case RESTORE_RESULT.FALSE: return 'false (miss)';
-    case RESTORE_RESULT.SKIPPED: return 'skipped (disabled)';
-    case RESTORE_RESULT.UNKNOWN: return 'unknown (restore error)';
-    default: return result;
-  }
-}
-
-/** Print one compact overview of all three restores once they have completed. */
+/** Print one compact overview of all restores once they have completed. */
 function logRestoreSummary(configuration, restoreDetails) {
-  const headers = ['Cache', 'Result', 'Before', 'After'];
-  const size = (value) => value === null ? 'unknown' : formatBytes(value);
-  const rows = Object.entries(restoreDetails).map(([name, detail]) => [
-    name === 'external'
-      ? externalCacheLabel(configuration)
-      : cacheLabel(configuration, configuration.caches[name]),
-    describeRestoreResult(detail.result),
-    size(detail.sizeBefore),
-    size(detail.sizeAfter),
-  ]);
-  printTable('Restore summary:', headers, rows);
+  printTable(
+    'Restore summary (local uncompressed size after restore):',
+    ['Cache', 'Result', 'Local size'],
+    restoreSummaryRows(configuration, restoreDetails),
+  );
 }
 
 function setRestoreOutputs({ bazelisk, disk, repository, external }) {

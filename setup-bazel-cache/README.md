@@ -180,15 +180,16 @@ Bazelisk version key.
 
 Each restore is shown in its own expandable log group with the result and the
 local cache size before and after the restore. Once all selected restores
-complete, a restore summary table reports the result and before/after size for
-every cache in one place, so a hit, a partial (older-generation) restore, or a
-miss is visible without expanding any group. The post action reports the local
-uncompressed payload size before each save and whether the cache was saved,
-skipped, or deliberately preserved, then ends with an equivalent save summary
-table. In repository-cache auto mode it also reports the post-restore baseline
-and the 10% growth decision. GitHub's cache service does not expose the
-compressed archive size through the cache API, so the reported size is the
-local directory size rather than the uploaded archive size.
+complete, a restore summary table reports the result and the resulting local
+uncompressed size for every cache in one place, so a hit, a partial
+(older-generation) restore, or a miss is visible without expanding any group.
+External caching reports the manifest and each extracted repository as separate
+rows. The post action reports the local uncompressed payload size before each
+save and whether the cache was saved, skipped, or deliberately preserved, then
+ends with an equivalent save summary table. In repository-cache auto mode it
+also reports the post-restore baseline and the 10% growth decision. GitHub's
+cache restore API does not expose the downloaded compressed archive size to the
+action, so the summary labels its available local directory size explicitly.
 
 ## Cache lifecycle
 
