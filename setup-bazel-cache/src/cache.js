@@ -27,6 +27,8 @@ const RESTORE_RESULT = Object.freeze({
 });
 
 const BYTE_UNITS = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+/** Keep content-addressed keys readable while retaining 64 bits of identity. */
+const CACHE_HASH_LENGTH = 16;
 const REPOSITORY_CACHE_GROWTH_PERCENT = 10;
 
 /** Keep the restored generation key available to the post action. */
@@ -146,7 +148,7 @@ function cachePrefix(configuration, cacheConfiguration) {
 
 /** The real, stable cache-key prefix shown in logs instead of the internal short name. */
 function cacheLabel(configuration, cacheConfiguration) {
-  return cachePrefix(configuration, cacheConfiguration).replace(/\.$/, '');
+  return cachePrefix(configuration, cacheConfiguration).replace(/\/$/, '');
 }
 
 /** Generate the readable timestamp generation suffix owned by this action. */
@@ -210,26 +212,27 @@ async function keyPlan(configuration, cacheConfiguration) {
   const prefix = cachePrefix(configuration, cacheConfiguration);
   let contentPrefix = prefix;
   if (cacheConfiguration.keySuffix !== undefined) {
-    contentPrefix = `${prefix}${cacheConfiguration.keySuffix}`;
+    contentPrefix = `${prefix}version-${encodeURIComponent(cacheConfiguration.keySuffix)}`;
   } else if (cacheConfiguration.files.length > 0) {
     const hash = await glob.hashFiles(
       cacheConfiguration.files.join('\n'),
       configuration.workspace,
       { followSymbolicLinks: false },
     );
-    contentPrefix = `${prefix}${hash}`;
+    contentPrefix = `${prefix}content-${hash.slice(0, CACHE_HASH_LENGTH)}`;
   }
 
   if (!cacheConfiguration.generational) {
     return { key: contentPrefix, restoreKeys: [] };
   }
 
-  const generationPrefix = `${contentPrefix}${contentPrefix === prefix ? '' : '.'}`;
+  const generationPrefix = contentPrefix === prefix ? prefix : `${contentPrefix}/`;
+  const generationRestorePrefix = `${generationPrefix}generation-`;
   const restoreKeys = generationPrefix === prefix
-    ? [prefix]
-    : [generationPrefix, prefix];
+    ? [generationRestorePrefix, prefix]
+    : [generationRestorePrefix, `${prefix}generation-`, prefix];
   return {
-    key: `${generationPrefix}${generationSuffix()}`,
+    key: `${generationRestorePrefix}${generationSuffix()}`,
     restoreKeys,
   };
 }
@@ -241,7 +244,7 @@ async function exactKey(configuration, cacheConfiguration) {
 
 /** Keep exact-hit state names consistent between the main and post processes. */
 function hitState(cacheConfiguration) {
-  return `cache-hit-${cacheConfiguration.name}`;
+  return `cache-hit-${cacheStateName(cacheConfiguration)}`;
 }
 
 /**
@@ -348,7 +351,7 @@ async function save(configuration, cacheConfiguration, restoreResult) {
 /** Return whether a key is one of this action's own timestamped generations. */
 function isOwnedGenerationKey(configuration, cacheConfiguration, cacheKey) {
   if (!cacheConfiguration.generational || typeof cacheKey !== 'string') return false;
-  const prefix = cachePrefix(configuration, cacheConfiguration);
+  const prefix = `${cachePrefix(configuration, cacheConfiguration)}generation-`;
   return cacheKey.startsWith(prefix) && /^\d+$/.test(cacheKey.slice(prefix.length));
 }
 

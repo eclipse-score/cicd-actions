@@ -92,7 +92,7 @@ test('external manifest accepts repository names but rejects path-like entries',
   assert.throws(() => readExternalManifest(manifest), /Invalid external repository/);
 });
 
-test('external repository keys encode dots and do not fall back to a different dependency definition', async (context) => {
+test('external repository keys keep dots readable and do not fall back to a different dependency definition', async (context) => {
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'setup-bazel-cache-workspace-'));
   context.after(() => fs.rmSync(workspace, { recursive: true, force: true }));
   fs.writeFileSync(path.join(workspace, 'MODULE.bazel'), 'module(name = "test")\n');
@@ -108,7 +108,7 @@ test('external repository keys encode dots and do not fall back to a different d
   assert.deepEqual(plan.restoreKeys, []);
   assert.match(
     plan.key,
-    new RegExp(`^${configuration.baseKey}\\.${configuration.platform}\\.external\\.rules__cc\\.[0-9a-f]{8,64}$`),
+    new RegExp(`^${configuration.baseKey}/${configuration.platform}/external/rules\\.cc/content-[0-9a-f]{16}$`),
   );
 });
 
@@ -121,13 +121,10 @@ test('external repository names with and without dots have distinct complete pre
 
   const dotted = externalRepositoryCache(configuration, 'rules.cc');
   const underscored = externalRepositoryCache(configuration, 'rules_cc');
-  assert.notEqual(
-    dotted.keyComponents[0],
-    underscored.keyComponents[0],
-  );
+  assert.notEqual(dotted.keyComponents[0], underscored.keyComponents[0]);
   assert.equal(
     dotted.keyComponents[0],
-    'rules__cc',
+    'rules.cc',
   );
   assert.equal(
     underscored.keyComponents[0],

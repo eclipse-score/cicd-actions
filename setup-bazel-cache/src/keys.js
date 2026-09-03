@@ -14,13 +14,12 @@
 const CACHE_KEY_NAMESPACE = 'setup-bazel-cache';
 
 /**
- * Encode a dynamic cache-key component without introducing a structural dot.
+ * Encode a dynamic cache-key component without introducing a structural slash.
  *
- * A doubled underscore is reserved for this encoding. Rejecting it at the
- * boundary makes the mapping reversible while retaining ordinary underscores
- * exactly as users supplied them. A dot next to an underscore is rejected as
- * well: both `._` and `_.` would otherwise produce the same three-underscore
- * sequence after encoding.
+ * URL encoding keeps ordinary dots and underscores readable while ensuring a
+ * slash supplied by a caller cannot accidentally become another key level.
+ * The input restrictions are retained so existing cache-key validation stays
+ * consistent across the readable key format.
  */
 function formatCacheComponent(value, label = 'cache component') {
   if (
@@ -35,12 +34,12 @@ function formatCacheComponent(value, label = 'cache component') {
       "(the reserved '__' sequence is also rejected).",
     );
   }
-  return value.replaceAll('.', '__');
+  return encodeURIComponent(value);
 }
 
 /** Build the stable platform prefix shared by all keys in one cache family. */
 function formatCacheKeyPrefix(baseKey, platform, family, components = []) {
-  return [baseKey, platform, family, ...components].join('.') + '.';
+  return [baseKey, platform, family, ...components].join('/') + '/';
 }
 
 export {

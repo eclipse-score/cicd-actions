@@ -107455,10 +107455,10 @@ function formatCacheComponent(value, label = "cache component") {
       `${label} must not be empty or contain an ambiguous dot/underscore sequence (the reserved '__' sequence is also rejected).`
     );
   }
-  return value.replaceAll(".", "__");
+  return encodeURIComponent(value);
 }
 function formatCacheKeyPrefix(baseKey, platform2, family, components = []) {
-  return [baseKey, platform2, family, ...components].join(".") + ".";
+  return [baseKey, platform2, family, ...components].join("/") + "/";
 }
 
 // src/cache.js
@@ -107470,6 +107470,7 @@ var RESTORE_RESULT = Object.freeze({
   UNKNOWN: "unknown"
 });
 var BYTE_UNITS = ["B", "KiB", "MiB", "GiB", "TiB"];
+var CACHE_HASH_LENGTH = 16;
 var REPOSITORY_CACHE_GROWTH_PERCENT = 10;
 function restoredKeyState(cacheConfiguration) {
   return `setup-bazel-cache-restored-key-${cacheStateName(cacheConfiguration)}`;
@@ -107552,7 +107553,7 @@ function cachePrefix(configuration, cacheConfiguration) {
   );
 }
 function cacheLabel(configuration, cacheConfiguration) {
-  return cachePrefix(configuration, cacheConfiguration).replace(/\.$/, "");
+  return cachePrefix(configuration, cacheConfiguration).replace(/\/$/, "");
 }
 function generationSuffix() {
   return Date.now().toString();
@@ -107586,22 +107587,23 @@ async function keyPlan(configuration, cacheConfiguration) {
   const prefix2 = cachePrefix(configuration, cacheConfiguration);
   let contentPrefix = prefix2;
   if (cacheConfiguration.keySuffix !== void 0) {
-    contentPrefix = `${prefix2}${cacheConfiguration.keySuffix}`;
+    contentPrefix = `${prefix2}version-${encodeURIComponent(cacheConfiguration.keySuffix)}`;
   } else if (cacheConfiguration.files.length > 0) {
     const hash = await hashFiles3(
       cacheConfiguration.files.join("\n"),
       configuration.workspace,
       { followSymbolicLinks: false }
     );
-    contentPrefix = `${prefix2}${hash}`;
+    contentPrefix = `${prefix2}content-${hash.slice(0, CACHE_HASH_LENGTH)}`;
   }
   if (!cacheConfiguration.generational) {
     return { key: contentPrefix, restoreKeys: [] };
   }
-  const generationPrefix = `${contentPrefix}${contentPrefix === prefix2 ? "" : "."}`;
-  const restoreKeys = generationPrefix === prefix2 ? [prefix2] : [generationPrefix, prefix2];
+  const generationPrefix = contentPrefix === prefix2 ? prefix2 : `${contentPrefix}/`;
+  const generationRestorePrefix = `${generationPrefix}generation-`;
+  const restoreKeys = generationPrefix === prefix2 ? [generationRestorePrefix, prefix2] : [generationRestorePrefix, `${prefix2}generation-`, prefix2];
   return {
-    key: `${generationPrefix}${generationSuffix()}`,
+    key: `${generationRestorePrefix}${generationSuffix()}`,
     restoreKeys
   };
 }
@@ -107609,7 +107611,7 @@ async function exactKey(configuration, cacheConfiguration) {
   return (await keyPlan(configuration, cacheConfiguration)).key;
 }
 function hitState(cacheConfiguration) {
-  return `cache-hit-${cacheConfiguration.name}`;
+  return `cache-hit-${cacheStateName(cacheConfiguration)}`;
 }
 async function save(configuration, cacheConfiguration, restoreResult) {
   const label = cacheLabel(configuration, cacheConfiguration);
@@ -107666,7 +107668,7 @@ async function save(configuration, cacheConfiguration, restoreResult) {
 }
 function isOwnedGenerationKey(configuration, cacheConfiguration, cacheKey) {
   if (!cacheConfiguration.generational || typeof cacheKey !== "string") return false;
-  const prefix2 = cachePrefix(configuration, cacheConfiguration);
+  const prefix2 = `${cachePrefix(configuration, cacheConfiguration)}generation-`;
   return cacheKey.startsWith(prefix2) && /^\d+$/.test(cacheKey.slice(prefix2.length));
 }
 async function deleteCacheByKey(cacheKey, {
@@ -107866,7 +107868,7 @@ function createConfiguration(workspace, diskCacheKey, { bazeliskVersion, enableP
         path: import_node_path3.default.join(cacheRoot, "bazelisk")
       },
       disk: {
-        keyComponents: [normalizedDiskCacheKey],
+        keyComponents: [`key-${normalizedDiskCacheKey}`],
         name: "disk",
         generational: true,
         files: [],

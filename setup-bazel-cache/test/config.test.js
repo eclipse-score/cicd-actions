@@ -31,7 +31,7 @@ test('configuration uses readable Linux cache names and a temporary bazelrc', ()
   );
   assert.equal(configuration.platform, `linux-${os.arch()}`);
   assert.equal(configuration.caches.disk.name, 'disk');
-  assert.deepEqual(configuration.caches.disk.keyComponents, ['build__qnx_x86_64']);
+  assert.deepEqual(configuration.caches.disk.keyComponents, ['key-build.qnx_x86_64']);
   assert.equal(
     configuration.bazelrc,
     path.join(process.env.RUNNER_TEMP || os.tmpdir(), 'setup-bazel-cache.bazelrc'),
@@ -130,8 +130,9 @@ test('Bazel 8 compatibility import preserves the user bazelrc', (context) => {
 
 test('disk cache keys are constrained to safe cache-key components', () => {
   assert.equal(validateDiskCacheKey('linux-debug'), 'linux-debug');
-  assert.equal(validateDiskCacheKey('build.qnx_x86_64'), 'build__qnx_x86_64');
+  assert.equal(validateDiskCacheKey('build.qnx_x86_64'), 'build.qnx_x86_64');
   assert.equal(validateDiskCacheKey('one_two'), 'one_two');
+  assert.equal(validateDiskCacheKey('build/target'), 'build%2Ftarget');
   assert.throws(() => validateDiskCacheKey(''), /printable characters without commas/);
   assert.throws(() => validateDiskCacheKey('a'.repeat(401)), /printable characters without commas/);
   assert.throws(() => validateDiskCacheKey('debug\nrelease'), /printable characters without commas/);

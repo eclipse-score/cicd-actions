@@ -161,7 +161,7 @@ function createConfiguration(
         path: path.join(cacheRoot, 'bazelisk'),
       },
       disk: {
-        keyComponents: [normalizedDiskCacheKey],
+        keyComponents: [`key-${normalizedDiskCacheKey}`],
         name: 'disk',
         generational: true,
         files: [],

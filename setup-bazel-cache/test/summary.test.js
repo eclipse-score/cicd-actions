@@ -79,6 +79,6 @@ test('restore summary keeps a single external row when no component was restored
 
   assert.deepEqual(restoreSummaryRows(configuration, details), [
     [cacheLabel(configuration, configuration.caches.bazelisk), 'skipped (disabled)', '0 B'],
-    [`${configuration.baseKey}.${configuration.platform}.external`, 'skipped (disabled)', '0 B'],
+    [`${configuration.baseKey}/${configuration.platform}/external`, 'skipped (disabled)', '0 B'],
   ]);
 });

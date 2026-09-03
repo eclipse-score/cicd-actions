@@ -26,9 +26,10 @@ steps:
 
 - `disk-cache-key` separates disk caches belonging to different jobs or
   matrix configurations. It must be a stable value; do not include transient
-  values such as `${{ github.run_id }}`. Dots are encoded as `__` in the cache
-  key, single underscores are preserved, and `__` (as well as ambiguous
-  dot/underscore adjacency) is reserved and rejected.
+  values such as `${{ github.run_id }}`. Cache keys use slash-separated,
+  human-readable levels; slash characters in dynamic values are URL-encoded.
+  `__` (as well as ambiguous dot/underscore adjacency) remains reserved and
+  rejected.
 - `cache-save-branch-patterns` is an optional newline-separated list of branch
   glob patterns allowed to save caches. An empty input uses the repository's GitHub
   default branch.
@@ -57,10 +58,8 @@ restoring external repositories. It caches real extracted directories of at
 least 500 MiB and skips symlinked local repositories. The cache key is independent
 of `disk-cache-key`; it is based on the repository name, runner architecture,
 the Bazel version, `MODULE.bazel.lock`, and any existing legacy `WORKSPACE*`
-files. If no lockfile exists, `MODULE.bazel` is used as a fallback. Dots in
-repository names are encoded as `__`; the reserved `__` sequence and ambiguous
-dot/underscore adjacency are rejected so names cannot become ambiguous
-cache-key components. The manifest is cached
+files. If no lockfile exists, `MODULE.bazel` is used as a fallback. The
+manifest is cached
 separately so the action knows which repository names to restore before the
 build.
 
@@ -193,28 +192,29 @@ action, so the summary labels its available local directory size explicitly.
 
 ## Cache lifecycle
 
-Cache keys use readable dot-separated components. For example, a disk cache
-with `disk-cache-key: build.qnx_x86_64` has the generation key
-`setup-bazel-cache.linux-x64.disk.build__qnx_x86_64.<timestamp>`.
-Bazelisk uses the readable `.bazelversion` value as the final exact component
-in a key such as `setup-bazel-cache.linux-x64.bazelisk.8.6.0` and does not
+Cache keys use readable slash-separated components. For example, a disk cache
+with `disk-cache-key: build.qnx_x86_64` has a generation key such as
+`setup-bazel-cache/linux-x64/disk/key-build.qnx_x86_64/generation-<timestamp>`.
+Bazelisk uses the readable `.bazelversion` value in a key such as
+`setup-bazel-cache/linux-x64/bazelisk/version-8.6.0` and does not
 restore snapshots created for another version.
 Its restore and save can be disabled with `bazelisk-cache-restore` and
 `bazelisk-cache-save`. The repository cache uses one rolling
 timestamped generation family for the repository and runner architecture, such
-as `setup-bazel-cache.linux-x64.repository.<timestamp>`.
+as `setup-bazel-cache/linux-x64/repository/generation-<timestamp>`.
 Bazel repository-cache entries are content-addressed, so
 `MODULE.bazel.lock` and individual Bazel configs are not correctness boundaries
 for this cache. Builds, fetch jobs, platforms, and configs all restore and
 augment the same snapshot. Disk caches use timestamped generations and include
 `disk-cache-key`. External repository caches use separate immutable keys based
 on the repository name and dependency-content hash, such as
-`setup-bazel-cache.linux-x64.external.rules__cc.<hash>`; dots in repository
-names are encoded as `__` so they cannot create ambiguous structural
-components; ambiguous dot/underscore adjacency is rejected. Unchanged
+`setup-bazel-cache/linux-x64/external/rules.cc/content-<hash>`;
+slashes in dynamic components are URL-encoded and ambiguous
+dot/underscore adjacency is rejected. Content hashes are shortened to their
+first 16 hexadecimal characters for readability. Unchanged
 extracted repositories are not uploaded again. The
 manifest remains a small rolling generation such as
-`setup-bazel-cache.linux-x64.external-manifest.<timestamp>` that records which
+`setup-bazel-cache/linux-x64/external-manifest/generation-<timestamp>` that records which
 repositories to restore. Cache API failures are reported as warnings so a
 transient cache outage does not fail the build.
 

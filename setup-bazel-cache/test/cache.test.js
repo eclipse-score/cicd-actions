@@ -40,11 +40,11 @@ test('cache families have explicit names', () => {
   const configuration = createConfiguration('/workspace', 'linux-debug');
   assert.equal(
     cachePrefix(configuration, configuration.caches.disk),
-    `${configuration.baseKey}.${configuration.platform}.disk.linux-debug.`,
+    `${configuration.baseKey}/${configuration.platform}/disk/key-linux-debug/`,
   );
   assert.equal(
     cachePrefix(configuration, configuration.caches.repository),
-    `${configuration.baseKey}.${configuration.platform}.repository.`,
+    `${configuration.baseKey}/${configuration.platform}/repository/`,
   );
 });
 
@@ -58,11 +58,11 @@ test('disk cache family names cannot prefix-match another configuration', async 
 
   assert.equal(
     buildPlan.key,
-    `${build.baseKey}.${build.platform}.disk.build.1700000000000`,
+    `${build.baseKey}/${build.platform}/disk/key-build/generation-1700000000000`,
   );
   assert.equal(
     buildQnxPlan.key,
-    `${buildQnx.baseKey}.${buildQnx.platform}.disk.build__qnx_x86_64.1700000000000`,
+    `${buildQnx.baseKey}/${buildQnx.platform}/disk/key-build.qnx_x86_64/generation-1700000000000`,
   );
   assert.equal(buildQnxPlan.key.startsWith(buildPlan.restoreKeys[0]), false);
 });
@@ -202,7 +202,7 @@ test('content-based cache keys do not restore snapshots for other content', asyn
   const plan = await keyPlan(configuration, configuration.caches.bazelisk);
   assert.match(
     plan.key,
-    new RegExp(`^${configuration.baseKey}\\.${configuration.platform}\\.bazelisk\\.8\\.6\\.0$`),
+    new RegExp(`^${configuration.baseKey}/${configuration.platform}/bazelisk/version-8\\.6\\.0$`),
   );
   assert.deepEqual(plan.restoreKeys, []);
 });
@@ -214,13 +214,13 @@ test('repository cache uses one rolling generation family for all configurations
   const configuration = createConfiguration('/workspace', 'test');
   const prefix = cachePrefix(configuration, configuration.caches.repository);
   const first = await keyPlan(configuration, configuration.caches.repository);
-  assert.equal(first.key, `${prefix}${timestamp}`);
-  assert.deepEqual(first.restoreKeys, [prefix]);
+  assert.equal(first.key, `${prefix}generation-${timestamp}`);
+  assert.deepEqual(first.restoreKeys, [`${prefix}generation-`, prefix]);
 
   timestamp += 1;
   const second = await keyPlan(configuration, configuration.caches.repository);
-  assert.equal(second.key, `${prefix}${timestamp}`);
-  assert.deepEqual(second.restoreKeys, [prefix]);
+  assert.equal(second.key, `${prefix}generation-${timestamp}`);
+  assert.deepEqual(second.restoreKeys, [`${prefix}generation-`, prefix]);
 });
 
 test('manifest generations use the same readable family format', async (context) => {
@@ -234,11 +234,14 @@ test('manifest generations use the same readable family format', async (context)
 
   assert.equal(
     manifest.key,
-    `${configuration.baseKey}.${configuration.platform}.external-manifest.1700000000000`,
+    `${configuration.baseKey}/${configuration.platform}/external-manifest/generation-1700000000000`,
   );
   assert.deepEqual(
     manifest.restoreKeys,
-    [`${configuration.baseKey}.${configuration.platform}.external-manifest.`],
+    [
+      `${configuration.baseKey}/${configuration.platform}/external-manifest/generation-`,
+      `${configuration.baseKey}/${configuration.platform}/external-manifest/`,
+    ],
   );
 });
 
@@ -295,11 +298,11 @@ test('only setup-bazel-cache generation keys are eligible for cleanup', () => {
   const diskPrefix = cachePrefix(configuration, configuration.caches.disk);
 
   assert.equal(
-    isOwnedGenerationKey(configuration, configuration.caches.repository, `${repositoryPrefix}1700000000000`),
+    isOwnedGenerationKey(configuration, configuration.caches.repository, `${repositoryPrefix}generation-1700000000000`),
     true,
   );
   assert.equal(
-    isOwnedGenerationKey(configuration, configuration.caches.disk, `${diskPrefix}1700000000000`),
+    isOwnedGenerationKey(configuration, configuration.caches.disk, `${diskPrefix}generation-1700000000000`),
     true,
   );
   assert.equal(
@@ -325,7 +328,7 @@ test('previous cache cleanup uses the current ref and exact cache family', async
 
   const configuration = createConfiguration('/workspace', 'test');
   const cacheConfiguration = configuration.caches.repository;
-  const oldKey = `${cachePrefix(configuration, cacheConfiguration)}1700000000000`;
+  const oldKey = `${cachePrefix(configuration, cacheConfiguration)}generation-1700000000000`;
   assert.equal(await deleteCacheByKey(oldKey, {
     configuration,
     cacheConfiguration,
@@ -336,7 +339,7 @@ test('previous cache cleanup uses the current ref and exact cache family', async
   }), true);
   assert.equal(
     request.url,
-    `https://api.example.test/repos/owner/repository/actions/caches?key=${oldKey}&ref=refs%2Fheads%2Fmain`,
+    `https://api.example.test/repos/owner/repository/actions/caches?key=${encodeURIComponent(oldKey)}&ref=refs%2Fheads%2Fmain`,
   );
   assert.equal(request.options.method, 'DELETE');
 });
@@ -369,7 +372,7 @@ test('insufficient cache cleanup permission is non-fatal', async (context) => {
 
   const configuration = createConfiguration('/workspace', 'test');
   const cacheConfiguration = configuration.caches.disk;
-  const oldKey = `${cachePrefix(configuration, cacheConfiguration)}1700000000000`;
+  const oldKey = `${cachePrefix(configuration, cacheConfiguration)}generation-1700000000000`;
   await assert.doesNotReject(() => deleteCacheByKey(oldKey, {
     configuration,
     cacheConfiguration,
