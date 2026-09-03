@@ -22,6 +22,7 @@ import {
   restore,
   save,
 } from './cache.js';
+import { formatCacheComponent } from './keys.js';
 
 const EXTERNAL_CACHE_MIN_SIZE = 500 * 1024 * 1024;
 const MAX_EXTERNAL_REPOSITORY_NAME_LENGTH = 200;
@@ -77,7 +78,8 @@ function externalRepositoryCache(configuration, name) {
   return {
     files: configuration.external.identityFiles,
     generational: false,
-    name: `external-${name}`,
+    keyComponents: [formatCacheComponent(name, 'external repository name')],
+    name: 'external',
     paths: [markerPath, repositoryPath],
   };
 }
@@ -91,6 +93,9 @@ function validateExternalRepositoryName(name) {
     name === '.' ||
     name === '..' ||
     !EXTERNAL_REPOSITORY_NAME.test(name) ||
+    name.includes('__') ||
+    name.includes('._') ||
+    name.includes('_.') ||
     [...name].some((character) => {
       const codePoint = character.codePointAt(0);
       return codePoint < 32 || codePoint === 127;

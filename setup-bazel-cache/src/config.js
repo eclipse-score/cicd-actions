@@ -14,6 +14,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { CACHE_KEY_NAMESPACE, formatCacheComponent } from './keys.js';
 import { profilePaths } from './profiling.js';
 
 const MAX_BAZELISK_VERSION_LENGTH = 400;
@@ -24,16 +25,20 @@ const BAZELRC_MARKER_END = '# setup-bazel-cache: end managed import';
 /** Reject malformed key components before cache APIs can fail late in the job. */
 function validateDiskCacheKey(value) {
   if (
+    typeof value !== 'string' ||
     !value ||
     value.length > MAX_DISK_CACHE_KEY_LENGTH ||
     hasControlCharacter(value) ||
-    value.includes(',')
+    value.includes(',') ||
+    value.includes('__') ||
+    value.includes('._') ||
+    value.includes('_.')
   ) {
     throw new Error(
-      'disk-cache-key must contain 1 to 400 printable characters without commas.',
+      "disk-cache-key must contain 1 to 400 printable characters without commas or ambiguous dot/underscore sequences; '__' is reserved.",
     );
   }
-  return value;
+  return formatCacheComponent(value, 'disk-cache-key');
 }
 
 function hasControlCharacter(value) {
@@ -114,14 +119,15 @@ function createConfiguration(
   diskCacheKey,
   { bazeliskVersion, enableProfiling = false, externalCacheEnabled = false, outputBase = null } = {},
 ) {
-  validateDiskCacheKey(diskCacheKey);
+  const normalizedDiskCacheKey = validateDiskCacheKey(diskCacheKey);
   const resolvedBazeliskVersion = bazeliskVersion === undefined
     ? readBazeliskVersion(workspace)
     : validateBazeliskVersion(bazeliskVersion);
   const home = os.homedir();
   const cacheRoot = path.join(home, '.cache');
   const runnerTemp = process.env.RUNNER_TEMP || os.tmpdir();
-  const baseKey = `setup-bazel-cache-v1-linux-${os.arch()}`;
+  const baseKey = CACHE_KEY_NAMESPACE;
+  const platform = `linux-${os.arch()}`;
   const profiles = enableProfiling ? profilePaths(runnerTemp) : null;
   const bazelrcLines = [
     `build --disk_cache=${path.join(cacheRoot, 'bazel-disk')}`,
@@ -155,7 +161,8 @@ function createConfiguration(
         path: path.join(cacheRoot, 'bazelisk'),
       },
       disk: {
-        name: `disk-${diskCacheKey.length}-${diskCacheKey}`,
+        keyComponents: [normalizedDiskCacheKey],
+        name: 'disk',
         generational: true,
         files: [],
         path: path.join(cacheRoot, 'bazel-disk'),
@@ -175,6 +182,7 @@ function createConfiguration(
           files: [],
           generational: true,
           name: 'external-manifest',
+          keyComponents: [],
           path: path.join(runnerTemp, 'setup-bazel-cache-external-manifest.txt'),
         },
         minSize: 500 * 1024 * 1024,
@@ -182,6 +190,7 @@ function createConfiguration(
         root: outputBase ? path.join(outputBase, 'external') : null,
       }
       : null,
+    platform,
     profiles,
     workspace,
   };

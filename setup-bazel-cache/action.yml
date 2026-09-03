@@ -23,7 +23,9 @@ inputs:
   disk-cache-key:
     description: >
       Stable disk-cache key for this workflow job and matrix configuration
-      (1-400 printable characters, no commas).
+      (1-400 printable characters, no commas or ambiguous dot/underscore
+      sequences; double underscores are reserved and dots are encoded as
+      double underscores).
     required: true
 
   cache-save-branch-patterns:

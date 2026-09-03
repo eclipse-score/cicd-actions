@@ -50,7 +50,8 @@ test('external repository cache uses an immutable identity key', () => {
   assert.deepEqual(externalRepositoryCache(configuration, 'rules_cc'), {
     files: configuration.external.identityFiles,
     generational: false,
-    name: 'external-rules_cc',
+    keyComponents: ['rules_cc'],
+    name: 'external',
     paths: [
       '/tmp/bazel-output-base/external/@rules_cc.marker',
       '/tmp/bazel-output-base/external/rules_cc',
@@ -60,9 +61,12 @@ test('external repository cache uses an immutable identity key', () => {
 
 test('external cache names cannot escape the output external directory', () => {
   assert.equal(validateExternalRepositoryName('rules_cc~override'), 'rules_cc~override');
+  assert.equal(validateExternalRepositoryName('rules.cc'), 'rules.cc');
   assert.throws(() => validateExternalRepositoryName('../outside'), /Invalid external repository/);
   assert.throws(() => validateExternalRepositoryName('repo/name'), /Invalid external repository/);
   assert.throws(() => validateExternalRepositoryName('repo\nname'), /Invalid external repository/);
+  assert.throws(() => validateExternalRepositoryName('repo__name'), /Invalid external repository/);
+  assert.throws(() => validateExternalRepositoryName('repo._name'), /Invalid external repository/);
 });
 
 test('external discovery includes directories and ignores marker files and symlinks', (context) => {
@@ -88,7 +92,7 @@ test('external manifest accepts repository names but rejects path-like entries',
   assert.throws(() => readExternalManifest(manifest), /Invalid external repository/);
 });
 
-test('external repository keys do not fall back to a different dependency definition', async (context) => {
+test('external repository keys encode dots and do not fall back to a different dependency definition', async (context) => {
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'setup-bazel-cache-workspace-'));
   context.after(() => fs.rmSync(workspace, { recursive: true, force: true }));
   fs.writeFileSync(path.join(workspace, 'MODULE.bazel'), 'module(name = "test")\n');
@@ -98,11 +102,37 @@ test('external repository keys do not fall back to a different dependency defini
     outputBase: '/tmp/bazel-output-base',
   });
   configureExternalCache(configuration, '/tmp/bazel-output-base');
-  const repository = externalRepositoryCache(configuration, 'rules_cc');
+  const repository = externalRepositoryCache(configuration, 'rules.cc');
   const plan = await keyPlan(configuration, repository);
 
   assert.deepEqual(plan.restoreKeys, []);
-  assert.match(plan.key, /external-rules_cc-[0-9a-f]{8,64}$/);
+  assert.match(
+    plan.key,
+    new RegExp(`^${configuration.baseKey}\\.external\\.${configuration.platform}\\.rules__cc\\.[0-9a-f]{8,64}$`),
+  );
+});
+
+test('external repository names with and without dots have distinct complete prefixes', () => {
+  const configuration = createConfiguration('/workspace', 'test', {
+    externalCacheEnabled: true,
+    outputBase: '/tmp/bazel-output-base',
+  });
+  configureExternalCache(configuration, '/tmp/bazel-output-base');
+
+  const dotted = externalRepositoryCache(configuration, 'rules.cc');
+  const underscored = externalRepositoryCache(configuration, 'rules_cc');
+  assert.notEqual(
+    dotted.keyComponents[0],
+    underscored.keyComponents[0],
+  );
+  assert.equal(
+    dotted.keyComponents[0],
+    'rules__cc',
+  );
+  assert.equal(
+    underscored.keyComponents[0],
+    'rules_cc',
+  );
 });
 
 test('aggregate external restore succeeds only when the manifest and every repository restore', () => {

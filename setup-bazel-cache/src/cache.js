@@ -16,6 +16,7 @@ import * as core from '@actions/core';
 import * as glob from '@actions/glob';
 import fs from 'node:fs';
 import path from 'node:path';
+import { formatCacheKeyPrefix } from './keys.js';
 
 const RESTORE_RESULT = Object.freeze({
   FALSE: 'false',
@@ -30,7 +31,12 @@ const REPOSITORY_CACHE_GROWTH_PERCENT = 10;
 
 /** Keep the restored generation key available to the post action. */
 function restoredKeyState(cacheConfiguration) {
-  return `setup-bazel-cache-restored-key-${cacheConfiguration.name}`;
+  return `setup-bazel-cache-restored-key-${cacheStateName(cacheConfiguration)}`;
+}
+
+/** Keep per-cache state names distinct when a family has a dynamic component. */
+function cacheStateName(cacheConfiguration) {
+  return [cacheConfiguration.name, ...(cacheConfiguration.keyComponents || [])].join('-');
 }
 
 /** Return the uncompressed size of one local path without following symlinks. */
@@ -130,12 +136,17 @@ function restoreOutput(result) {
 
 /** Return the stable cache-family prefix used for fallback restores. */
 function cachePrefix(configuration, cacheConfiguration) {
-  return `${configuration.baseKey}-${cacheConfiguration.name}-`;
+  return formatCacheKeyPrefix(
+    configuration.baseKey,
+    cacheConfiguration.name,
+    configuration.platform,
+    cacheConfiguration.keyComponents,
+  );
 }
 
 /** The real, stable cache-key prefix shown in logs instead of the internal short name. */
 function cacheLabel(configuration, cacheConfiguration) {
-  return cachePrefix(configuration, cacheConfiguration).replace(/-$/, '');
+  return cachePrefix(configuration, cacheConfiguration).replace(/\.$/, '');
 }
 
 /** Generate the readable timestamp generation suffix owned by this action. */
@@ -198,7 +209,7 @@ function skippedSaveSummary(configuration, cacheConfiguration, status) {
 async function keyPlan(configuration, cacheConfiguration) {
   const prefix = cachePrefix(configuration, cacheConfiguration);
   let contentPrefix = prefix;
-  if (cacheConfiguration.keySuffix) {
+  if (cacheConfiguration.keySuffix !== undefined) {
     contentPrefix = `${prefix}${cacheConfiguration.keySuffix}`;
   } else if (cacheConfiguration.files.length > 0) {
     const hash = await glob.hashFiles(
@@ -213,7 +224,7 @@ async function keyPlan(configuration, cacheConfiguration) {
     return { key: contentPrefix, restoreKeys: [] };
   }
 
-  const generationPrefix = `${contentPrefix}${contentPrefix === prefix ? '' : '-'}`;
+  const generationPrefix = `${contentPrefix}${contentPrefix === prefix ? '' : '.'}`;
   const restoreKeys = generationPrefix === prefix
     ? [prefix]
     : [generationPrefix, prefix];

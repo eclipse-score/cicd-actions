@@ -40,11 +40,11 @@ test('cache families have explicit names', () => {
   const configuration = createConfiguration('/workspace', 'linux-debug');
   assert.equal(
     cachePrefix(configuration, configuration.caches.disk),
-    `${configuration.baseKey}-disk-11-linux-debug-`
+    `${configuration.baseKey}.disk.${configuration.platform}.linux-debug.`,
   );
   assert.equal(
     cachePrefix(configuration, configuration.caches.repository),
-    `${configuration.baseKey}-repository-`
+    `${configuration.baseKey}.repository.${configuration.platform}.`,
   );
 });
 
@@ -52,11 +52,19 @@ test('disk cache family names cannot prefix-match another configuration', async 
   context.mock.method(Date, 'now', () => 1700000000000);
 
   const build = createConfiguration('/workspace', 'build');
-  const buildRelease = createConfiguration('/workspace', 'build-release');
+  const buildQnx = createConfiguration('/workspace', 'build.qnx_x86_64');
   const buildPlan = await keyPlan(build, build.caches.disk);
-  const buildReleasePlan = await keyPlan(buildRelease, buildRelease.caches.disk);
+  const buildQnxPlan = await keyPlan(buildQnx, buildQnx.caches.disk);
 
-  assert.equal(buildReleasePlan.key.startsWith(buildPlan.restoreKeys[0]), false);
+  assert.equal(
+    buildPlan.key,
+    `${build.baseKey}.disk.${build.platform}.build.1700000000000`,
+  );
+  assert.equal(
+    buildQnxPlan.key,
+    `${buildQnx.baseKey}.disk.${buildQnx.platform}.build__qnx_x86_64.1700000000000`,
+  );
+  assert.equal(buildQnxPlan.key.startsWith(buildPlan.restoreKeys[0]), false);
 });
 
 test('restore results use a stable output vocabulary', () => {
@@ -194,7 +202,7 @@ test('content-based cache keys do not restore snapshots for other content', asyn
   const plan = await keyPlan(configuration, configuration.caches.bazelisk);
   assert.match(
     plan.key,
-    new RegExp(`^${configuration.baseKey}-bazelisk-8\\.6\\.0$`),
+    new RegExp(`^${configuration.baseKey}\\.bazelisk\\.${configuration.platform}\\.8\\.6\\.0$`),
   );
   assert.deepEqual(plan.restoreKeys, []);
 });
@@ -207,13 +215,31 @@ test('repository cache uses one rolling generation family for all configurations
   const prefix = cachePrefix(configuration, configuration.caches.repository);
   const first = await keyPlan(configuration, configuration.caches.repository);
   assert.equal(first.key, `${prefix}${timestamp}`);
-  assert.equal(first.key.replace(/-[0-9a-f]{8,64}$/, ''), prefix.slice(0, -1));
   assert.deepEqual(first.restoreKeys, [prefix]);
 
   timestamp += 1;
   const second = await keyPlan(configuration, configuration.caches.repository);
   assert.equal(second.key, `${prefix}${timestamp}`);
   assert.deepEqual(second.restoreKeys, [prefix]);
+});
+
+test('manifest generations use the same readable family format', async (context) => {
+  context.mock.method(Date, 'now', () => 1700000000000);
+
+  const configuration = createConfiguration('/workspace', 'build', {
+    externalCacheEnabled: true,
+  });
+  configuration.caches.externalManifest = configuration.external.manifest;
+  const manifest = await keyPlan(configuration, configuration.caches.externalManifest);
+
+  assert.equal(
+    manifest.key,
+    `${configuration.baseKey}.external-manifest.${configuration.platform}.1700000000000`,
+  );
+  assert.deepEqual(
+    manifest.restoreKeys,
+    [`${configuration.baseKey}.external-manifest.${configuration.platform}.`],
+  );
 });
 
 test('failed generational restores do not replace the existing cache snapshot', () => {

@@ -26,7 +26,9 @@ steps:
 
 - `disk-cache-key` separates disk caches belonging to different jobs or
   matrix configurations. It must be a stable value; do not include transient
-  values such as `${{ github.run_id }}`.
+  values such as `${{ github.run_id }}`. Dots are encoded as `__` in the cache
+  key, single underscores are preserved, and `__` (as well as ambiguous
+  dot/underscore adjacency) is reserved and rejected.
 - `cache-save-branch-patterns` is an optional newline-separated list of branch
   glob patterns allowed to save caches. An empty input uses the repository's GitHub
   default branch.
@@ -55,8 +57,12 @@ restoring external repositories. It caches real extracted directories of at
 least 500 MiB and skips symlinked local repositories. The cache key is independent
 of `disk-cache-key`; it is based on the repository name, runner architecture,
 the Bazel version, `MODULE.bazel.lock`, and any existing legacy `WORKSPACE*`
-files. If no lockfile exists, `MODULE.bazel` is used as a fallback. The manifest is cached separately so
-the action knows which repository names to restore before the build.
+files. If no lockfile exists, `MODULE.bazel` is used as a fallback. Dots in
+repository names are encoded as `__`; the reserved `__` sequence and ambiguous
+dot/underscore adjacency are rejected so names cannot become ambiguous
+cache-key components. The manifest is cached
+separately so the action knows which repository names to restore before the
+build.
 
 External caching can be used without the repository cache. In that mode, an
 external-cache hit avoids the download and extraction; a miss falls back to
@@ -186,22 +192,30 @@ local directory size rather than the uploaded archive size.
 
 ## Cache lifecycle
 
-Cache keys use the prefix
-`setup-bazel-cache-v1-linux-<architecture>`.
-Bazelisk uses the readable `.bazelversion` value in an exact cache key such as
-`...-bazelisk-8.6.0` and does not restore snapshots created for another version.
+Cache keys use readable dot-separated components. For example, a disk cache
+with `disk-cache-key: build.qnx_x86_64` has the generation key
+`setup-bazel-cache.disk.linux-x64.build__qnx_x86_64.<timestamp>`.
+Bazelisk uses the readable `.bazelversion` value as the final exact component
+in a key such as `setup-bazel-cache.bazelisk.linux-x64.8.6.0` and does not
+restore snapshots created for another version.
 Its restore and save can be disabled with `bazelisk-cache-restore` and
 `bazelisk-cache-save`. The repository cache uses one rolling
-timestamped generation family for the repository and runner architecture.
+timestamped generation family for the repository and runner architecture, such
+as `setup-bazel-cache.repository.linux-x64.<timestamp>`.
 Bazel repository-cache entries are content-addressed, so
 `MODULE.bazel.lock` and individual Bazel configs are not correctness boundaries
 for this cache. Builds, fetch jobs, platforms, and configs all restore and
 augment the same snapshot. Disk caches use timestamped generations and include
 `disk-cache-key`. External repository caches use separate immutable keys based
-on the repository name and dependency-content hash, so unchanged extracted
-repositories are not uploaded again. The manifest remains a small rolling
-generation that records which repositories to restore. Cache API failures are
-reported as warnings so a transient cache outage does not fail the build.
+on the repository name and dependency-content hash, such as
+`setup-bazel-cache.external.linux-x64.rules__cc.<hash>`; dots in repository
+names are encoded as `__` so they cannot create ambiguous structural
+components; ambiguous dot/underscore adjacency is rejected. Unchanged
+extracted repositories are not uploaded again. The
+manifest remains a small rolling generation such as
+`setup-bazel-cache.external-manifest.linux-x64.<timestamp>` that records which
+repositories to restore. Cache API failures are reported as warnings so a
+transient cache outage does not fail the build.
 
 External repository caches are discovered after the workflow's Bazel commands
 finish. The manifest records only repositories that meet the size threshold;

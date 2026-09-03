@@ -69503,6 +69503,22 @@ function hashFiles3(patterns_1) {
 // src/cache.js
 var import_node_fs2 = __toESM(require("node:fs"), 1);
 var import_node_path = __toESM(require("node:path"), 1);
+
+// src/keys.js
+var CACHE_KEY_NAMESPACE = "setup-bazel-cache";
+function formatCacheComponent(value, label = "cache component") {
+  if (typeof value !== "string" || !value || value.includes("__") || value.includes("._") || value.includes("_.")) {
+    throw new Error(
+      `${label} must not be empty or contain an ambiguous dot/underscore sequence (the reserved '__' sequence is also rejected).`
+    );
+  }
+  return value.replaceAll(".", "__");
+}
+function formatCacheKeyPrefix(baseKey, family, platform2, components = []) {
+  return [baseKey, family, platform2, ...components].join(".") + ".";
+}
+
+// src/cache.js
 var RESTORE_RESULT = Object.freeze({
   FALSE: "false",
   PARTIAL: "partial",
@@ -69512,7 +69528,10 @@ var RESTORE_RESULT = Object.freeze({
 });
 var BYTE_UNITS = ["B", "KiB", "MiB", "GiB", "TiB"];
 function restoredKeyState(cacheConfiguration) {
-  return `setup-bazel-cache-restored-key-${cacheConfiguration.name}`;
+  return `setup-bazel-cache-restored-key-${cacheStateName(cacheConfiguration)}`;
+}
+function cacheStateName(cacheConfiguration) {
+  return [cacheConfiguration.name, ...cacheConfiguration.keyComponents || []].join("-");
 }
 function localPathSize(root) {
   const pending = [root];
@@ -69584,10 +69603,15 @@ function restoreOutput(result) {
   return result === RESTORE_RESULT.TRUE || result === RESTORE_RESULT.PARTIAL ? RESTORE_RESULT.TRUE : RESTORE_RESULT.FALSE;
 }
 function cachePrefix(configuration, cacheConfiguration) {
-  return `${configuration.baseKey}-${cacheConfiguration.name}-`;
+  return formatCacheKeyPrefix(
+    configuration.baseKey,
+    cacheConfiguration.name,
+    configuration.platform,
+    cacheConfiguration.keyComponents
+  );
 }
 function cacheLabel(configuration, cacheConfiguration) {
-  return cachePrefix(configuration, cacheConfiguration).replace(/-$/, "");
+  return cachePrefix(configuration, cacheConfiguration).replace(/\.$/, "");
 }
 function generationSuffix() {
   return Date.now().toString();
@@ -69604,7 +69628,7 @@ function canSaveAfterFailure(restoreResults, saves) {
 async function keyPlan(configuration, cacheConfiguration) {
   const prefix2 = cachePrefix(configuration, cacheConfiguration);
   let contentPrefix = prefix2;
-  if (cacheConfiguration.keySuffix) {
+  if (cacheConfiguration.keySuffix !== void 0) {
     contentPrefix = `${prefix2}${cacheConfiguration.keySuffix}`;
   } else if (cacheConfiguration.files.length > 0) {
     const hash = await hashFiles3(
@@ -69617,7 +69641,7 @@ async function keyPlan(configuration, cacheConfiguration) {
   if (!cacheConfiguration.generational) {
     return { key: contentPrefix, restoreKeys: [] };
   }
-  const generationPrefix = `${contentPrefix}${contentPrefix === prefix2 ? "" : "-"}`;
+  const generationPrefix = `${contentPrefix}${contentPrefix === prefix2 ? "" : "."}`;
   const restoreKeys = generationPrefix === prefix2 ? [prefix2] : [generationPrefix, prefix2];
   return {
     key: `${generationPrefix}${generationSuffix()}`,
@@ -69701,12 +69725,12 @@ var MAX_DISK_CACHE_KEY_LENGTH = 400;
 var BAZELRC_MARKER_START = "# setup-bazel-cache: begin managed import";
 var BAZELRC_MARKER_END = "# setup-bazel-cache: end managed import";
 function validateDiskCacheKey(value) {
-  if (!value || value.length > MAX_DISK_CACHE_KEY_LENGTH || hasControlCharacter(value) || value.includes(",")) {
+  if (typeof value !== "string" || !value || value.length > MAX_DISK_CACHE_KEY_LENGTH || hasControlCharacter(value) || value.includes(",") || value.includes("__") || value.includes("._") || value.includes("_.")) {
     throw new Error(
-      "disk-cache-key must contain 1 to 400 printable characters without commas."
+      "disk-cache-key must contain 1 to 400 printable characters without commas or ambiguous dot/underscore sequences; '__' is reserved."
     );
   }
-  return value;
+  return formatCacheComponent(value, "disk-cache-key");
 }
 function hasControlCharacter(value) {
   return [...value].some((character) => {
@@ -69762,12 +69786,13 @@ function installManagedBazelrc(configuration) {
   );
 }
 function createConfiguration(workspace, diskCacheKey, { bazeliskVersion, enableProfiling = false, externalCacheEnabled = false, outputBase = null } = {}) {
-  validateDiskCacheKey(diskCacheKey);
+  const normalizedDiskCacheKey = validateDiskCacheKey(diskCacheKey);
   const resolvedBazeliskVersion = bazeliskVersion === void 0 ? readBazeliskVersion(workspace) : validateBazeliskVersion(bazeliskVersion);
   const home = import_node_os4.default.homedir();
   const cacheRoot = import_node_path3.default.join(home, ".cache");
   const runnerTemp = process.env.RUNNER_TEMP || import_node_os4.default.tmpdir();
-  const baseKey = `setup-bazel-cache-v1-linux-${import_node_os4.default.arch()}`;
+  const baseKey = CACHE_KEY_NAMESPACE;
+  const platform2 = `linux-${import_node_os4.default.arch()}`;
   const profiles = enableProfiling ? profilePaths(runnerTemp) : null;
   const bazelrcLines = [
     `build --disk_cache=${import_node_path3.default.join(cacheRoot, "bazel-disk")}`,
@@ -69800,7 +69825,8 @@ function createConfiguration(workspace, diskCacheKey, { bazeliskVersion, enableP
         path: import_node_path3.default.join(cacheRoot, "bazelisk")
       },
       disk: {
-        name: `disk-${diskCacheKey.length}-${diskCacheKey}`,
+        keyComponents: [normalizedDiskCacheKey],
+        name: "disk",
         generational: true,
         files: [],
         path: import_node_path3.default.join(cacheRoot, "bazel-disk")
@@ -69819,12 +69845,14 @@ function createConfiguration(workspace, diskCacheKey, { bazeliskVersion, enableP
         files: [],
         generational: true,
         name: "external-manifest",
+        keyComponents: [],
         path: import_node_path3.default.join(runnerTemp, "setup-bazel-cache-external-manifest.txt")
       },
       minSize: 500 * 1024 * 1024,
       outputBase,
       root: outputBase ? import_node_path3.default.join(outputBase, "external") : null
     } : null,
+    platform: platform2,
     profiles,
     workspace
   };
@@ -69878,12 +69906,13 @@ function externalRepositoryCache(configuration, name) {
   return {
     files: configuration.external.identityFiles,
     generational: false,
-    name: `external-${name}`,
+    keyComponents: [formatCacheComponent(name, "external repository name")],
+    name: "external",
     paths: [markerPath, repositoryPath]
   };
 }
 function validateExternalRepositoryName(name) {
-  if (typeof name !== "string" || !name || name.length > MAX_EXTERNAL_REPOSITORY_NAME_LENGTH || name === "." || name === ".." || !EXTERNAL_REPOSITORY_NAME.test(name) || [...name].some((character) => {
+  if (typeof name !== "string" || !name || name.length > MAX_EXTERNAL_REPOSITORY_NAME_LENGTH || name === "." || name === ".." || !EXTERNAL_REPOSITORY_NAME.test(name) || name.includes("__") || name.includes("._") || name.includes("_.") || [...name].some((character) => {
     const codePoint = character.codePointAt(0);
     return codePoint < 32 || codePoint === 127;
   })) {
