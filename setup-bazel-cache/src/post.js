@@ -27,8 +27,84 @@ import {
 import { createConfiguration } from './config.js';
 import { configureExternalCache, saveExternalCaches } from './external.js';
 import { existingProfiles, profilePaths, profilingEnabled } from './profiling.js';
+import { summarizeProfileFile } from './profile-analysis.js';
 
 const PROFILE_ARTIFACT_NAME = 'bazel-profiles';
+
+function formatDuration(seconds) {
+  if (!Number.isFinite(seconds)) return 'unknown';
+  if (seconds >= 60) return `${(seconds / 60).toFixed(1)} min`;
+  return `${seconds.toFixed(1)} s`;
+}
+
+/** Print a compact performance summary from the profiles already collected. */
+function logProfileAnalysis() {
+  if (!profilingEnabled(core.getInput('enable-profiling'))) return;
+
+  const files = existingProfiles(profilePaths());
+  if (files.length === 0) return;
+
+  const summaries = [];
+  for (const profile of files) {
+    try {
+      summaries.push(summarizeProfileFile(profile));
+    } catch (error) {
+      core.warning(`Bazel profile analysis failed for ${profile}: ${error.stack || error}`);
+    }
+  }
+  if (summaries.length === 0) return;
+
+  core.startGroup('Bazel profile analysis');
+  core.info('Action durations are cumulative across concurrent actions, not wall-clock time.');
+  const summaryHeaders = ['Profile', 'Bazel', 'Elapsed', 'Critical path', 'Action events'];
+  const summaryRows = summaries.map((summary) => [
+    path.basename(summary.name),
+    summary.bazelVersion,
+    formatDuration(summary.totalSeconds),
+    formatDuration(summary.criticalPathSeconds),
+    summary.actionEventCount.toString(),
+  ]);
+  logTable(summaryHeaders, summaryRows);
+
+  const phaseRows = summaries.flatMap((summary) => summary.phaseDurations.map((phase) => [
+    path.basename(summary.name),
+    `${phase.from} -> ${phase.to}`,
+    formatDuration(phase.seconds),
+  ]));
+  if (phaseRows.length > 0) {
+    core.info('Profile phase intervals:');
+    logTable(['Profile', 'Interval', 'Duration'], phaseRows);
+  }
+
+  const actionRows = summaries.flatMap((summary) => summary.actionStats.slice(0, 8).map((action) => [
+    path.basename(summary.name),
+    action.mnemonic,
+    action.count.toString(),
+    formatDuration(action.totalSeconds),
+    formatDuration(action.maxSeconds),
+  ]));
+  if (actionRows.length > 0) {
+    core.info('Slowest action classes by cumulative duration:');
+    logTable(['Profile', 'Mnemonic', 'Count', 'Cumulative', 'Slowest'], actionRows);
+  }
+  core.endGroup();
+}
+
+function logTable(headers, rows) {
+  const widths = headers.map((header, index) => Math.max(
+    header.length,
+    ...rows.map((row) => row[index].length),
+  ));
+  const border = `+${widths.map((width) => '-'.repeat(width + 2)).join('+')}+`;
+  const formatRow = (row) =>
+    `| ${row.map((value, index) => value.padEnd(widths[index])).join(' | ')} |`;
+
+  core.info(border);
+  core.info(formatRow(headers));
+  core.info(border);
+  for (const row of rows) core.info(formatRow(row));
+  core.info(border);
+}
 
 /** Print one compact overview after all cache save attempts have completed. */
 function logSaveSummary(results) {
@@ -72,6 +148,7 @@ async function run() {
     }
 
     await uploadProfiles();
+    logProfileAnalysis();
 
     const {
       cacheSaveAllowed,
@@ -176,7 +253,7 @@ async function run() {
   }
 }
 
-/** Upload the last build and test profiles without analyzing them in CI. */
+/** Upload the last build and test profiles without modifying them. */
 async function uploadProfiles() {
   if (!profilingEnabled(core.getInput('enable-profiling'))) return;
 

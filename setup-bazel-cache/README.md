@@ -80,12 +80,15 @@ debug runs. Set `enable-profiling: true` to enable it for every run:
     enable-profiling: true
 ```
 
-The action uploads the raw profiles as the `bazel-profiles` artifact in its post
-step. It does not analyze the profiles in the workflow log. There is one fixed
-profile for `build` and one for `test`; if a command is invoked more than once,
-the later invocation overwrites the earlier profile. If neither command runs,
-no profiling artifact is created. Set `enable-profiling: false` to disable
-profiling, including for debug runs.
+The post step analyzes the profiles and reports elapsed time, critical-path
+time, phase intervals, and the slowest action classes. It also uploads the raw
+profiles as the `bazel-profiles` artifact. Action durations are cumulative
+across concurrent actions and therefore describe resource consumption rather
+than wall-clock time. There is one fixed profile for `build` and one for `test`;
+if a command is invoked more than once, the later invocation overwrites the
+earlier profile. If neither command runs, no profiling artifact is created. Set
+`enable-profiling: false` to disable profiling and its analysis, including for
+debug runs.
 
 ### Advanced
 
@@ -189,6 +192,9 @@ ends with an equivalent save summary table. In repository-cache auto mode it
 also reports the post-restore baseline and the 10% growth decision. GitHub's
 cache restore API does not expose the downloaded compressed archive size to the
 action, so the summary labels its available local directory size explicitly.
+When profiling is enabled, the post action adds a separate `Bazel profile
+analysis` group derived from the JSON trace profiles; it does not capture or
+parse Bazel's ordinary `INFO:` output.
 
 ## Cache lifecycle
 
