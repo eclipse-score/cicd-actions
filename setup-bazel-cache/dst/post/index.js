@@ -108298,24 +108298,30 @@ async function logExecutionCacheSummary() {
   const reports = [];
   for (const [command, logPath] of existing) {
     try {
-      reports.push({ command, logPath, ...await summarizeExecutionLog(logPath) });
+      reports.push({ command, ...await summarizeExecutionLog(logPath) });
     } catch (error2) {
       warning(`Bazel ${command} execution-log analysis failed: ${error2.stack || error2}`);
     }
   }
   if (reports.length === 0) return;
-  startGroup("Bazel cache reporting");
+  info("Bazel cache report (latest invocation only)");
+  warning(
+    "This report covers only the last bazel build/run, test, or coverage call. Repeated calls overwrite earlier data."
+  );
   info(EXECUTION_LOG_METRIC_NOTE);
   for (const report of reports) logExecutionReport(report);
-  endGroup();
   try {
-    let summary2 = summary.addHeading("Bazel cache reporting");
+    let summary2 = summary.addHeading("Bazel cache report (latest invocation only)");
+    summary2 = summary2.addRaw(
+      "**Warning:** This report covers only the last `bazel build`/`bazel run`, `bazel test`, or `bazel coverage` call. Repeated calls overwrite earlier data.\n\n"
+    );
     summary2 = summary2.addRaw(`${EXECUTION_LOG_METRIC_NOTE}
 
 `);
-    for (const report of reports) {
-      summary2 = summary2.addRaw(formatExecutionReport(report));
-    }
+    summary2 = summary2.addRaw(
+      "| Command | Cacheable spawns hit | Cache hits | Executed/non-hits |\n| --- | ---: | --- | --- |\n"
+    );
+    for (const report of reports) summary2 = summary2.addRaw(formatExecutionTableRow(report));
     await summary2.write();
   } catch (error2) {
     warning(`Bazel cache report summary could not be written: ${error2.stack || error2}`);
@@ -108323,13 +108329,15 @@ async function logExecutionCacheSummary() {
 }
 function logExecutionReport(report) {
   for (const line of formatExecutionReport(report).trimEnd().split("\n")) info(line);
+  info("");
 }
 function formatExecutionReport({ command, hits, observed, hitRunners, executedRunners, partial, decoderError }) {
   const percentage = observed === 0 ? "n/a" : `${(hits / observed * 100).toFixed(2).replace(/\.00$/, "")}%`;
+  const label = command === "build" ? "build/run" : command;
   const lines = [
-    `Bazel ${command} cache: ${hits} / ${observed} observed cacheable spawns hit (${percentage})`,
-    `Hits: ${formatRunnerCounts(hitRunners, "none")}`,
-    `Executed/non-hits: ${formatRunnerCounts(executedRunners, "0")}`
+    `Bazel ${label} cache: ${hits} / ${observed} observed cacheable spawns hit (${percentage})`,
+    `  Cache hits: ${formatRunnerCounts(hitRunners, "none")}`,
+    `  Executed/non-hits: ${formatRunnerCounts(executedRunners, "none")}`
   ];
   if (partial) {
     lines.push(
@@ -108339,6 +108347,16 @@ function formatExecutionReport({ command, hits, observed, hitRunners, executedRu
   return `${lines.join("\n")}
 
 `;
+}
+function formatExecutionTableRow({ command, hits, observed, hitRunners, executedRunners, partial }) {
+  const label = command === "build" ? "build/run" : command;
+  const percentage = observed === 0 ? "n/a" : `${(hits / observed * 100).toFixed(2).replace(/\.00$/, "")}%`;
+  const warning2 = partial ? " \u26A0\uFE0F partial" : "";
+  return `| ${label} | ${hits} / ${observed} (${percentage})${warning2} | ${escapeTableCell(formatRunnerCounts(hitRunners, "none"))} | ${escapeTableCell(formatRunnerCounts(executedRunners, "none"))} |
+`;
+}
+function escapeTableCell(value) {
+  return value.replaceAll("|", "\\|");
 }
 function formatRunnerCounts(runners, emptyValue) {
   if (runners.length === 0) return emptyValue;

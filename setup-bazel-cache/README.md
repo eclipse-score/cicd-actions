@@ -95,7 +95,8 @@ debug runs.
 Cache-hit reporting defaults to enabled. Set `report-cache-hits: false` to
 disable the compact execution-log overhead. The action adds Bazel's native
 `--execution_log_compact_file` option for `build`, `test`, and `coverage`, then
-reports the latest invocation of each command in the job log and step summary.
+reports the latest invocation of each `build`/`run`, `test`, and `coverage`
+command in the job log and step summary.
 
 ```yaml
 - uses: eclipse-score/cicd-actions/setup-bazel-cache@<sha>
