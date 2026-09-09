@@ -27,7 +27,8 @@ import {
   resolveOutputBase,
   restoreExternalCaches,
 } from './external.js';
-import { clearProfiles, profilingEnabled } from './profiling.js';
+import { clearExecutionLogs } from './execution-log.js';
+import { cacheHitReportingEnabled, clearProfiles, profilingEnabled } from './profiling.js';
 import {
   ensureComparisonHistory,
   lockFileChanged,
@@ -63,6 +64,7 @@ async function run() {
 
     const diskCacheKey = core.getInput('disk-cache-key', { required: true });
     const enableProfiling = profilingEnabled(core.getInput('enable-profiling'));
+    const reportCacheHits = cacheHitReportingEnabled(core.getInput('report-cache-hits'));
     const rawCacheSaveBranchPatterns = core.getInput('cache-save-branch-patterns');
     const cacheSaveBranchPatterns = parseCacheSaveBranchPatterns(
       rawCacheSaveBranchPatterns,
@@ -81,11 +83,16 @@ async function run() {
 
     const configuration = createConfiguration(workspace, diskCacheKey, {
       enableProfiling,
+      reportCacheHits,
       externalCacheEnabled: cacheModes.restore.external || cacheModes.save.external,
     });
     if (configuration.profiles) {
       clearProfiles(configuration.profiles);
       core.info('Bazel profiling enabled; later build/test invocations overwrite their profiles.');
+    }
+    if (configuration.executionLogs) {
+      clearExecutionLogs(configuration.executionLogs);
+      core.info('Bazel cache reporting enabled; repeated invocations overwrite the latest command log.');
     }
 
     const ref = process.env.GITHUB_REF || '';

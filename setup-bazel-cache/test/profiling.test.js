@@ -17,11 +17,18 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import {
+  cacheHitReportingEnabled,
   clearProfiles,
   existingProfiles,
   profilePaths,
   profilingEnabled,
 } from '../src/profiling.js';
+
+test('cache-hit reporting defaults accept only explicit boolean values', () => {
+  assert.equal(cacheHitReportingEnabled('true'), true);
+  assert.equal(cacheHitReportingEnabled(' FALSE '), false);
+  assert.throws(() => cacheHitReportingEnabled('auto'), /report-cache-hits/);
+});
 
 test('profiling defaults to GitHub Actions debug runs', () => {
   assert.equal(profilingEnabled('auto', false), false);

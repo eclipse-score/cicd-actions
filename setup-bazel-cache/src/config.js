@@ -14,6 +14,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { executionLogPaths } from './execution-log.js';
 import { CACHE_KEY_NAMESPACE, formatCacheComponent } from './keys.js';
 import { profilePaths } from './profiling.js';
 
@@ -117,7 +118,13 @@ function installManagedBazelrc(configuration) {
 function createConfiguration(
   workspace,
   diskCacheKey,
-  { bazeliskVersion, enableProfiling = false, externalCacheEnabled = false, outputBase = null } = {},
+  {
+    bazeliskVersion,
+    enableProfiling = false,
+    reportCacheHits = true,
+    externalCacheEnabled = false,
+    outputBase = null,
+  } = {},
 ) {
   const normalizedDiskCacheKey = validateDiskCacheKey(diskCacheKey);
   const resolvedBazeliskVersion = bazeliskVersion === undefined
@@ -129,6 +136,7 @@ function createConfiguration(
   const baseKey = CACHE_KEY_NAMESPACE;
   const platform = `linux-${os.arch()}`;
   const profiles = enableProfiling ? profilePaths(runnerTemp) : null;
+  const executionLogs = reportCacheHits ? executionLogPaths(runnerTemp) : null;
   const bazelrcLines = [
     `build --disk_cache=${path.join(cacheRoot, 'bazel-disk')}`,
     `common --repository_cache=${path.join(cacheRoot, 'bazel-repo')}`,
@@ -137,6 +145,13 @@ function createConfiguration(
     bazelrcLines.push(
       `build --profile=${profiles.build}`,
       `test --profile=${profiles.test}`,
+    );
+  }
+  if (executionLogs) {
+    bazelrcLines.push(
+      `build --execution_log_compact_file=${executionLogs.build}`,
+      `test --execution_log_compact_file=${executionLogs.test}`,
+      `coverage --execution_log_compact_file=${executionLogs.coverage}`,
     );
   }
 
@@ -192,6 +207,7 @@ function createConfiguration(
       : null,
     platform,
     profiles,
+    executionLogs,
     workspace,
   };
 }

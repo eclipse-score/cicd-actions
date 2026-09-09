@@ -20,6 +20,14 @@ const PROFILE_NAMES = Object.freeze({
   test: 'setup-bazel-cache-test.profile.gz',
 });
 
+/** Resolve the opt-out cache-reporting input. */
+function cacheHitReportingEnabled(value) {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'true') return true;
+  if (normalized === 'false') return false;
+  throw new Error("Input 'report-cache-hits' must be one of: true, false");
+}
+
 /** Resolve profiling input, enabling it automatically for GitHub debug runs. */
 function profilingEnabled(value, runnerDebug = process.env.RUNNER_DEBUG === '1') {
   const normalized = value.trim().toLowerCase();
@@ -52,6 +60,7 @@ function existingProfiles(profiles) {
 }
 
 export {
+  cacheHitReportingEnabled,
   clearProfiles,
   existingProfiles,
   profilePaths,

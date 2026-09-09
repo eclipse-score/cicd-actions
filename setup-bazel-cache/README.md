@@ -90,6 +90,27 @@ earlier profile. If neither command runs, no profiling artifact is created. Set
 `enable-profiling: false` to disable profiling and its analysis, including for
 debug runs.
 
+### Cache-hit reporting
+
+Cache-hit reporting defaults to enabled. Set `report-cache-hits: false` to
+disable the compact execution-log overhead. The action adds Bazel's native
+`--execution_log_compact_file` option for `build`, `test`, and `coverage`, then
+reports the latest invocation of each command in the job log and step summary.
+
+```yaml
+- uses: eclipse-score/cicd-actions/setup-bazel-cache@<sha>
+  with:
+    disk-cache-key: ${{ github.workflow }}-${{ github.job }}
+    report-cache-hits: true
+```
+
+The report counts `cacheable && cache_hit` as hits,
+`cacheable && !cache_hit` as executed/non-hits, and excludes non-cacheable
+spawns. It is an execution-log metric rather than total Bazel action-cache
+effectiveness: persistent action-cache results, including some cached test
+results, are not represented by Bazel execution-log spawns. Missing, partial, or
+truncated logs produce a warning without failing the job.
+
 ### Advanced
 
 Further parameters to configure cache behavior:

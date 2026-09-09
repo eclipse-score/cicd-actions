@@ -38,6 +38,18 @@ test('configuration uses readable Linux cache names and a temporary bazelrc', ()
   );
   assert.match(configuration.bazelrcContents, /^build --disk_cache=.*bazel-disk$/m);
   assert.match(configuration.bazelrcContents, /^common --repository_cache=.*bazel-repo$/m);
+  assert.match(
+    configuration.bazelrcContents,
+    /^build --execution_log_compact_file=.*setup-bazel-cache-build\.exec\.log\.zst$/m,
+  );
+  assert.match(
+    configuration.bazelrcContents,
+    /^test --execution_log_compact_file=.*setup-bazel-cache-test\.exec\.log\.zst$/m,
+  );
+  assert.match(
+    configuration.bazelrcContents,
+    /^coverage --execution_log_compact_file=.*setup-bazel-cache-coverage\.exec\.log\.zst$/m,
+  );
   assert.doesNotMatch(configuration.bazelrcContents, /output_base/);
   assert.equal(configuration.caches.disk.generational, true);
   assert.equal(configuration.caches.repository.generational, true);
@@ -48,6 +60,15 @@ test('configuration uses readable Linux cache names and a temporary bazelrc', ()
     configuration.additiveCacheSaveEnvironment,
     'SETUP_BAZEL_CACHE_ADDITIVE_SAVE',
   );
+});
+
+test('cache-hit reporting can be disabled without adding execution-log flags', () => {
+  const configuration = createConfiguration('/workspace', 'test', {
+    reportCacheHits: false,
+  });
+
+  assert.equal(configuration.executionLogs, null);
+  assert.doesNotMatch(configuration.bazelrcContents, /execution_log_compact_file/);
 });
 
 test('Bazelisk version is read as a readable cache-key component', (context) => {

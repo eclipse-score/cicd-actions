@@ -26,10 +26,79 @@ import {
 } from './cache.js';
 import { createConfiguration } from './config.js';
 import { configureExternalCache, saveExternalCaches } from './external.js';
+import {
+  EXECUTION_LOG_METRIC_NOTE,
+  existingExecutionLogs,
+  executionLogPaths,
+  summarizeExecutionLog,
+} from './execution-log.js';
 import { existingProfiles, profilePaths, profilingEnabled } from './profiling.js';
 import { summarizeProfileFile } from './profile-analysis.js';
 
 const PROFILE_ARTIFACT_NAME = 'bazel-profiles';
+
+/** Report cacheable spawns from the latest invocation of each Bazel command. */
+async function logExecutionCacheSummary() {
+  if (core.getInput('report-cache-hits').trim().toLowerCase() !== 'true') return;
+
+  const logs = executionLogPaths();
+  const existing = existingExecutionLogs(logs);
+  if (existing.length === 0) {
+    core.info('Bazel cache reporting enabled, but no compact execution logs were produced');
+    return;
+  }
+
+  const reports = [];
+  for (const [command, logPath] of existing) {
+    try {
+      reports.push({ command, logPath, ...(await summarizeExecutionLog(logPath)) });
+    } catch (error) {
+      core.warning(`Bazel ${command} execution-log analysis failed: ${error.stack || error}`);
+    }
+  }
+  if (reports.length === 0) return;
+
+  core.startGroup('Bazel cache reporting');
+  core.info(EXECUTION_LOG_METRIC_NOTE);
+  for (const report of reports) logExecutionReport(report);
+  core.endGroup();
+
+  try {
+    let summary = core.summary.addHeading('Bazel cache reporting');
+    summary = summary.addRaw(`${EXECUTION_LOG_METRIC_NOTE}\n\n`);
+    for (const report of reports) {
+      summary = summary.addRaw(formatExecutionReport(report));
+    }
+    await summary.write();
+  } catch (error) {
+    core.warning(`Bazel cache report summary could not be written: ${error.stack || error}`);
+  }
+}
+
+function logExecutionReport(report) {
+  for (const line of formatExecutionReport(report).trimEnd().split('\n')) core.info(line);
+}
+
+function formatExecutionReport({ command, hits, observed, hitRunners, executedRunners, partial, decoderError }) {
+  const percentage = observed === 0 ? 'n/a' : `${((hits / observed) * 100).toFixed(2).replace(/\.00$/, '')}%`;
+  const lines = [
+    `Bazel ${command} cache: ${hits} / ${observed} observed cacheable spawns hit (${percentage})`,
+    `Hits: ${formatRunnerCounts(hitRunners, 'none')}`,
+    `Executed/non-hits: ${formatRunnerCounts(executedRunners, '0')}`,
+  ];
+  if (partial) {
+    lines.push(
+      `Warning: ${decoderError ? `the compact log decoder reported ${decoderError.message}; ` : ''}` +
+      'the execution log was missing records or truncated; counts may be incomplete.',
+    );
+  }
+  return `${lines.join('\n')}\n\n`;
+}
+
+function formatRunnerCounts(runners, emptyValue) {
+  if (runners.length === 0) return emptyValue;
+  return runners.map(({ runner, count }) => `${count} ${runner}`).join(', ');
+}
 
 function formatDuration(seconds) {
   if (!Number.isFinite(seconds)) return 'unknown';
@@ -147,6 +216,7 @@ async function run() {
       return;
     }
 
+    await logExecutionCacheSummary();
     await uploadProfiles();
     logProfileAnalysis();
 
