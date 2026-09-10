@@ -71,8 +71,13 @@ test('cache-hit reporting can be disabled without adding execution-log flags', (
   assert.doesNotMatch(configuration.bazelrcContents, /execution_log_compact_file/);
 });
 
-test('test-cache reporting is opt-in and adds independent BEP paths', () => {
-  const disabled = createConfiguration('/workspace', 'test');
+test('test-cache reporting is enabled by default and can be disabled independently', () => {
+  const defaultConfiguration = createConfiguration('/workspace', 'test');
+  assert.ok(defaultConfiguration.testCacheReports);
+
+  const disabled = createConfiguration('/workspace', 'test', {
+    reportTestCacheHits: false,
+  });
   assert.equal(disabled.testCacheReports, null);
 
   const enabled = createConfiguration('/workspace', 'test', {

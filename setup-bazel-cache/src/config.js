@@ -123,7 +123,7 @@ function createConfiguration(
     bazeliskVersion,
     enableProfiling = false,
     reportCacheHits = true,
-    reportTestCacheHits = false,
+    reportTestCacheHits = true,
     externalCacheEnabled = false,
     outputBase = null,
   } = {},

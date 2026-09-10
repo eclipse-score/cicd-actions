@@ -114,9 +114,11 @@ truncated logs produce a warning without failing the job.
 
 ### Test-result cache reporting
 
-Test-result reporting is disabled by default. Set `report-test-cache-hits: true`
-to add Bazel's `--build_event_json_file` option to `test` and `coverage` and
-report the latest invocation of each command in the job log and step summary:
+Test-result reporting is enabled by default. Set
+`report-test-cache-hits: false` to disable it, or set it explicitly to `true`.
+When enabled, the action adds Bazel's `--build_event_json_file` option to
+`test` and `coverage` and reports the latest invocation of each command in the
+job log and step summary:
 
 ```yaml
 - uses: eclipse-score/cicd-actions/setup-bazel-cache@<sha>
@@ -165,8 +167,8 @@ no report.
 Generating BEP adds JSON serialization and file-writing overhead; streaming
 analysis adds post-step time. The action uses
 `--nobuild_event_json_file_path_conversion` so this reporting file does not
-trigger uploads of referenced artifacts. Reporting remains opt-in; measure BEP
-size and runtime with equivalent cache states before adopting it broadly.
+trigger uploads of referenced artifacts. Measure BEP size and runtime with
+equivalent cache states when assessing that overhead.
 Enabling reporting does not enable test-result caching; Bazel's
 `--cache_test_results` setting controls whether prior results are used.
 

@@ -56,9 +56,9 @@ inputs:
       Report cached Bazel test attempts from Build Event Protocol JSON in the
       job log and step summary. Covers the latest test and coverage invocation
       separately, including retries, shards, and repeated runs. Accepts true or
-      false and defaults to false.
+      false and defaults to true.
     required: false
-    default: "false"
+    default: "true"
 
   # cache flags:
 
