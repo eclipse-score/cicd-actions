@@ -108594,7 +108594,7 @@ function cacheRestoreSummaryRows(state3 = {}) {
     return [{
       cache: label,
       ...counts,
-      status: restoreStatusLabel(result),
+      status: restoreStatusLabel(result, counts),
       order: 10 + index
     }];
   });
@@ -108615,15 +108615,10 @@ function restoreCounts(result) {
     rate: restored ? "100%" : result === "false" ? "0%" : "\u2014"
   };
 }
-function restoreStatusLabel(result) {
-  return {
-    true: "Restored",
-    // A partial result is an older complete cache generation, not a partial
-    // payload. The detailed restore log retains the distinction.
-    partial: "Restored",
-    false: "Not restored",
-    unknown: "Unavailable"
-  }[result] || "Unavailable";
+function restoreStatusLabel(result, counts) {
+  if (result === "unknown") return "Unavailable";
+  if (counts.cached !== "\u2014" && Number.parseInt(counts.cached, 10) > 0) return "Used";
+  return result === "true" || result === "partial" ? "Used" : "Not used";
 }
 function logExecutionReport(report) {
   for (const line of formatExecutionReport(report).trimEnd().split("\n")) info(line);

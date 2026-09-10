@@ -96,9 +96,9 @@ test('test report preserves cache output and renders disabled, partial, and no-a
   assert.match(actual.summary, /\| Cache \| Cached \/ total \| Hit rate \| Status \|/);
   assert.match(actual.summary, /\| test \(test cache \(off\)\) \| 0 \/ 1 \| 0% \| ⚠️ Disabled \|/);
   assert.match(actual.summary, /\| coverage \(test cache\) \| 1 \/ 1 \| 100% \| Partial data \|/);
-  assert.match(actual.summary, /\| Bazelisk cache \| 1 \/ 1 \| 100% \| Restored \|/);
-  assert.match(actual.summary, /\| Disk cache \| 1 \/ 1 \| 100% \| Restored \|/);
-  assert.match(actual.summary, /\| Repository cache \| 0 \/ 1 \| 0% \| Not restored \|/);
+  assert.match(actual.summary, /\| Bazelisk cache \| 1 \/ 1 \| 100% \| Used \|/);
+  assert.match(actual.summary, /\| Disk cache \| 1 \/ 1 \| 100% \| Used \|/);
+  assert.match(actual.summary, /\| Repository cache \| 0 \/ 1 \| 0% \| Not used \|/);
   assert.doesNotMatch(actual.summary, /\| External cache \|/);
   fs.writeFileSync(path.join(root, 'summary.md'), '');
   const withExternal = runPost(root, true, path.join(root, 'summary.md'), {
@@ -111,7 +111,7 @@ test('test report preserves cache output and renders disabled, partial, and no-a
       'repo-c': 'false',
     },
   });
-  assert.match(withExternal.summary, /\| External cache \| 2 \/ 3 \| 66.67% \| Not restored \|/);
+  assert.match(withExternal.summary, /\| External cache \| 2 \/ 3 \| 66.67% \| Used \|/);
   assert.doesNotMatch(actual.summary, /0 \/ 0/);
   assert.doesNotMatch(actual.summary, /Local cache \| Shared cache \| Ran \|/);
   assert.match(actual.output, /Bazel test cache\n\+[-+]+\+/);

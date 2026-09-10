@@ -1,15 +1,10 @@
 # Setup Bazel Cache
 
 This Linux-only action configures Bazelisk, Bazel disk, and Bazel repository
-caches with opinionated defaults for Bazel 8.6 or newer. It can also cache
-large extracted external repositories. Branch and
-pull-request jobs restore caches; only configured cache-saving branches save
-them. If no cache-save branch patterns are configured, the repository's default
-branch is used automatically.
+caches for Bazel 8.6 or newer. It can also cache large extracted external
+repositories and report cache reuse.
 
-The action supports Linux runners only.
-
-## Usage
+## Quick start
 
 ```yaml
 steps:
@@ -17,242 +12,144 @@ steps:
 
   - uses: eclipse-score/cicd-actions/setup-bazel-cache@<sha>
     with:
+      # Keep this stable for the workflow job and matrix entry.
       disk-cache-key: ${{ github.workflow }}-${{ github.job }}
-      # Optional:
+```
+
+The action restores caches on every run. By default, only the repository's
+default branch may publish new cache generations. To allow other branches:
+
+```yaml
       cache-save-branch-patterns: |
-        master
-        release/*
+        main
+        release/**
 ```
 
-- `disk-cache-key` separates disk caches belonging to different jobs or
-  matrix configurations. It must be a stable value; do not include transient
-  values such as `${{ github.run_id }}`. Cache keys use slash-separated,
-  human-readable levels; slash characters in dynamic values are URL-encoded,
-  while dots and underscores remain ordinary component characters.
-- `cache-save-branch-patterns` is an optional newline-separated list of branch
-  glob patterns allowed to save caches. An empty input uses the repository's GitHub
-  default branch.
-  Globbing: `*` matches within one branch path component and `**` also crosses `/`,
-  so `release/*` matches `release/1.0` and `release/**` matches `release/1/0` and `release/2.0`.
+In branch patterns, `*` stays within one path component and `**` also matches
+across `/`.
 
-### Extracted external-repository cache
+Use a stable `disk-cache-key` for each job or matrix configuration. Do not
+include transient values such as `github.run_id`, or every run will create a
+new cache family.
 
-Bazel's repository cache stores downloaded archive contents. It does not store
-the extracted repositories that Bazel materializes under
-`$(bazel info output_base)/external`. The external cache stores those extracted
-repositories as separate GitHub Actions cache entries, so a hit can avoid both
-the download and extraction steps. This is action-level caching; Bazel itself
-does not provide an `external-cache` flag.
+## What is cached
+
+| Cache | Purpose | Defaults |
+| --- | --- | --- |
+| Bazelisk | Downloaded Bazel versions | Restore and save enabled |
+| Disk | Bazel action/output cache | Restore `auto`, save enabled |
+| Repository | Downloaded repository archives | Restore enabled, save `auto` |
+| External | Large extracted repositories | Restore and save enabled |
+
+Cache saving is still limited to `cache-save-branch-patterns`. Repository
+`auto` mode seeds a missing cache and publishes a new generation when the local
+repository cache grows by at least 10%. Set the relevant save input to `false`
+to disable saving.
+
+### Extracted external repositories
+
+Bazel's repository cache contains downloaded archives, not the extracted
+directories under `bazel info output_base`/`external`. The optional external
+cache can avoid both download and extraction. It uses separate GitHub cache
+entries per repository and can be used with or without the repository cache.
+
+The action resolves the output base with `bazel info output_base`. Only real
+extracted directories of at least 500 MiB are cached; symlinked local
+repositories are skipped. External-cache restore and save can be disabled
+independently:
 
 ```yaml
-- uses: eclipse-score/cicd-actions/setup-bazel-cache@<sha>
-  with:
-    disk-cache-key: ${{ github.job }}
-    external-cache-restore: true
-    external-cache-save: true
+      external-cache-restore: false
+      external-cache-save: false
 ```
 
-The action discovers the output base with `bazel info output_base` before
-restoring external repositories. It caches real extracted directories of at
-least 500 MiB and skips symlinked local repositories. The cache key is independent
-of `disk-cache-key`; it is based on the repository name, runner architecture,
-the Bazel version, `MODULE.bazel.lock`, and any existing legacy `WORKSPACE*`
-files. If no lockfile exists, `MODULE.bazel` is used as a fallback. The
-manifest is cached
-separately so the action knows which repository names to restore before the
-build.
+## Inputs users commonly change
 
-External caching can be used without the repository cache. In that mode, an
-external-cache hit avoids the download and extraction; a miss falls back to
-Bazel's normal network fetch. Enabling both caches provides a repository-cache
-fallback for external-cache misses but stores more data.
+| Input | Default | When to change it |
+| --- | --- | --- |
+| `disk-cache-key` | required | Separate jobs or matrix configurations |
+| `cache-save-branch-patterns` | repository default branch | Allow additional branches to publish caches |
+| `disk-cache-restore` | `auto` | Set `false` to start without an existing disk cache |
+| `disk-cache-save` | `true` | Disable disk-cache uploads |
+| `repository-cache-restore` | `true` | Start without the shared repository cache |
+| `repository-cache-save` | `auto` | Use `true` for a dedicated warm-cache job, or `false` to disable uploads |
+| `bazelisk-cache-restore` / `bazelisk-cache-save` | `true` / `true` | Disable Bazel version caching |
+| `external-cache-restore` / `external-cache-save` | `true` / `true` | Disable extracted-repository caching |
+| `token` | `${{ github.token }}` | Allow generation cleanup with a token that has `actions: write` |
+| `report-cache-hits` | `true` | Disable build/action cache reporting overhead |
+| `report-test-cache-hits` | `true` | Disable test-result cache reporting overhead |
+| `enable-profiling` | `auto` | Use `true` for every run or `false` to disable profiling |
 
-### Optional Bazel profiling
+All boolean inputs accept only `true` or `false`. `disk-cache-restore` also
+accepts `auto`; `repository-cache-save` accepts `auto`. Cache-save inputs do
+not override the branch policy.
 
-Profiling defaults to `auto`, which enables it automatically for GitHub Actions
-debug runs. Set `enable-profiling: true` to enable it for every run:
+## Cache reports
 
-```yaml
-- uses: eclipse-score/cicd-actions/setup-bazel-cache@<sha>
-  with:
-    disk-cache-key: ${{ github.workflow }}-${{ github.job }}
-    enable-profiling: true
-```
-
-The post step analyzes the profiles and reports elapsed time, critical-path
-time, phase intervals, and the slowest action classes. It also uploads the raw
-profiles as a `bazel-profiles-<disk-cache-key>` artifact, so matrix jobs keep
-their profiling artifacts distinct. Unsafe or unusually long key characters
-are made readable and disambiguated automatically. Action durations are
-cumulative across concurrent actions and therefore describe resource
-consumption rather than wall-clock time. There is one fixed profile for
-`build` and one for `test`; if a command is invoked more than once, the later
-invocation overwrites the earlier profile. If neither command runs, no
-profiling artifact is created. Set `enable-profiling: false` to disable
-profiling and its analysis, including for debug runs.
-
-### Cache-hit reporting
-
-Cache-hit reporting defaults to enabled. Set `report-cache-hits: false` to
-disable the compact execution-log overhead. The action adds Bazel's native
-`--execution_log_compact_file` option for `build`, `test`, and `coverage`, then
-reports the latest invocation of each `build`/`run`, `test`, and `coverage`
-command in the job log and step summary.
-
-```yaml
-- uses: eclipse-score/cicd-actions/setup-bazel-cache@<sha>
-  with:
-    disk-cache-key: ${{ github.workflow }}-${{ github.job }}
-    report-cache-hits: true
-```
-
-The report counts `cacheable && cache_hit` as hits,
-`cacheable && !cache_hit` as executed/non-hits, and excludes non-cacheable
-spawns. It is an execution-log metric rather than total Bazel action-cache
-effectiveness: persistent action-cache results, including some cached test
-results, are not represented by Bazel execution-log spawns. Missing, partial, or
-truncated logs produce a warning without failing the job.
-
-### Test-result cache reporting
-
-Test-result reporting is enabled by default. Set
-`report-test-cache-hits: false` to disable it, or set it explicitly to `true`.
-When enabled, the action adds Bazel's `--build_event_json_file` option to
-`test` and `coverage` and reports the latest invocation of each command in the
-job log and step summary:
-
-```yaml
-- uses: eclipse-score/cicd-actions/setup-bazel-cache@<sha>
-  with:
-    disk-cache-key: ${{ github.workflow }}-${{ github.job }}
-    report-test-cache-hits: true
-```
-
-This report is a different metric and data source from execution-log reporting.
-It reads BEP `TestResult` events and counts attempts, so retries, shards, and
-multiple runs contribute separate observations. Duplicate attempt identities
-are counted once. `cachedLocally` is reported as a local hit; otherwise,
-`executionInfo.cachedRemotely` is a remote/disk hit. Remaining attempts are
-executed/non-hits, including unsuccessful attempts. Remote execution alone
-does not count as a hit.
-
-The step summary combines invocation metrics and setup-time cache restores into
-one compact table. Invocation rows show cached test or build work; restore rows
-show whether Bazelisk, disk, repository, or extracted external-repository data
-was restored. A disabled cache is omitted rather than shown as an empty row.
-The job log keeps the build and test metrics as separate cache-specific tables,
-with diagnostic details collapsed below them:
-
-The job log places the compact cache tables directly in the visible output.
-Invocation scope, metric notes, and incomplete-data details are kept in
-collapsible log groups.
+The action shows a compact cache overview in the job summary and job log. It
+keeps these two percentages separate because they measure different things:
 
 | Cache | Cached / total | Hit rate | Status |
 | --- | ---: | ---: | --- |
 | test (test cache) | 18 / 20 | 90% | Used |
 | coverage (build cache) | 3058 / 3603 | 84.87% | Used |
-| Bazelisk cache | 1 / 1 | 100% | Restored |
-| Repository cache | 0 / 1 | 0% | Not restored |
-| External cache | 2 / 3 | 66.67% | Not restored |
+| Bazelisk cache | 1 / 1 | 100% | Used |
+| Repository cache | 0 / 1 | 0% | Not used |
+| External cache | 2 / 3 | 66.67% | Used |
 
-Invocation status is `Used` when at least one attempt reused a result, `No
-hits` when none did, `⚠️ Disabled` when test-result caching was disabled, and
-`Partial data` when the report was incomplete. Restore rows use `Restored`,
-`Not restored`, or `Unavailable`. A fallback to an older complete cache
-generation is still counted as `1 / 1` because the cache was restored and is
-usable. External-cache counts represent the extracted repository entries; if
-the manifest did not provide repository entries, the manifest result is used.
+`Used` means at least one result was reused or restored; `Not used` means no
+result was. `⚠️ Disabled`, `Partial data`, and `Unavailable` identify disabled,
+incomplete, and unknown states. A fallback to an older complete cache
+generation is still counted as used. External-cache counts represent extracted
+repository entries; if the manifest provides no repository entries, its result
+is used instead.
 
-For invocation rows, the rate is cached attempts divided by observed attempts.
-No attempts means `n/a`, including when caching is disabled. The canonical BEP command line
-provides the effective setting: Enabled, Disabled, Auto, or Unknown when
-metadata is unavailable. `--nocache_test_results` appears as `⚠️ Disabled`; it does
-not replace the observed counts. Both metrics can include the same cached test
-execution, so their counts and percentages must not be combined.
+### Build/action cache
 
-The BEP files are temporary, are cleared during action setup, and are not
-uploaded as artifacts. Each command has one managed file, so repeated
-invocations overwrite the previous report. Only the latest invocation writing
-each managed file is reported. Normal Bazel flag precedence applies: a custom
-`--build_event_json_file` can override the managed destination, and the action
-does not discover alternative paths. Concurrent invocations sharing a managed
-path are unsupported.
+`report-cache-hits` reads Bazel's compact execution log for the latest
+`build`/`run`, `test`, and `coverage` invocation. It counts cacheable work that
+was reused; it is not a complete measure of every Bazel action-cache lookup.
 
-Missing, empty, or unreadable invocations are omitted from the table. Truncated
-or malformed files retain readable counts and are marked Partial. These
-statuses are informational and do not emit GitHub warning annotations or fail
-the job.
-The existing post-step condition still applies: some failed jobs, including
-those with external cache saving enabled, do not run the post step and receive
-no report.
+### Test-result cache
 
-Generating BEP adds JSON serialization and file-writing overhead; streaming
-analysis adds post-step time. The action uses
-`--nobuild_event_json_file_path_conversion` so this reporting file does not
-trigger uploads of referenced artifacts. Measure BEP size and runtime with
-equivalent cache states when assessing that overhead.
-Enabling reporting does not enable test-result caching; Bazel's
-`--cache_test_results` setting controls whether prior results are used.
+`report-test-cache-hits` reads Bazel Build Event Protocol test results for the
+latest `test` and `coverage` invocations. It counts attempts, including retries,
+shards, and repeated runs. `cachedLocally` and `executionInfo.cachedRemotely`
+are counted as hits; remote execution alone is not a cache hit. A disabled
+test-result cache is shown as `⚠️ Disabled`, without changing the observed
+counts.
 
-### Advanced
+Reporting does not enable test-result caching. Bazel's normal
+`--cache_test_results` setting controls whether results may be reused.
 
-Further parameters to configure cache behavior:
-- `token` is optional and defaults to `${{ github.token }}`. It is only used to
-  remove the previous repository- or disk-cache generation after a successful
-  upload by this action.
-- `bazelisk-cache-restore` and `bazelisk-cache-save` accept `true` or `false`.
-  Both default to `true`; saving is still limited to configured cache-saving
-  branches. `repository-cache-restore` accepts `true` or `false`, while
-  `repository-cache-save` accepts `true`, `false`, or `auto` and defaults to
-  `auto`. With `auto`, the repository cache is seeded after a miss and is
-  uploaded again when its local payload grows by at least 10% during the job;
-  the previous generation is then removed on a best-effort basis.
-  `disk-cache-save` accepts `true` or `false`, and
-  `disk-cache-restore` additionally accepts `auto`.
-  Bazelisk uses the readable `.bazelversion` value in its exact cache key, so
-  its cache is independent of `MODULE.bazel.lock`. For the disk and repository
-  caches, restore `false` skips the restore. For disk-cache-restore, `auto`
-  starts a fresh cache on a cache-saving branch when `MODULE.bazel.lock` changed;
-  other refs restore the latest available cache.
-  Save inputs only take effect on configured cache-saving branches; `false`
-  disables saving for that cache.
-  `external-cache-restore` and `external-cache-save` accept `true` or `false`
-  and default to `true`. External saves are also limited to configured
-  cache-saving branches.
+The action manages one temporary report file per command. Repeated invocations
+overwrite the previous file, so only the latest invocation is reported. A
+custom `--build_event_json_file` path is not discovered. Malformed data keeps
+readable records and is marked partial; missing invocations are omitted.
+Reporting errors are non-fatal.
 
-## Cache security
+### Profiling
 
-GitHub makes default-branch caches readable from pull-request workflows,
-including workflows triggered by forks. Do not allow Bazel's disk, repository,
-or external cache to contain secrets, credentials, private dependencies, or
-other artifacts that pull-request authors must not be able to read. Extracted
-repositories may contain generated credentials or downloaded private content,
-depending on the repository rule.
+Set `enable-profiling: true` to upload the latest build/test profiles and show
+profile analysis in the post step. The artifact is named
+`bazel-profiles-<disk-cache-key>`, so matrix jobs can identify their artifacts.
+Unsafe or unusually long keys are made readable and disambiguated. Profiling
+adds JSON writing and post-step processing time; no artifact is uploaded when
+neither command produces a profile.
 
-## Automatic mode and checkout history
+## Permissions and security
 
-On a cache-saving branch, `disk-cache-restore: auto` compares
-`MODULE.bazel.lock` with the commit preceding the current push, covering every
-commit in a multi-commit push. For events without a push base, it compares the
-previous commit.
-
-This behavior may change in the future without notice!
-
-An ordinary shallow checkout fetches the comparison commit
-when necessary. If that is impossible, use `actions/checkout` with
-`fetch-depth: 0`, or set `disk-cache-restore` explicitly.
-
-The job needs `contents: read` for automatic history deepening:
+Automatic disk-cache restore decisions may need commit history. Give the job
+`contents: read` and use `actions/checkout` with sufficient history when
+necessary:
 
 ```yaml
 permissions:
   contents: read
 ```
 
-The action uses the token input to remove the previous repository- or
-disk-cache generation after a successful upload. Grant `actions: write` when
-this cleanup should work; without it, the upload still succeeds and cleanup is
-reported as an informational message:
+The action needs `actions: write` only to delete the previous cache generation
+after a successful upload. Uploads still succeed without that permission:
 
 ```yaml
 permissions:
@@ -260,123 +157,40 @@ permissions:
   actions: write
 ```
 
+Default-branch caches are readable by pull-request workflows, including forks.
+Do not place credentials, private dependencies, or other secrets in Bazel disk,
+repository, or external caches.
+
+## Workflow behavior to know
+
+- Failed jobs may save only standard caches that extend a valid restored
+  generation. External caches are saved only after successful jobs; cancelled
+  jobs do not save.
+- Concurrent jobs cannot merge GitHub cache archives. A dedicated warm-cache
+  job is preferable when several jobs need to publish one shared repository
+  cache.
+- The post action runs only under the action's normal post-step condition. Some
+  failed jobs therefore have no report.
+- Cache API failures and report failures are informational and do not fail the
+  build.
+
 ## Outputs
 
-- `cache-save-branch-evaluated`: whether this ref can save caches in the post
-  action
+Public outputs:
+
+- `cache-save-branch-evaluated`: whether this ref may save caches
 - `bazelisk-cache-restored`, `disk-cache-restored`,
-  `repository-cache-restored`, and `external-cache-restored`: `true` for an
-  exact or fallback cache hit;
-  `false` for a miss, disabled restore, or restore error
+  `repository-cache-restored`, `external-cache-restored`: `true` for an exact
+  or fallback restore, otherwise `false`
 
-The following outputs are intended for the action's internal diagnostics:
+The action also exposes internal diagnostic outputs beginning with `_`; they
+are not intended as a stable workflow interface.
 
-- `_failed-job-cache-save-allowed`: whether the selected standard caches were
-  restored sufficiently to allow an additive save if a later step fails. It is
-  false when external cache saving is enabled.
-- `_checkout-history`: `skipped`, `existing`, `deepened`, or `fetched`
-- `_lock-file-changed`: `true`, `false`, or `unknown`
+## Further details
 
-## Logging
-
-The action writes a compact decision summary to the workflow log. It includes
-the effective restore and save decisions, branch-save eligibility, automatic
-`MODULE.bazel.lock` detection, the configured cache directories, and the
-Bazelisk version key.
-
-Each restore is shown in its own expandable log group with the result and the
-local cache size before and after the restore. Once all selected restores
-complete, a restore summary table reports the result and the resulting local
-uncompressed size for every cache in one place, so a hit, a partial
-(older-generation) restore, or a miss is visible without expanding any group.
-External caching reports the manifest and each extracted repository as separate
-rows. The post action reports the local uncompressed payload size before each
-save and whether the cache was saved, skipped, or deliberately preserved, then
-ends with an equivalent save summary table. In repository-cache auto mode it
-also reports the post-restore baseline and the 10% growth decision. GitHub's
-cache restore API does not expose the downloaded compressed archive size to the
-action, so the summary labels its available local directory size explicitly.
-When profiling is enabled, the post action adds a separate `Bazel profile
-analysis` group derived from the JSON trace profiles; it does not capture or
-parse Bazel's ordinary `INFO:` output.
-
-## Cache lifecycle
-
-Cache keys use readable slash-separated components. For example, a disk cache
-with `disk-cache-key: build.qnx_x86_64` has a generation key such as
-`setup-bazel-cache/linux-x64/disk/key-build.qnx_x86_64/generation-<timestamp>`.
-Bazelisk uses the readable `.bazelversion` value in a key such as
-`setup-bazel-cache/linux-x64/bazelisk/version-8.6.0` and does not
-restore snapshots created for another version.
-Its restore and save can be disabled with `bazelisk-cache-restore` and
-`bazelisk-cache-save`. The repository cache uses one rolling
-timestamped generation family for the repository and runner architecture, such
-as `setup-bazel-cache/linux-x64/repository/generation-<timestamp>`.
-Bazel repository-cache entries are content-addressed, so
-`MODULE.bazel.lock` and individual Bazel configs are not correctness boundaries
-for this cache. Builds, fetch jobs, platforms, and configs all restore and
-augment the same snapshot. Disk caches use timestamped generations and include
-`disk-cache-key`. External repository caches use separate immutable keys based
-on the repository name and dependency-content hash, such as
-`setup-bazel-cache/linux-x64/external/rules.cc/content-<hash>`;
-slashes in dynamic components are URL-encoded. Content hashes are shortened to
-their first 16 hexadecimal characters for readability. Unchanged
-extracted repositories are not uploaded again. The
-manifest remains a small rolling generation such as
-`setup-bazel-cache/linux-x64/external-manifest/generation-<timestamp>` that records which
-repositories to restore. Cache API failures are reported as warnings so a
-transient cache outage does not fail the build.
-
-External repository caches are discovered after the workflow's Bazel commands
-finish. The manifest records only repositories that meet the size threshold;
-repositories that miss the external cache are still fetched normally by Bazel
-and become eligible for the next successful save.
-
-Successful jobs may publish new cache baselines. The action can add to existing
-standard caches after a failed job, but only when every selected standard cache
-was restored with an exact `true` result or, for generational caches, an internal
-`partial` result. When external cache saving is enabled, the failed-job path is
-disabled entirely, so extracted external repositories are published only after
-a successful job. Cancelled jobs never save.
-
-On a successful job, a generational cache is also left untouched when its restore
-failed with an `unknown` result. This prevents a transient cache-service or
-archive error from turning an incomplete local directory into the newest cache
-generation. A normal cache miss still creates a new generation.
-
-Each disk-cache generation includes the previously restored cache plus new
-entries. After a successful upload, this action removes only the previously
-restored generation belonging to its own disk-cache family and Git ref. A token
-with `actions: write` is required for that cleanup; without it, the upload
-still succeeds and the action reports an informational message. Cache-size and
-age limits are workload-specific and should be configured in the repository's
-`.bazelrc` with Bazel's `--experimental_disk_cache_gc_max_size` and
-`--experimental_disk_cache_gc_max_age` flags when needed.
-
-The rolling repository snapshot may retain artifacts that are no longer
-referenced. Periodically setting `repository-cache-restore: "false"` on a
-cache-writing run rebuilds a compact generation from only the dependencies used
-by that run. A dedicated warm-cache job should fetch every supported variant
-before publishing such a replacement.
-
-With the default `repository-cache-save: "auto"`, the first successful
-cache-writing job seeds the repository cache when no snapshot can be restored.
-Jobs that restore an existing snapshot publish a new generation only when the
-local repository payload grows by at least 10%; after that upload, this action
-removes only the previous repository generation from the same cache family and
-ref when the token has `actions: write`. Use
-`repository-cache-save: "true"` when a job is intended to publish an additive
-generation on every successful run, or `"false"` to disable repository-cache
-saving entirely.
-
-GitHub cannot merge cache archives uploaded concurrently. If several
-default-branch jobs restore the same generation, add different dependencies,
-and all save, the job that finishes last publishes a snapshot without the
-other jobs' additions. For deterministic coverage, use one dedicated job that:
-
-1. runs this action with `repository-cache-save: "true"`;
-2. runs `warm-bazel-repository-cache` for every supported config and variant.
-
-Set `repository-cache-save: "false"` in other parallel jobs. They still restore
-the shared repository snapshot, while their disk and Bazelisk caches retain the
-normal save behavior.
+The action prints expandable restore/save diagnostics, including local
+uncompressed cache sizes and automatic repository-cache decisions. Cache keys
+are scoped by runner architecture and cache family; disk-cache keys are scoped
+by `disk-cache-key`, while external repository keys include dependency content.
+These implementation details are intentionally kept out of the normal job
+summary so the useful cache results remain easy to scan.
