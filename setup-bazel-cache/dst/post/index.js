@@ -107995,7 +107995,7 @@ var TEST_CACHE_HEADERS = [
   "Shared cache",
   "Ran",
   "Caching",
-  "Report"
+  "Status"
 ];
 function testCachePaths(runnerTemp = process.env.RUNNER_TEMP || import_node_os5.default.tmpdir()) {
   return Object.fromEntries(["test", "coverage"].map((command) => [
@@ -108107,13 +108107,14 @@ function testCacheRow(report) {
   const { command, hits, observed, localHits, remoteHits, executed, cacheSetting, partial, available } = report;
   const rate = !available || observed === 0 ? "n/a" : `${(hits / observed * 100).toFixed(2).replace(/\.00$/, "")}%`;
   const setting = { yes: "Enabled", no: "Disabled", auto: "Auto", unknown: "Unknown" }[cacheSetting];
+  const status = !available ? "Unavailable" : observed === 0 ? "No attempts" : partial ? "Partial data" : cacheSetting === "no" ? "Disabled" : hits > 0 ? "Used" : "No hits";
   return [
     command,
     available ? `${hits} / ${observed}` : "\u2014",
     rate,
     ...[localHits, remoteHits, executed].map((count) => available ? String(count) : "\u2014"),
     setting || "Unknown",
-    !available ? "Unavailable" : partial ? "Partial" : observed === 0 ? "No attempts" : "Complete"
+    status
   ];
 }
 function formatTestCacheReport(reports) {
@@ -108500,29 +108501,33 @@ async function logTestCacheSummary() {
   endGroup();
   return { reports, notes };
 }
-async function writeCacheSummary(execution, tests) {
+async function writeCacheSummary(execution, tests, state3) {
   if (!execution && !tests) return;
-  const rows = [
+  const invocationRows = [
     ...(execution?.reports || []).filter(hasObservedData).map((report) => cacheSummaryRow("Build cache", report)),
     ...(tests?.reports || []).filter(hasObservedData).map((report) => cacheSummaryRow(
       report.cacheSetting === "no" ? "Test cache (off)" : "Test cache",
       report
     ))
-  ].sort((left, right) => commandOrder(left.command) - commandOrder(right.command));
+  ];
+  const rows = [
+    ...invocationRows,
+    ...cacheRestoreSummaryRows(state3?.restoreResults)
+  ].sort((left, right) => left.order - right.order);
   const notes = tests?.notes || [];
   let summary2 = summary.addHeading("Bazel cache summary");
   summary2 = summary2.addRaw(
-    "Latest invocation per command. Build-cache and test-cache rates are separate views.\n\n"
+    "Latest invocation per command. Restore rows show which setup caches were available.\n\n"
   );
   if (rows.length === 0) {
     summary2 = summary2.addRaw("No cache data was available for this job.\n\n");
   } else {
     summary2 = summary2.addRaw(
-      "| Command | Cache | Cached / total | Hit rate | Status |\n| --- | --- | ---: | ---: | --- |\n"
+      "| Cache | Cached / total | Hit rate | Status |\n| --- | ---: | ---: | --- |\n"
     );
     for (const row of rows) {
       summary2 = summary2.addRaw(
-        `| ${row.command} | ${row.cache} | ${row.cached} | ${row.rate} | ${row.status} |
+        `| ${row.cache} | ${row.cached} | ${row.rate} | ${row.status} |
 `
       );
     }
@@ -108531,9 +108536,11 @@ async function writeCacheSummary(execution, tests) {
   for (const note of notes) summary2 = summary2.addRaw(`${note}
 
 `);
-  summary2 = summary2.addRaw(
-    "The two cache percentages must not be added together.\n\n"
-  );
+  if (invocationRows.length > 1) {
+    summary2 = summary2.addRaw(
+      "Build-cache and test-cache percentages are different views; do not add them together.\n\n"
+    );
+  }
   await summary2.write();
 }
 async function reportSafely(name, report) {
@@ -108550,16 +108557,49 @@ function hasObservedData(report) {
 }
 function cacheSummaryRow(cache, report) {
   const rate = report.observed === 0 ? "n/a" : `${(report.hits / report.observed * 100).toFixed(2).replace(/\.00$/, "")}%`;
+  const command = report.command === "build" ? "build/run" : report.command;
   return {
-    command: report.command === "build" ? "build/run" : report.command,
-    cache,
+    cache: `${command} (${cache.toLowerCase()})`,
     cached: `${report.hits} / ${report.observed}`,
     rate,
-    status: report.partial ? "Partial" : "Complete"
+    status: invocationStatus(report),
+    order: commandOrder(command) * 2 + (cache.startsWith("Test") ? 1 : 0)
   };
 }
-function commandOrder(row) {
-  return { "build/run": 0, test: 1, coverage: 2 }[row.command] ?? 99;
+function invocationStatus(report) {
+  if (report.partial) return "Partial data";
+  if (report.cacheSetting === "no") return "Disabled";
+  return report.hits > 0 ? "Used" : "No hits";
+}
+function commandOrder(command) {
+  return { "build/run": 0, test: 1, coverage: 2 }[command] ?? 99;
+}
+function cacheRestoreSummaryRows(restoreResults = {}) {
+  const caches = [
+    ["bazelisk", "Bazelisk cache"],
+    ["disk", "Disk cache"],
+    ["repository", "Repository cache"],
+    ["external", "External cache"]
+  ];
+  return caches.flatMap(([name, label], index) => {
+    const result = String(restoreResults[name] || "").toLowerCase();
+    if (!result || result === "skipped") return [];
+    return [{
+      cache: label,
+      cached: "\u2014",
+      rate: "\u2014",
+      status: restoreStatusLabel(result),
+      order: 10 + index
+    }];
+  });
+}
+function restoreStatusLabel(result) {
+  return {
+    true: "Restored",
+    partial: "Partially restored",
+    false: "Miss",
+    unknown: "Unavailable"
+  }[result] || "Unavailable";
 }
 function logExecutionReport(report) {
   for (const line of formatExecutionReport(report).trimEnd().split("\n")) info(line);
@@ -108707,7 +108747,11 @@ async function run() {
     }
     const executionReport = await reportSafely("Bazel build cache report", logExecutionCacheSummary);
     const testReport = await reportSafely("Bazel test cache report", logTestCacheSummary);
-    await reportSafely("Bazel cache summary", () => writeCacheSummary(executionReport, testReport));
+    const savedState = JSON.parse(state3);
+    await reportSafely(
+      "Bazel cache summary",
+      () => writeCacheSummary(executionReport, testReport, savedState)
+    );
     await uploadProfiles();
     logProfileAnalysis();
     const {
@@ -108723,7 +108767,7 @@ async function run() {
       externalManifestRestoreResult = "skipped",
       externalRepositoryRestoreResults = {},
       outputBase = null
-    } = JSON.parse(state3);
+    } = savedState;
     if (!cacheSaveAllowed) {
       info("Cache saving is disabled on this ref");
       return;

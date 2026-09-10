@@ -134,22 +134,32 @@ are counted once. `cachedLocally` is reported as a local hit; otherwise,
 executed/non-hits, including unsuccessful attempts. Remote execution alone
 does not count as a hit.
 
-The step summary combines both cache views into one compact table. The job log
-shows the same information as two cache-specific tables, with diagnostic
-details collapsed below them:
+The step summary combines invocation metrics and setup-time cache restores into
+one compact table. Invocation rows show cached test or build work; restore rows
+show whether Bazelisk, disk, repository, or extracted external-repository data
+was restored. A disabled cache is omitted rather than shown as an empty row.
+The job log keeps the build and test metrics as separate cache-specific tables,
+with diagnostic details collapsed below them:
 
 The job log places the compact cache tables directly in the visible output.
 Invocation scope, metric notes, and incomplete-data details are kept in
 collapsible log groups.
 
-| Command | Cache | Cached / total | Hit rate | Status |
-| --- | --- | ---: | ---: | --- |
-| test | Test cache | 18 / 20 | 90% | Complete |
-| coverage | Build cache | 3058 / 3603 | 84.87% | Complete |
-| coverage | Test cache (off) | 0 / 8 | 0% | Complete |
+| Cache | Cached / total | Hit rate | Status |
+| --- | ---: | ---: | --- |
+| test (test cache) | 18 / 20 | 90% | Used |
+| coverage (build cache) | 3058 / 3603 | 84.87% | Used |
+| Bazelisk cache | — | — | Restored |
+| Repository cache | — | — | Miss |
+| External cache | — | — | Restored |
 
-The rate is cached attempts divided by observed attempts. No attempts means
-`n/a`, including when caching is disabled. The canonical BEP command line
+Invocation status is `Used` when at least one attempt reused a result, `No
+hits` when none did, `Disabled` when test-result caching was disabled, and
+`Partial data` when the report was incomplete. Restore rows use `Restored`,
+`Partially restored`, `Miss`, or `Unavailable`.
+
+For invocation rows, the rate is cached attempts divided by observed attempts.
+No attempts means `n/a`, including when caching is disabled. The canonical BEP command line
 provides the effective setting: Enabled, Disabled, Auto, or Unknown when
 metadata is unavailable. `--nocache_test_results` appears as Disabled; it does
 not replace the observed counts. Both metrics can include the same cached test

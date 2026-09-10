@@ -113,11 +113,13 @@ async function logTestCacheSummary() {
   return { reports, notes };
 }
 
-/** Write one compact step-summary table for both cache views. */
-async function writeCacheSummary(execution, tests) {
+/** Write one compact step-summary table for invocation metrics and cache restores. */
+async function writeCacheSummary(execution, tests, state) {
+  // Keep the summary opt-in with the two reporting inputs. Restore details
+  // enrich an enabled report; they do not create an otherwise empty report.
   if (!execution && !tests) return;
 
-  const rows = [
+  const invocationRows = [
     ...(execution?.reports || [])
       .filter(hasObservedData)
       .map((report) => cacheSummaryRow('Build cache', report)),
@@ -127,31 +129,37 @@ async function writeCacheSummary(execution, tests) {
         report.cacheSetting === 'no' ? 'Test cache (off)' : 'Test cache',
         report,
       )),
-  ].sort((left, right) => commandOrder(left.command) - commandOrder(right.command));
+  ];
+  const rows = [
+    ...invocationRows,
+    ...cacheRestoreSummaryRows(state?.restoreResults),
+  ].sort((left, right) => left.order - right.order);
   const notes = tests?.notes || [];
 
   let summary = core.summary.addHeading('Bazel cache summary');
   summary = summary.addRaw(
-    'Latest invocation per command. Build-cache and test-cache rates are separate views.\n\n',
+    'Latest invocation per command. Restore rows show which setup caches were available.\n\n',
   );
   if (rows.length === 0) {
     summary = summary.addRaw('No cache data was available for this job.\n\n');
   } else {
     summary = summary.addRaw(
-      '| Command | Cache | Cached / total | Hit rate | Status |\n' +
-      '| --- | --- | ---: | ---: | --- |\n',
+      '| Cache | Cached / total | Hit rate | Status |\n' +
+      '| --- | ---: | ---: | --- |\n',
     );
     for (const row of rows) {
       summary = summary.addRaw(
-        `| ${row.command} | ${row.cache} | ${row.cached} | ${row.rate} | ${row.status} |\n`,
+        `| ${row.cache} | ${row.cached} | ${row.rate} | ${row.status} |\n`,
       );
     }
     summary = summary.addRaw('\n');
   }
   for (const note of notes) summary = summary.addRaw(`${note}\n\n`);
-  summary = summary.addRaw(
-    'The two cache percentages must not be added together.\n\n',
-  );
+  if (invocationRows.length > 1) {
+    summary = summary.addRaw(
+      'Build-cache and test-cache percentages are different views; do not add them together.\n\n',
+    );
+  }
   await summary.write();
 }
 
@@ -176,17 +184,55 @@ function cacheSummaryRow(cache, report) {
   const rate = report.observed === 0
     ? 'n/a'
     : `${((report.hits / report.observed) * 100).toFixed(2).replace(/\.00$/, '')}%`;
+  const command = report.command === 'build' ? 'build/run' : report.command;
   return {
-    command: report.command === 'build' ? 'build/run' : report.command,
-    cache,
+    cache: `${command} (${cache.toLowerCase()})`,
     cached: `${report.hits} / ${report.observed}`,
     rate,
-    status: report.partial ? 'Partial' : 'Complete',
+    status: invocationStatus(report),
+    order: commandOrder(command) * 2 + (cache.startsWith('Test') ? 1 : 0),
   };
 }
 
-function commandOrder(row) {
-  return { 'build/run': 0, test: 1, coverage: 2 }[row.command] ?? 99;
+/** Use outcome words in the overview; report completeness belongs in details. */
+function invocationStatus(report) {
+  if (report.partial) return 'Partial data';
+  if (report.cacheSetting === 'no') return 'Disabled';
+  return report.hits > 0 ? 'Used' : 'No hits';
+}
+
+function commandOrder(command) {
+  return { 'build/run': 0, test: 1, coverage: 2 }[command] ?? 99;
+}
+
+/** Show setup-time cache restores only when a restore was actually attempted. */
+function cacheRestoreSummaryRows(restoreResults = {}) {
+  const caches = [
+    ['bazelisk', 'Bazelisk cache'],
+    ['disk', 'Disk cache'],
+    ['repository', 'Repository cache'],
+    ['external', 'External cache'],
+  ];
+  return caches.flatMap(([name, label], index) => {
+    const result = String(restoreResults[name] || '').toLowerCase();
+    if (!result || result === 'skipped') return [];
+    return [{
+      cache: label,
+      cached: '—',
+      rate: '—',
+      status: restoreStatusLabel(result),
+      order: 10 + index,
+    }];
+  });
+}
+
+function restoreStatusLabel(result) {
+  return {
+    true: 'Restored',
+    partial: 'Partially restored',
+    false: 'Miss',
+    unknown: 'Unavailable',
+  }[result] || 'Unavailable';
 }
 
 function logExecutionReport(report) {
@@ -359,7 +405,11 @@ async function run() {
 
     const executionReport = await reportSafely('Bazel build cache report', logExecutionCacheSummary);
     const testReport = await reportSafely('Bazel test cache report', logTestCacheSummary);
-    await reportSafely('Bazel cache summary', () => writeCacheSummary(executionReport, testReport));
+    const savedState = JSON.parse(state);
+    await reportSafely(
+      'Bazel cache summary',
+      () => writeCacheSummary(executionReport, testReport, savedState),
+    );
     await uploadProfiles();
     logProfileAnalysis();
 
@@ -376,7 +426,7 @@ async function run() {
       externalManifestRestoreResult = 'skipped',
       externalRepositoryRestoreResults = {},
       outputBase = null,
-    } = JSON.parse(state);
+    } = savedState;
     if (!cacheSaveAllowed) {
       core.info('Cache saving is disabled on this ref');
       return;

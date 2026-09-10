@@ -20,7 +20,7 @@ const TEST_CACHE_METRIC_NOTE =
   'Each test run counts separately, including retries and parallel test pieces. Latest invocation per command.';
 const TEST_CACHE_HEADERS = [
   'Command', 'Cached / total', 'Hit rate', 'Local cache', 'Shared cache',
-  'Ran', 'Caching', 'Report',
+  'Ran', 'Caching', 'Status',
 ];
 
 function testCacheReportingEnabled(value) {
@@ -154,11 +154,22 @@ function testCacheRow(report) {
   const rate = !available || observed === 0
     ? 'n/a' : `${((hits / observed) * 100).toFixed(2).replace(/\.00$/, '')}%`;
   const setting = { yes: 'Enabled', no: 'Disabled', auto: 'Auto', unknown: 'Unknown' }[cacheSetting];
+  const status = !available
+    ? 'Unavailable'
+    : observed === 0
+      ? 'No attempts'
+      : partial
+        ? 'Partial data'
+        : cacheSetting === 'no'
+          ? 'Disabled'
+          : hits > 0
+            ? 'Used'
+            : 'No hits';
   return [
     command, available ? `${hits} / ${observed}` : '—', rate,
     ...[localHits, remoteHits, executed].map((count) => available ? String(count) : '—'),
     setting || 'Unknown',
-    !available ? 'Unavailable' : partial ? 'Partial' : observed === 0 ? 'No attempts' : 'Complete',
+    status,
   ];
 }
 

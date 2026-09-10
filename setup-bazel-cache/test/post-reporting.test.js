@@ -27,7 +27,12 @@ function fixture(context) {
   return root;
 }
 
-function runPost(root, enabled, summaryPath = path.join(root, 'summary.md')) {
+function runPost(
+  root,
+  enabled,
+  summaryPath = path.join(root, 'summary.md'),
+  state = { cacheSaveAllowed: false },
+) {
   if (!fs.existsSync(summaryPath)) fs.writeFileSync(summaryPath, '');
   const output = execFileSync(process.execPath, [
     fileURLToPath(new URL('../src/post.js', import.meta.url)),
@@ -38,7 +43,7 @@ function runPost(root, enabled, summaryPath = path.join(root, 'summary.md')) {
       ...process.env,
       RUNNER_TEMP: root,
       GITHUB_STEP_SUMMARY: summaryPath,
-      'STATE_setup-bazel-cache-configuration': JSON.stringify({ cacheSaveAllowed: false }),
+      'STATE_setup-bazel-cache-configuration': JSON.stringify(state),
       'INPUT_REPORT-CACHE-HITS': 'true',
       'INPUT_REPORT-TEST-CACHE-HITS': String(enabled),
       'INPUT_ENABLE-PROFILING': 'false',
@@ -65,6 +70,10 @@ test('test report preserves cache output and renders disabled, partial, and no-a
       commandLineLabel: 'canonical',
       sections: [{ optionList: { option: [{ optionName: 'cache_test_results', optionValue: '0' }] } }],
     } }),
+    JSON.stringify({
+      id: { testResult: { label: '//:disabled-test' } },
+      testResult: { executionInfo: { strategy: 'local' } },
+    }),
     JSON.stringify({ lastMessage: true }),
   ].join('\n'));
   fs.writeFileSync(testCachePaths(root).coverage, [
@@ -73,11 +82,30 @@ test('test report preserves cache output and renders disabled, partial, and no-a
   ].join('\n'));
   const baseline = runPost(root, false);
   fs.writeFileSync(path.join(root, 'summary.md'), '');
-  const actual = runPost(root, true);
+  const actual = runPost(root, true, path.join(root, 'summary.md'), {
+    cacheSaveAllowed: false,
+    restoreResults: {
+      bazelisk: 'true',
+      disk: 'partial',
+      repository: 'false',
+      external: 'skipped',
+    },
+  });
   assert.match(baseline.summary, /<h1>Bazel cache summary<\/h1>/);
   assert.match(actual.summary, /<h1>Bazel cache summary<\/h1>/);
-  assert.match(actual.summary, /\| Command \| Cache \| Cached \/ total \| Hit rate \| Status \|/);
-  assert.match(actual.summary, /\| coverage \| Test cache \| 1 \/ 1 \| 100% \| Partial \|/);
+  assert.match(actual.summary, /\| Cache \| Cached \/ total \| Hit rate \| Status \|/);
+  assert.match(actual.summary, /\| test \(test cache \(off\)\) \| 0 \/ 1 \| 0% \| Disabled \|/);
+  assert.match(actual.summary, /\| coverage \(test cache\) \| 1 \/ 1 \| 100% \| Partial data \|/);
+  assert.match(actual.summary, /\| Bazelisk cache \| — \| — \| Restored \|/);
+  assert.match(actual.summary, /\| Disk cache \| — \| — \| Partially restored \|/);
+  assert.match(actual.summary, /\| Repository cache \| — \| — \| Miss \|/);
+  assert.doesNotMatch(actual.summary, /\| External cache \|/);
+  fs.writeFileSync(path.join(root, 'summary.md'), '');
+  const withExternal = runPost(root, true, path.join(root, 'summary.md'), {
+    cacheSaveAllowed: false,
+    restoreResults: { external: 'true' },
+  });
+  assert.match(withExternal.summary, /\| External cache \| — \| — \| Restored \|/);
   assert.doesNotMatch(actual.summary, /0 \/ 0/);
   assert.doesNotMatch(actual.summary, /Local cache \| Shared cache \| Ran \|/);
   assert.match(actual.output, /Bazel test cache\n\+[-+]+\+/);
