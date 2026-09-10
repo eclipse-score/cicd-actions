@@ -153,14 +153,15 @@ collapsible log groups.
 | coverage (build cache) | 3058 / 3603 | 84.87% | Used |
 | Bazelisk cache | 1 / 1 | 100% | Restored |
 | Repository cache | 0 / 1 | 0% | Not restored |
-| External cache | 1 / 1 | 100% | Restored |
+| External cache | 2 / 3 | 66.67% | Not restored |
 
 Invocation status is `Used` when at least one attempt reused a result, `No
 hits` when none did, `⚠️ Disabled` when test-result caching was disabled, and
 `Partial data` when the report was incomplete. Restore rows use `Restored`,
 `Not restored`, or `Unavailable`. A fallback to an older complete cache
 generation is still counted as `1 / 1` because the cache was restored and is
-usable.
+usable. External-cache counts represent the extracted repository entries; if
+the manifest did not provide repository entries, the manifest result is used.
 
 For invocation rows, the rate is cached attempts divided by observed attempts.
 No attempts means `n/a`, including when caching is disabled. The canonical BEP command line

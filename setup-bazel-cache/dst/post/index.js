@@ -108522,7 +108522,7 @@ async function writeCacheSummary(execution, tests, state3) {
   ];
   const rows = [
     ...invocationRows,
-    ...cacheRestoreSummaryRows(state3?.restoreResults)
+    ...cacheRestoreSummaryRows(state3)
   ].sort((left, right) => left.order - right.order);
   const notes = tests?.notes || [];
   let summary2 = summary.addHeading("Bazel cache summary");
@@ -108579,7 +108579,8 @@ function invocationStatus(report) {
 function commandOrder(command) {
   return { "build/run": 0, test: 1, coverage: 2 }[command] ?? 99;
 }
-function cacheRestoreSummaryRows(restoreResults = {}) {
+function cacheRestoreSummaryRows(state3 = {}) {
+  const restoreResults = state3.restoreResults || {};
   const caches = [
     ["bazelisk", "Bazelisk cache"],
     ["disk", "Disk cache"],
@@ -108589,15 +108590,30 @@ function cacheRestoreSummaryRows(restoreResults = {}) {
   return caches.flatMap(([name, label], index) => {
     const result = String(restoreResults[name] || "").toLowerCase();
     if (!result || result === "skipped") return [];
-    const restored = result === "true" || result === "partial";
+    const counts = name === "external" ? externalRestoreCounts(state3, result) : restoreCounts(result);
     return [{
       cache: label,
-      cached: restored ? "1 / 1" : result === "false" ? "0 / 1" : "\u2014",
-      rate: restored ? "100%" : result === "false" ? "0%" : "\u2014",
+      ...counts,
       status: restoreStatusLabel(result),
       order: 10 + index
     }];
   });
+}
+function externalRestoreCounts(state3, aggregateResult) {
+  const repositoryResults = Object.values(state3.externalRepositoryRestoreResults || {}).map((result) => String(result).toLowerCase()).filter((result) => result && result !== "skipped");
+  if (repositoryResults.length === 0) return restoreCounts(aggregateResult);
+  const hits = repositoryResults.filter((result) => result === "true" || result === "partial").length;
+  return {
+    cached: `${hits} / ${repositoryResults.length}`,
+    rate: `${(hits / repositoryResults.length * 100).toFixed(2).replace(/\.00$/, "")}%`
+  };
+}
+function restoreCounts(result) {
+  const restored = result === "true" || result === "partial";
+  return {
+    cached: restored ? "1 / 1" : result === "false" ? "0 / 1" : "\u2014",
+    rate: restored ? "100%" : result === "false" ? "0%" : "\u2014"
+  };
 }
 function restoreStatusLabel(result) {
   return {

@@ -103,9 +103,15 @@ test('test report preserves cache output and renders disabled, partial, and no-a
   fs.writeFileSync(path.join(root, 'summary.md'), '');
   const withExternal = runPost(root, true, path.join(root, 'summary.md'), {
     cacheSaveAllowed: false,
-    restoreResults: { external: 'true' },
+    restoreResults: { external: 'false' },
+    externalManifestRestoreResult: 'true',
+    externalRepositoryRestoreResults: {
+      'repo-a': 'true',
+      'repo-b': 'partial',
+      'repo-c': 'false',
+    },
   });
-  assert.match(withExternal.summary, /\| External cache \| 1 \/ 1 \| 100% \| Restored \|/);
+  assert.match(withExternal.summary, /\| External cache \| 2 \/ 3 \| 66.67% \| Not restored \|/);
   assert.doesNotMatch(actual.summary, /0 \/ 0/);
   assert.doesNotMatch(actual.summary, /Local cache \| Shared cache \| Ran \|/);
   assert.match(actual.output, /Bazel test cache\n\+[-+]+\+/);
