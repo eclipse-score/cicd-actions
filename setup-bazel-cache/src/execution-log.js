@@ -18,6 +18,7 @@ import path from 'node:path';
 
 const LOG_NAMES = Object.freeze({
   build: 'setup-bazel-cache-build.exec.log.zst',
+  run: 'setup-bazel-cache-run.exec.log.zst',
   test: 'setup-bazel-cache-test.exec.log.zst',
   coverage: 'setup-bazel-cache-coverage.exec.log.zst',
 });

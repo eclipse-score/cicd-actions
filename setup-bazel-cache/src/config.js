@@ -150,6 +150,7 @@ function createConfiguration(
   if (executionLogs) {
     bazelrcLines.push(
       `build --execution_log_compact_file=${executionLogs.build}`,
+      `run --execution_log_compact_file=${executionLogs.run}`,
       `test --execution_log_compact_file=${executionLogs.test}`,
       `coverage --execution_log_compact_file=${executionLogs.coverage}`,
     );

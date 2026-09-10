@@ -69696,6 +69696,7 @@ var import_node_os3 = __toESM(require("node:os"), 1);
 var import_node_path2 = __toESM(require("node:path"), 1);
 var LOG_NAMES = Object.freeze({
   build: "setup-bazel-cache-build.exec.log.zst",
+  run: "setup-bazel-cache-run.exec.log.zst",
   test: "setup-bazel-cache-test.exec.log.zst",
   coverage: "setup-bazel-cache-coverage.exec.log.zst"
 });
@@ -69863,6 +69864,7 @@ function createConfiguration(workspace, diskCacheKey, {
   if (executionLogs) {
     bazelrcLines.push(
       `build --execution_log_compact_file=${executionLogs.build}`,
+      `run --execution_log_compact_file=${executionLogs.run}`,
       `test --execution_log_compact_file=${executionLogs.test}`,
       `coverage --execution_log_compact_file=${executionLogs.coverage}`
     );

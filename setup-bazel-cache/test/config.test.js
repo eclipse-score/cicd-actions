@@ -44,6 +44,10 @@ test('configuration uses readable Linux cache names and a temporary bazelrc', ()
   );
   assert.match(
     configuration.bazelrcContents,
+    /^run --execution_log_compact_file=.*setup-bazel-cache-run\.exec\.log\.zst$/m,
+  );
+  assert.match(
+    configuration.bazelrcContents,
     /^test --execution_log_compact_file=.*setup-bazel-cache-test\.exec\.log\.zst$/m,
   );
   assert.match(

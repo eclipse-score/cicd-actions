@@ -122,8 +122,10 @@ test('managed execution-log paths are separate and removable', (context) => {
   const logs = executionLogPaths(directory);
   for (const log of Object.values(logs)) fs.writeFileSync(log, 'stale');
   clearExecutionLogs(logs);
-  assert.deepEqual(Object.values(logs).map(fs.existsSync), [false, false, false]);
+  assert.deepEqual(Object.values(logs).map(fs.existsSync), [false, false, false, false]);
   assert.notEqual(logs.build, logs.test);
+  assert.notEqual(logs.build, logs.run);
+  assert.notEqual(logs.run, logs.test);
   assert.notEqual(logs.test, logs.coverage);
 });
 

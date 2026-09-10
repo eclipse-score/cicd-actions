@@ -176,7 +176,7 @@ function cacheSummaryRow(cache, report) {
   const rate = report.observed === 0
     ? 'n/a'
     : `${((report.hits / report.observed) * 100).toFixed(2).replace(/\.00$/, '')}%`;
-  const command = report.command === 'build' ? 'build/run' : report.command;
+  const command = report.command;
   return {
     cache: `${command} (${cache.toLowerCase()})`,
     cached: `${report.hits} / ${report.observed}`,
@@ -194,7 +194,7 @@ function invocationStatus(report) {
 }
 
 function commandOrder(command) {
-  return { 'build/run': 0, test: 1, coverage: 2 }[command] ?? 99;
+  return { build: 0, run: 1, test: 2, coverage: 3 }[command] ?? 99;
 }
 
 /** Show setup-time cache restores only when a restore was actually attempted. */
@@ -256,9 +256,8 @@ function logExecutionReport(report) {
 
 function formatExecutionReport({ command, hits, observed, hitRunners, executedRunners, partial }) {
   const percentage = observed === 0 ? 'n/a' : `${((hits / observed) * 100).toFixed(2).replace(/\.00$/, '')}%`;
-  const label = command === 'build' ? 'build/run' : command;
   const lines = [
-    `Bazel ${label} cache: ${hits} / ${observed} cached (${percentage})`,
+    `Bazel ${command} cache: ${hits} / ${observed} cached (${percentage})`,
     `  Cache hits: ${formatRunnerCounts(hitRunners, 'none', true)}`,
     `  Ran: ${formatRunnerCounts(executedRunners, 'none', false)}`,
   ];
@@ -269,10 +268,9 @@ function formatExecutionReport({ command, hits, observed, hitRunners, executedRu
 }
 
 function executionTableRow({ command, hits, observed, hitRunners, executedRunners, partial }) {
-  const label = command === 'build' ? 'build/run' : command;
   const percentage = observed === 0 ? 'n/a' : `${((hits / observed) * 100).toFixed(2).replace(/\.00$/, '')}%`;
   return [
-    label,
+    command,
     `${hits} / ${observed}`,
     percentage,
     formatRunnerCounts(hitRunners, 'none', true),
