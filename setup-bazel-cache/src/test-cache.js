@@ -18,6 +18,7 @@ import readline from 'node:readline';
 
 const TEST_CACHE_METRIC_NOTE =
   'Each test run counts separately, including retries and parallel test pieces. Latest invocation per command.';
+const DISABLED_CACHE_STATUS = '⚠️ Disabled';
 const TEST_CACHE_HEADERS = [
   'Command', 'Cached / total', 'Hit rate', 'Local cache', 'Shared cache',
   'Ran', 'Caching', 'Status',
@@ -161,7 +162,7 @@ function testCacheRow(report) {
       : partial
         ? 'Partial data'
         : cacheSetting === 'no'
-          ? 'Disabled'
+          ? DISABLED_CACHE_STATUS
           : hits > 0
             ? 'Used'
             : 'No hits';
@@ -190,6 +191,7 @@ function formatTestCacheReport(reports) {
 export {
   TEST_CACHE_HEADERS,
   TEST_CACHE_METRIC_NOTE,
+  DISABLED_CACHE_STATUS,
   clearTestCacheReports,
   formatTestCacheReport,
   formatTestCacheTableRow,

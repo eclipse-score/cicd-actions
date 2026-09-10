@@ -154,7 +154,7 @@ collapsible log groups.
 | External cache | 1 / 1 | 100% | Restored |
 
 Invocation status is `Used` when at least one attempt reused a result, `No
-hits` when none did, `Disabled` when test-result caching was disabled, and
+hits` when none did, `⚠️ Disabled` when test-result caching was disabled, and
 `Partial data` when the report was incomplete. Restore rows use `Restored`,
 `Not restored`, or `Unavailable`. A fallback to an older complete cache
 generation is still counted as `1 / 1` because the cache was restored and is
@@ -163,7 +163,7 @@ usable.
 For invocation rows, the rate is cached attempts divided by observed attempts.
 No attempts means `n/a`, including when caching is disabled. The canonical BEP command line
 provides the effective setting: Enabled, Disabled, Auto, or Unknown when
-metadata is unavailable. `--nocache_test_results` appears as Disabled; it does
+metadata is unavailable. `--nocache_test_results` appears as `⚠️ Disabled`; it does
 not replace the observed counts. Both metrics can include the same cached test
 execution, so their counts and percentages must not be combined.
 

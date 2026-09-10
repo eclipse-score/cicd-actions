@@ -33,6 +33,7 @@ import {
   summarizeExecutionLog,
 } from './execution-log.js';
 import {
+  DISABLED_CACHE_STATUS,
   TEST_CACHE_METRIC_NOTE,
   formatTestCacheReport,
   summarizeTestCacheFile,
@@ -197,7 +198,7 @@ function cacheSummaryRow(cache, report) {
 /** Use outcome words in the overview; report completeness belongs in details. */
 function invocationStatus(report) {
   if (report.partial) return 'Partial data';
-  if (report.cacheSetting === 'no') return 'Disabled';
+  if (report.cacheSetting === 'no') return DISABLED_CACHE_STATUS;
   return report.hits > 0 ? 'Used' : 'No hits';
 }
 

@@ -94,7 +94,7 @@ test('test report preserves cache output and renders disabled, partial, and no-a
   assert.match(baseline.summary, /<h1>Bazel cache summary<\/h1>/);
   assert.match(actual.summary, /<h1>Bazel cache summary<\/h1>/);
   assert.match(actual.summary, /\| Cache \| Cached \/ total \| Hit rate \| Status \|/);
-  assert.match(actual.summary, /\| test \(test cache \(off\)\) \| 0 \/ 1 \| 0% \| Disabled \|/);
+  assert.match(actual.summary, /\| test \(test cache \(off\)\) \| 0 \/ 1 \| 0% \| ⚠️ Disabled \|/);
   assert.match(actual.summary, /\| coverage \(test cache\) \| 1 \/ 1 \| 100% \| Partial data \|/);
   assert.match(actual.summary, /\| Bazelisk cache \| 1 \/ 1 \| 100% \| Restored \|/);
   assert.match(actual.summary, /\| Disk cache \| 1 \/ 1 \| 100% \| Restored \|/);

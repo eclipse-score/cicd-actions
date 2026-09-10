@@ -107987,6 +107987,7 @@ var import_node_os5 = __toESM(require("node:os"), 1);
 var import_node_path4 = __toESM(require("node:path"), 1);
 var import_node_readline = __toESM(require("node:readline"), 1);
 var TEST_CACHE_METRIC_NOTE = "Each test run counts separately, including retries and parallel test pieces. Latest invocation per command.";
+var DISABLED_CACHE_STATUS = "\u26A0\uFE0F Disabled";
 var TEST_CACHE_HEADERS = [
   "Command",
   "Cached / total",
@@ -108107,7 +108108,7 @@ function testCacheRow(report) {
   const { command, hits, observed, localHits, remoteHits, executed, cacheSetting, partial, available } = report;
   const rate = !available || observed === 0 ? "n/a" : `${(hits / observed * 100).toFixed(2).replace(/\.00$/, "")}%`;
   const setting = { yes: "Enabled", no: "Disabled", auto: "Auto", unknown: "Unknown" }[cacheSetting];
-  const status = !available ? "Unavailable" : observed === 0 ? "No attempts" : partial ? "Partial data" : cacheSetting === "no" ? "Disabled" : hits > 0 ? "Used" : "No hits";
+  const status = !available ? "Unavailable" : observed === 0 ? "No attempts" : partial ? "Partial data" : cacheSetting === "no" ? DISABLED_CACHE_STATUS : hits > 0 ? "Used" : "No hits";
   return [
     command,
     available ? `${hits} / ${observed}` : "\u2014",
@@ -108568,7 +108569,7 @@ function cacheSummaryRow(cache, report) {
 }
 function invocationStatus(report) {
   if (report.partial) return "Partial data";
-  if (report.cacheSetting === "no") return "Disabled";
+  if (report.cacheSetting === "no") return DISABLED_CACHE_STATUS;
   return report.hits > 0 ? "Used" : "No hits";
 }
 function commandOrder(command) {
