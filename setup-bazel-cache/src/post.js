@@ -39,10 +39,13 @@ import {
   summarizeTestCacheFile,
   testCachePaths,
 } from './test-cache.js';
-import { existingProfiles, profilePaths, profilingEnabled } from './profiling.js';
+import {
+  existingProfiles,
+  profileArtifactName,
+  profilePaths,
+  profilingEnabled,
+} from './profiling.js';
 import { summarizeProfileFile } from './profile-analysis.js';
-
-const PROFILE_ARTIFACT_NAME = 'bazel-profiles';
 
 /** Report cache reuse from the latest invocation of each Bazel command. */
 async function logExecutionCacheSummary() {
@@ -402,7 +405,7 @@ async function run() {
       'Bazel cache summary',
       () => writeCacheSummary(executionReport, testReport, savedState),
     );
-    await uploadProfiles();
+    await uploadProfiles(savedState.diskCacheKey);
     logProfileAnalysis();
 
     const {
@@ -509,7 +512,7 @@ async function run() {
 }
 
 /** Upload the last build and test profiles without modifying them. */
-async function uploadProfiles() {
+async function uploadProfiles(diskCacheKey) {
   if (!profilingEnabled(core.getInput('enable-profiling'))) return;
 
   const profiles = profilePaths();
@@ -520,15 +523,16 @@ async function uploadProfiles() {
   }
 
   try {
+    const artifactName = profileArtifactName(diskCacheKey);
     const artifact = new DefaultArtifactClient();
     const result = await artifact.uploadArtifact(
-      PROFILE_ARTIFACT_NAME,
+      artifactName,
       files,
       path.dirname(files[0]),
       { compressionLevel: 0 },
     );
     core.info(
-      `Uploaded ${files.length} Bazel profile(s) as '${PROFILE_ARTIFACT_NAME}' ` +
+      `Uploaded ${files.length} Bazel profile(s) as '${artifactName}' ` +
       `(artifact ${result.id ?? 'unknown'}, ${result.size ?? 'unknown'} bytes)`,
     );
   } catch (error) {

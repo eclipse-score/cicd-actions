@@ -20,6 +20,7 @@ import {
   cacheHitReportingEnabled,
   clearProfiles,
   existingProfiles,
+  profileArtifactName,
   profilePaths,
   profilingEnabled,
 } from '../src/profiling.js';
@@ -45,6 +46,14 @@ test('profile paths use stable build and test filenames', () => {
     build: '/runner-temp/setup-bazel-cache-build.profile.gz',
     test: '/runner-temp/setup-bazel-cache-test.profile.gz',
   });
+});
+
+test('profile artifact names identify matrix cache keys without unsafe characters', () => {
+  assert.equal(profileArtifactName('linux-debug'), 'bazel-profiles-linux-debug');
+  assert.notEqual(profileArtifactName('linux/debug'), profileArtifactName('linux-debug'));
+  assert.match(profileArtifactName('linux/debug'), /^bazel-profiles-linux-debug-[0-9a-f]{10}$/);
+  assert.equal(profileArtifactName(), 'bazel-profiles-default');
+  assert.ok(profileArtifactName('x'.repeat(400)).length <= 200);
 });
 
 test('profile discovery and cleanup only handle the managed files', (context) => {

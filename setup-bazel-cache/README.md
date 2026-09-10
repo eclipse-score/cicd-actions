@@ -81,13 +81,15 @@ debug runs. Set `enable-profiling: true` to enable it for every run:
 
 The post step analyzes the profiles and reports elapsed time, critical-path
 time, phase intervals, and the slowest action classes. It also uploads the raw
-profiles as the `bazel-profiles` artifact. Action durations are cumulative
-across concurrent actions and therefore describe resource consumption rather
-than wall-clock time. There is one fixed profile for `build` and one for `test`;
-if a command is invoked more than once, the later invocation overwrites the
-earlier profile. If neither command runs, no profiling artifact is created. Set
-`enable-profiling: false` to disable profiling and its analysis, including for
-debug runs.
+profiles as a `bazel-profiles-<disk-cache-key>` artifact, so matrix jobs keep
+their profiling artifacts distinct. Unsafe or unusually long key characters
+are made readable and disambiguated automatically. Action durations are
+cumulative across concurrent actions and therefore describe resource
+consumption rather than wall-clock time. There is one fixed profile for
+`build` and one for `test`; if a command is invoked more than once, the later
+invocation overwrites the earlier profile. If neither command runs, no
+profiling artifact is created. Set `enable-profiling: false` to disable
+profiling and its analysis, including for debug runs.
 
 ### Cache-hit reporting
 

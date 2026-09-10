@@ -12,13 +12,36 @@
 // *******************************************************************************
 
 import fs from 'node:fs';
+import { createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 
+const PROFILE_ARTIFACT_PREFIX = 'bazel-profiles';
+const PROFILE_ARTIFACT_MAX_LENGTH = 200;
+const PROFILE_ARTIFACT_HASH_LENGTH = 10;
 const PROFILE_NAMES = Object.freeze({
   build: 'setup-bazel-cache-build.profile.gz',
   test: 'setup-bazel-cache-test.profile.gz',
 });
+
+/** Build a readable, matrix-safe artifact name from the disk-cache key. */
+function profileArtifactName(diskCacheKey) {
+  const raw = typeof diskCacheKey === 'string' ? diskCacheKey : '';
+  if (!raw) return `${PROFILE_ARTIFACT_PREFIX}-default`;
+
+  const readable = raw
+    .replace(/[^A-Za-z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  const plainLimit = PROFILE_ARTIFACT_MAX_LENGTH - PROFILE_ARTIFACT_PREFIX.length - 1;
+  if (readable === raw && readable.length <= plainLimit) {
+    return `${PROFILE_ARTIFACT_PREFIX}-${readable}`;
+  }
+
+  const hash = createHash('sha256').update(raw).digest('hex').slice(0, PROFILE_ARTIFACT_HASH_LENGTH);
+  const readableLimit = PROFILE_ARTIFACT_MAX_LENGTH - PROFILE_ARTIFACT_PREFIX.length - 2 - hash.length;
+  const prefix = (readable || 'key').slice(0, readableLimit).replace(/-+$/g, '') || 'key';
+  return `${PROFILE_ARTIFACT_PREFIX}-${prefix}-${hash}`;
+}
 
 /** Resolve the opt-out cache-reporting input. */
 function cacheHitReportingEnabled(value) {
@@ -63,6 +86,7 @@ export {
   cacheHitReportingEnabled,
   clearProfiles,
   existingProfiles,
+  profileArtifactName,
   profilePaths,
   profilingEnabled,
 };

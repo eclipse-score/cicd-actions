@@ -107956,12 +107956,29 @@ var CompactExecutionLogParser = class {
 
 // src/profiling.js
 var import_node_fs4 = __toESM(require("node:fs"), 1);
+var import_node_crypto4 = require("node:crypto");
 var import_node_os4 = __toESM(require("node:os"), 1);
 var import_node_path3 = __toESM(require("node:path"), 1);
+var PROFILE_ARTIFACT_PREFIX = "bazel-profiles";
+var PROFILE_ARTIFACT_MAX_LENGTH = 200;
+var PROFILE_ARTIFACT_HASH_LENGTH = 10;
 var PROFILE_NAMES = Object.freeze({
   build: "setup-bazel-cache-build.profile.gz",
   test: "setup-bazel-cache-test.profile.gz"
 });
+function profileArtifactName(diskCacheKey) {
+  const raw = typeof diskCacheKey === "string" ? diskCacheKey : "";
+  if (!raw) return `${PROFILE_ARTIFACT_PREFIX}-default`;
+  const readable = raw.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
+  const plainLimit = PROFILE_ARTIFACT_MAX_LENGTH - PROFILE_ARTIFACT_PREFIX.length - 1;
+  if (readable === raw && readable.length <= plainLimit) {
+    return `${PROFILE_ARTIFACT_PREFIX}-${readable}`;
+  }
+  const hash = (0, import_node_crypto4.createHash)("sha256").update(raw).digest("hex").slice(0, PROFILE_ARTIFACT_HASH_LENGTH);
+  const readableLimit = PROFILE_ARTIFACT_MAX_LENGTH - PROFILE_ARTIFACT_PREFIX.length - 2 - hash.length;
+  const prefix2 = (readable || "key").slice(0, readableLimit).replace(/-+$/g, "") || "key";
+  return `${PROFILE_ARTIFACT_PREFIX}-${prefix2}-${hash}`;
+}
 function profilingEnabled(value, runnerDebug = process.env.RUNNER_DEBUG === "1") {
   const normalized = value.trim().toLowerCase();
   if (normalized === "auto") return runnerDebug;
@@ -108440,7 +108457,6 @@ function summarizeProfileFile(profilePath) {
 }
 
 // src/post.js
-var PROFILE_ARTIFACT_NAME = "bazel-profiles";
 async function logExecutionCacheSummary() {
   if (getInput("report-cache-hits").trim().toLowerCase() !== "true") return null;
   const logs = executionLogPaths();
@@ -108744,7 +108760,7 @@ async function run() {
       "Bazel cache summary",
       () => writeCacheSummary(executionReport, testReport, savedState)
     );
-    await uploadProfiles();
+    await uploadProfiles(savedState.diskCacheKey);
     logProfileAnalysis();
     const {
       cacheSaveAllowed,
@@ -108841,7 +108857,7 @@ async function run() {
     setFailed(error2.stack || error2.message);
   }
 }
-async function uploadProfiles() {
+async function uploadProfiles(diskCacheKey) {
   if (!profilingEnabled(getInput("enable-profiling"))) return;
   const profiles = profilePaths();
   const files = existingProfiles(profiles);
@@ -108850,15 +108866,16 @@ async function uploadProfiles() {
     return;
   }
   try {
+    const artifactName = profileArtifactName(diskCacheKey);
     const artifact = new DefaultArtifactClient();
     const result = await artifact.uploadArtifact(
-      PROFILE_ARTIFACT_NAME,
+      artifactName,
       files,
       import_node_path7.default.dirname(files[0]),
       { compressionLevel: 0 }
     );
     info(
-      `Uploaded ${files.length} Bazel profile(s) as '${PROFILE_ARTIFACT_NAME}' (artifact ${result.id ?? "unknown"}, ${result.size ?? "unknown"} bytes)`
+      `Uploaded ${files.length} Bazel profile(s) as '${artifactName}' (artifact ${result.id ?? "unknown"}, ${result.size ?? "unknown"} bytes)`
     );
   } catch (error2) {
     warning(`Bazel profile upload failed: ${error2.stack || error2}`);
