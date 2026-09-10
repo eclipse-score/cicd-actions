@@ -93,9 +93,6 @@ function validateExternalRepositoryName(name) {
     name === '.' ||
     name === '..' ||
     !EXTERNAL_REPOSITORY_NAME.test(name) ||
-    name.includes('__') ||
-    name.includes('._') ||
-    name.includes('_.') ||
     [...name].some((character) => {
       const codePoint = character.codePointAt(0);
       return codePoint < 32 || codePoint === 127;

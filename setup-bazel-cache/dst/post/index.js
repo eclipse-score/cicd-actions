@@ -107451,10 +107451,8 @@ var import_node_path = __toESM(require("node:path"), 1);
 // src/keys.js
 var CACHE_KEY_NAMESPACE = "setup-bazel-cache";
 function formatCacheComponent(value, label = "cache component") {
-  if (typeof value !== "string" || !value || value.includes("__") || value.includes("._") || value.includes("_.")) {
-    throw new Error(
-      `${label} must not be empty or contain an ambiguous dot/underscore sequence (the reserved '__' sequence is also rejected).`
-    );
+  if (typeof value !== "string" || !value) {
+    throw new Error(`${label} must not be empty.`);
   }
   return encodeURIComponent(value);
 }
@@ -108136,9 +108134,9 @@ var MAX_DISK_CACHE_KEY_LENGTH = 400;
 var BAZELRC_MARKER_START = "# setup-bazel-cache: begin managed import";
 var BAZELRC_MARKER_END = "# setup-bazel-cache: end managed import";
 function validateDiskCacheKey(value) {
-  if (typeof value !== "string" || !value || value.length > MAX_DISK_CACHE_KEY_LENGTH || hasControlCharacter(value) || value.includes(",") || value.includes("__") || value.includes("._") || value.includes("_.")) {
+  if (typeof value !== "string" || !value || value.length > MAX_DISK_CACHE_KEY_LENGTH || hasControlCharacter(value) || value.includes(",")) {
     throw new Error(
-      "disk-cache-key must contain 1 to 400 printable characters without commas or ambiguous dot/underscore sequences; '__' is reserved."
+      "disk-cache-key must contain 1 to 400 printable characters without commas."
     );
   }
   return formatCacheComponent(value, "disk-cache-key");
@@ -108308,7 +108306,7 @@ function externalRepositoryCache(configuration, name) {
   };
 }
 function validateExternalRepositoryName(name) {
-  if (typeof name !== "string" || !name || name.length > MAX_EXTERNAL_REPOSITORY_NAME_LENGTH || name === "." || name === ".." || !EXTERNAL_REPOSITORY_NAME.test(name) || name.includes("__") || name.includes("._") || name.includes("_.") || [...name].some((character) => {
+  if (typeof name !== "string" || !name || name.length > MAX_EXTERNAL_REPOSITORY_NAME_LENGTH || name === "." || name === ".." || !EXTERNAL_REPOSITORY_NAME.test(name) || [...name].some((character) => {
     const codePoint = character.codePointAt(0);
     return codePoint < 32 || codePoint === 127;
   })) {

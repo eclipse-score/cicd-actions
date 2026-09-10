@@ -27,9 +27,8 @@ steps:
 - `disk-cache-key` separates disk caches belonging to different jobs or
   matrix configurations. It must be a stable value; do not include transient
   values such as `${{ github.run_id }}`. Cache keys use slash-separated,
-  human-readable levels; slash characters in dynamic values are URL-encoded.
-  `__` (as well as ambiguous dot/underscore adjacency) remains reserved and
-  rejected.
+  human-readable levels; slash characters in dynamic values are URL-encoded,
+  while dots and underscores remain ordinary component characters.
 - `cache-save-branch-patterns` is an optional newline-separated list of branch
   glob patterns allowed to save caches. An empty input uses the repository's GitHub
   default branch.
@@ -297,9 +296,8 @@ augment the same snapshot. Disk caches use timestamped generations and include
 `disk-cache-key`. External repository caches use separate immutable keys based
 on the repository name and dependency-content hash, such as
 `setup-bazel-cache/linux-x64/external/rules.cc/content-<hash>`;
-slashes in dynamic components are URL-encoded and ambiguous
-dot/underscore adjacency is rejected. Content hashes are shortened to their
-first 16 hexadecimal characters for readability. Unchanged
+slashes in dynamic components are URL-encoded. Content hashes are shortened to
+their first 16 hexadecimal characters for readability. Unchanged
 extracted repositories are not uploaded again. The
 manifest remains a small rolling generation such as
 `setup-bazel-cache/linux-x64/external-manifest/generation-<timestamp>` that records which

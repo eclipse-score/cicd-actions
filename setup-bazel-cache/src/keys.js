@@ -16,23 +16,14 @@ const CACHE_KEY_NAMESPACE = 'setup-bazel-cache';
 /**
  * Encode a dynamic cache-key component without introducing a structural slash.
  *
- * URL encoding keeps ordinary dots and underscores readable while ensuring a
- * slash supplied by a caller cannot accidentally become another key level.
- * The input restrictions are retained so existing cache-key validation stays
- * consistent across the readable key format.
+ * URL encoding keeps ordinary repository and workflow names readable while
+ * ensuring a slash supplied by a caller cannot accidentally become another key
+ * level. The key format is slash-separated, so underscores and dots have no
+ * structural meaning and are valid in a component.
  */
 function formatCacheComponent(value, label = 'cache component') {
-  if (
-    typeof value !== 'string' ||
-    !value ||
-    value.includes('__') ||
-    value.includes('._') ||
-    value.includes('_.')
-  ) {
-    throw new Error(
-      `${label} must not be empty or contain an ambiguous dot/underscore sequence ` +
-      "(the reserved '__' sequence is also rejected).",
-    );
+  if (typeof value !== 'string' || !value) {
+    throw new Error(`${label} must not be empty.`);
   }
   return encodeURIComponent(value);
 }

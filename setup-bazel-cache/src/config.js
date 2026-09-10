@@ -31,13 +31,10 @@ function validateDiskCacheKey(value) {
     !value ||
     value.length > MAX_DISK_CACHE_KEY_LENGTH ||
     hasControlCharacter(value) ||
-    value.includes(',') ||
-    value.includes('__') ||
-    value.includes('._') ||
-    value.includes('_.')
+    value.includes(',')
   ) {
     throw new Error(
-      "disk-cache-key must contain 1 to 400 printable characters without commas or ambiguous dot/underscore sequences; '__' is reserved.",
+      'disk-cache-key must contain 1 to 400 printable characters without commas.',
     );
   }
   return formatCacheComponent(value, 'disk-cache-key');

@@ -62,23 +62,29 @@ test('external repository cache uses an immutable identity key', () => {
 test('external cache names cannot escape the output external directory', () => {
   assert.equal(validateExternalRepositoryName('rules_cc~override'), 'rules_cc~override');
   assert.equal(validateExternalRepositoryName('rules.cc'), 'rules.cc');
+  assert.equal(
+    validateExternalRepositoryName('rules_python++config+pypi__build'),
+    'rules_python++config+pypi__build',
+  );
   assert.throws(() => validateExternalRepositoryName('../outside'), /Invalid external repository/);
   assert.throws(() => validateExternalRepositoryName('repo/name'), /Invalid external repository/);
   assert.throws(() => validateExternalRepositoryName('repo\nname'), /Invalid external repository/);
-  assert.throws(() => validateExternalRepositoryName('repo__name'), /Invalid external repository/);
-  assert.throws(() => validateExternalRepositoryName('repo._name'), /Invalid external repository/);
 });
 
 test('external discovery includes directories and ignores marker files and symlinks', (context) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'setup-bazel-cache-external-'));
   context.after(() => fs.rmSync(root, { recursive: true, force: true }));
   fs.mkdirSync(path.join(root, 'rules_cc'));
+  fs.mkdirSync(path.join(root, 'rules_python++config+pypi__build'));
   fs.writeFileSync(path.join(root, '@rules_cc.marker'), 'marker');
   fs.mkdirSync(path.join(root, 'local_repo'));
   fs.rmSync(path.join(root, 'local_repo'), { recursive: true, force: true });
   fs.symlinkSync(path.join(root, 'rules_cc'), path.join(root, 'local_repo'));
 
-  assert.deepEqual(discoverExternalRepositories(root), ['rules_cc']);
+  assert.deepEqual(
+    discoverExternalRepositories(root),
+    ['rules_cc', 'rules_python++config+pypi__build'],
+  );
 });
 
 test('external manifest accepts repository names but rejects path-like entries', (context) => {

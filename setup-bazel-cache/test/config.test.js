@@ -191,6 +191,6 @@ test('disk cache keys are constrained to safe cache-key components', () => {
   assert.throws(() => validateDiskCacheKey('a'.repeat(401)), /printable characters without commas/);
   assert.throws(() => validateDiskCacheKey('debug\nrelease'), /printable characters without commas/);
   assert.throws(() => validateDiskCacheKey('debug,release'), /printable characters without commas/);
-  assert.throws(() => validateDiskCacheKey('debug__release'), /reserved/);
-  assert.throws(() => validateDiskCacheKey('debug._release'), /ambiguous/);
+  assert.equal(validateDiskCacheKey('debug__release'), 'debug__release');
+  assert.equal(validateDiskCacheKey('debug._release'), 'debug._release');
 });
