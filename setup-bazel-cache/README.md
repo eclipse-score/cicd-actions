@@ -134,16 +134,19 @@ are counted once. `cachedLocally` is reported as a local hit; otherwise,
 executed/non-hits, including unsuccessful attempts. Remote execution alone
 does not count as a hit.
 
-The log and step summary show the same table:
+The step summary combines both cache views into one compact table. The job log
+shows the same information as two cache-specific tables, with diagnostic
+details collapsed below them:
 
 The job log places the compact cache tables directly in the visible output.
 Invocation scope, metric notes, and incomplete-data details are kept in
 collapsible log groups.
 
-| Command | Cached / total | Hit rate | Local cache | Shared cache | Ran | Caching | Report |
-| --- | ---: | ---: | ---: | ---: | ---: | --- | --- |
-| test | 18 / 20 | 90% | 12 | 6 | 2 | Auto | Complete |
-| coverage | 0 / 8 | 0% | 0 | 0 | 8 | Disabled | Complete |
+| Command | Cache | Cached / total | Hit rate | Status |
+| --- | --- | ---: | ---: | --- |
+| test | Test cache | 18 / 20 | 90% | Complete |
+| coverage | Build cache | 3058 / 3603 | 84.87% | Complete |
+| coverage | Test cache (off) | 0 / 8 | 0% | Complete |
 
 The rate is cached attempts divided by observed attempts. No attempts means
 `n/a`, including when caching is disabled. The canonical BEP command line

@@ -74,10 +74,12 @@ test('test report preserves cache output and renders disabled, partial, and no-a
   const baseline = runPost(root, false);
   fs.writeFileSync(path.join(root, 'summary.md'), '');
   const actual = runPost(root, true);
-  assert.ok(actual.summary.startsWith(baseline.summary));
-  assert.ok(actual.output.startsWith(baseline.output.split('Cache saving is disabled')[0]));
-  assert.match(actual.summary, /0 \/ 0 \| n\/a.*Disabled \| No attempts/);
-  assert.match(actual.summary, /1 \/ 1 \| 100%.*Partial/);
+  assert.match(baseline.summary, /<h1>Bazel cache summary<\/h1>/);
+  assert.match(actual.summary, /<h1>Bazel cache summary<\/h1>/);
+  assert.match(actual.summary, /\| Command \| Cache \| Cached \/ total \| Hit rate \| Status \|/);
+  assert.match(actual.summary, /\| coverage \| Test cache \| 1 \/ 1 \| 100% \| Partial \|/);
+  assert.doesNotMatch(actual.summary, /0 \/ 0/);
+  assert.doesNotMatch(actual.summary, /Local cache \| Shared cache \| Ran \|/);
   assert.match(actual.output, /Bazel test cache\n\+[-+]+\+/);
   assert.match(actual.output, /::group::Bazel test cache details/);
   assert.match(actual.output, /\+[-+]+\+/);
@@ -89,7 +91,7 @@ test('summary write failures do not stop post-step processing', (context) => {
   const root = fixture(context);
   // A directory is accessible but cannot receive summary text.
   const { output } = runPost(root, true, root);
-  assert.match(output, /step summary unavailable/);
+  assert.match(output, /Bazel cache summary unavailable/);
   assert.match(output, /Cache saving is disabled on this ref/);
   assert.doesNotMatch(output, /::error::/);
 });

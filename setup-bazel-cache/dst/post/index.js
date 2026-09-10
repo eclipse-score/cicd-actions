@@ -108116,10 +108116,6 @@ function testCacheRow(report) {
     !available ? "Unavailable" : partial ? "Partial" : observed === 0 ? "No attempts" : "Complete"
   ];
 }
-function formatTestCacheTableRow(report) {
-  return `| ${testCacheRow(report).join(" | ")} |
-`;
-}
 function formatTestCacheReport(reports) {
   const rows = [TEST_CACHE_HEADERS, ...reports.map(testCacheRow)];
   const widths = TEST_CACHE_HEADERS.map((_2, column) => Math.max(...rows.map((row) => row[column].length)));
@@ -108444,10 +108440,10 @@ function summarizeProfileFile(profilePath) {
 // src/post.js
 var PROFILE_ARTIFACT_NAME = "bazel-profiles";
 async function logExecutionCacheSummary() {
-  if (getInput("report-cache-hits").trim().toLowerCase() !== "true") return;
+  if (getInput("report-cache-hits").trim().toLowerCase() !== "true") return null;
   const logs = executionLogPaths();
   const existing = existingExecutionLogs(logs);
-  if (existing.length === 0) return;
+  if (existing.length === 0) return null;
   const reports = [];
   for (const [command, logPath] of existing) {
     try {
@@ -108456,43 +108452,34 @@ async function logExecutionCacheSummary() {
       warning(`Bazel ${command} execution-log analysis failed: ${error2.stack || error2}`);
     }
   }
-  if (reports.length === 0) return;
-  info("Bazel build cache");
-  logTable(
-    ["Command", "Cached / total", "Hit rate", "Cache hits", "Ran", "Report"],
-    reports.map(executionTableRow)
-  );
-  info("");
+  if (reports.length === 0) return null;
+  const visibleReports = reports.filter(hasObservedData);
+  if (visibleReports.length > 0) {
+    info("Bazel build cache");
+    logTable(
+      ["Command", "Cached / total", "Hit rate", "Cache hits", "Ran", "Report"],
+      visibleReports.map(executionTableRow)
+    );
+    info("");
+  }
   startGroup("Bazel build cache details");
   info("Latest Bazel invocation only; repeated calls overwrite earlier data.");
   info(EXECUTION_LOG_METRIC_NOTE);
   for (const report of reports) logExecutionReport(report);
   endGroup();
-  try {
-    let summary2 = summary.addHeading("Bazel build cache report (latest invocation only)");
-    summary2 = summary2.addRaw(
-      "This report covers only the latest Bazel invocation. Repeated calls overwrite earlier data.\n\n"
-    );
-    summary2 = summary2.addRaw(`${EXECUTION_LOG_METRIC_NOTE}
-
-`);
-    summary2 = summary2.addRaw(
-      "| Command | Cached / total | Hit rate | Cache hits | Ran | Report |\n| --- | ---: | ---: | --- | --- | --- |\n"
-    );
-    for (const report of reports) summary2 = summary2.addRaw(formatExecutionTableRow(report));
-    await summary2.write();
-  } catch (error2) {
-    warning(`Bazel cache report summary could not be written: ${error2.stack || error2}`);
-  }
+  return { reports };
 }
 async function logTestCacheSummary() {
-  if (getInput("report-test-cache-hits").trim().toLowerCase() !== "true") return;
+  if (getInput("report-test-cache-hits").trim().toLowerCase() !== "true") return null;
   const reports = [];
   for (const [command, reportPath] of Object.entries(testCachePaths())) {
     reports.push({ command, ...await summarizeTestCacheFile(reportPath) });
   }
-  info("Bazel test cache");
-  info(formatTestCacheReport(reports));
+  const visibleReports = reports.filter(hasObservedData);
+  if (visibleReports.length > 0) {
+    info("Bazel test cache");
+    info(formatTestCacheReport(visibleReports));
+  }
   const notes = [];
   if (reports.some((report) => !report.available)) notes.push(
     "Unavailable: no readable test-cache data. The command may not have run or may have used another report path."
@@ -108511,37 +108498,68 @@ async function logTestCacheSummary() {
   for (const note of notes) info(note);
   info("The build-cache and test-cache percentages are different views of cache reuse; do not combine them.");
   endGroup();
-  try {
-    let summary2 = summary.addHeading("Bazel test cache");
-    summary2 = summary2.addRaw(`${TEST_CACHE_METRIC_NOTE}
-
-`);
+  return { reports, notes };
+}
+async function writeCacheSummary(execution, tests) {
+  if (!execution && !tests) return;
+  const rows = [
+    ...(execution?.reports || []).filter(hasObservedData).map((report) => cacheSummaryRow("Build cache", report)),
+    ...(tests?.reports || []).filter(hasObservedData).map((report) => cacheSummaryRow(
+      report.cacheSetting === "no" ? "Test cache (off)" : "Test cache",
+      report
+    ))
+  ].sort((left, right) => commandOrder(left.command) - commandOrder(right.command));
+  const notes = tests?.notes || [];
+  let summary2 = summary.addHeading("Bazel cache summary");
+  summary2 = summary2.addRaw(
+    "Latest invocation per command. Build-cache and test-cache rates are separate views.\n\n"
+  );
+  if (rows.length === 0) {
+    summary2 = summary2.addRaw("No cache data was available for this job.\n\n");
+  } else {
     summary2 = summary2.addRaw(
-      `| ${TEST_CACHE_HEADERS.join(" | ")} |
-| --- | ---: | ---: | ---: | ---: | ---: | --- | --- |
+      "| Command | Cache | Cached / total | Hit rate | Status |\n| --- | --- | ---: | ---: | --- |\n"
+    );
+    for (const row of rows) {
+      summary2 = summary2.addRaw(
+        `| ${row.command} | ${row.cache} | ${row.cached} | ${row.rate} | ${row.status} |
 `
-    );
-    for (const report of reports) summary2 = summary2.addRaw(formatTestCacheTableRow(report));
+      );
+    }
     summary2 = summary2.addRaw("\n");
-    for (const note of notes) summary2 = summary2.addRaw(`${note}
+  }
+  for (const note of notes) summary2 = summary2.addRaw(`${note}
 
 `);
-    summary2 = summary2.addRaw(
-      "The build-cache and test-cache percentages are different views of cache reuse; do not combine them.\n\n"
-    );
-    await summary2.write();
-  } catch {
-    summary.emptyBuffer();
-    info("Bazel test cache: step summary unavailable; see the job log.");
-  }
+  summary2 = summary2.addRaw(
+    "The two cache percentages must not be added together.\n\n"
+  );
+  await summary2.write();
 }
 async function reportSafely(name, report) {
   try {
-    await report();
+    return await report();
   } catch {
     summary.emptyBuffer();
     info(`${name} unavailable; continuing post-step processing.`);
+    return null;
   }
+}
+function hasObservedData(report) {
+  return report.available === void 0 ? report.observed > 0 : report.available && report.observed > 0;
+}
+function cacheSummaryRow(cache, report) {
+  const rate = report.observed === 0 ? "n/a" : `${(report.hits / report.observed * 100).toFixed(2).replace(/\.00$/, "")}%`;
+  return {
+    command: report.command === "build" ? "build/run" : report.command,
+    cache,
+    cached: `${report.hits} / ${report.observed}`,
+    rate,
+    status: report.partial ? "Partial" : "Complete"
+  };
+}
+function commandOrder(row) {
+  return { "build/run": 0, test: 1, coverage: 2 }[row.command] ?? 99;
 }
 function logExecutionReport(report) {
   for (const line of formatExecutionReport(report).trimEnd().split("\n")) info(line);
@@ -108573,13 +108591,6 @@ function executionTableRow({ command, hits, observed, hitRunners, executedRunner
     formatRunnerCounts(executedRunners, "none", false),
     partial ? "Partial" : "Complete"
   ];
-}
-function formatExecutionTableRow(report) {
-  return `| ${executionTableRow(report).map(escapeTableCell).join(" | ")} |
-`;
-}
-function escapeTableCell(value) {
-  return value.replaceAll("|", "\\|");
 }
 function formatRunnerCounts(runners, emptyValue, cached) {
   if (runners.length === 0) return emptyValue;
@@ -108694,8 +108705,9 @@ async function run() {
       info("Setup did not complete; caches will not be saved");
       return;
     }
-    await reportSafely("Bazel build cache report", logExecutionCacheSummary);
-    await reportSafely("Bazel test cache report", logTestCacheSummary);
+    const executionReport = await reportSafely("Bazel build cache report", logExecutionCacheSummary);
+    const testReport = await reportSafely("Bazel test cache report", logTestCacheSummary);
+    await reportSafely("Bazel cache summary", () => writeCacheSummary(executionReport, testReport));
     await uploadProfiles();
     logProfileAnalysis();
     const {
