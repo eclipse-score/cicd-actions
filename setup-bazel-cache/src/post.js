@@ -216,10 +216,11 @@ function cacheRestoreSummaryRows(restoreResults = {}) {
   return caches.flatMap(([name, label], index) => {
     const result = String(restoreResults[name] || '').toLowerCase();
     if (!result || result === 'skipped') return [];
+    const restored = result === 'true' || result === 'partial';
     return [{
       cache: label,
-      cached: '—',
-      rate: '—',
+      cached: restored ? '1 / 1' : result === 'false' ? '0 / 1' : '—',
+      rate: restored ? '100%' : result === 'false' ? '0%' : '—',
       status: restoreStatusLabel(result),
       order: 10 + index,
     }];
@@ -229,8 +230,10 @@ function cacheRestoreSummaryRows(restoreResults = {}) {
 function restoreStatusLabel(result) {
   return {
     true: 'Restored',
-    partial: 'Partially restored',
-    false: 'Miss',
+    // A partial result is an older complete cache generation, not a partial
+    // payload. The detailed restore log retains the distinction.
+    partial: 'Restored',
+    false: 'Not restored',
     unknown: 'Unavailable',
   }[result] || 'Unavailable';
 }
