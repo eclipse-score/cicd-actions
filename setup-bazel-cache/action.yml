@@ -51,6 +51,15 @@ inputs:
     required: false
     default: "true"
 
+  report-test-cache-hits:
+    description: >
+      Report cached Bazel test attempts from Build Event Protocol JSON in the
+      job log and step summary. Covers the latest test and coverage invocation
+      separately, including retries, shards, and repeated runs. Accepts true or
+      false and defaults to false.
+    required: false
+    default: "false"
+
   # cache flags:
 
   bazelisk-cache-restore:

@@ -112,6 +112,64 @@ effectiveness: persistent action-cache results, including some cached test
 results, are not represented by Bazel execution-log spawns. Missing, partial, or
 truncated logs produce a warning without failing the job.
 
+### Test-result cache reporting
+
+Test-result reporting is disabled by default. Set `report-test-cache-hits: true`
+to add Bazel's `--build_event_json_file` option to `test` and `coverage` and
+report the latest invocation of each command in the job log and step summary:
+
+```yaml
+- uses: eclipse-score/cicd-actions/setup-bazel-cache@<sha>
+  with:
+    disk-cache-key: ${{ github.workflow }}-${{ github.job }}
+    report-test-cache-hits: true
+```
+
+This report is a different metric and data source from execution-log reporting.
+It reads BEP `TestResult` events and counts attempts, so retries, shards, and
+multiple runs contribute separate observations. Duplicate attempt identities
+are counted once. `cachedLocally` is reported as a local hit; otherwise,
+`executionInfo.cachedRemotely` is a remote/disk hit. Remaining attempts are
+executed/non-hits, including unsuccessful attempts. Remote execution alone
+does not count as a hit.
+
+The log and step summary show the same table:
+
+| Command | Cached / observed | Hit rate | Local | Remote/disk | Executed/non-hits | Test caching | Data |
+| --- | ---: | ---: | ---: | ---: | ---: | --- | --- |
+| test | 18 / 20 | 90% | 12 | 6 | 2 | Auto | Complete |
+| coverage | 0 / 8 | 0% | 0 | 0 | 8 | Disabled | Complete |
+
+The rate is cached attempts divided by observed attempts. No attempts means
+`n/a`, including when caching is disabled. The canonical BEP command line
+provides the effective setting: Enabled, Disabled, Auto, or Unknown when
+metadata is unavailable. `--nocache_test_results` appears as Disabled; it does
+not replace the observed counts. Both metrics can include the same cached test
+execution, so their counts and percentages must not be combined.
+
+The BEP files are temporary, are cleared during action setup, and are not
+uploaded as artifacts. Each command has one managed file, so repeated
+invocations overwrite the previous report. Only the latest invocation writing
+each managed file is reported. Normal Bazel flag precedence applies: a custom
+`--build_event_json_file` can override the managed destination, and the action
+does not discover alternative paths. Concurrent invocations sharing a managed
+path are unsupported.
+
+Missing, empty, or unreadable data is shown as Unavailable. Truncated or
+malformed files retain readable counts and are marked Partial. These statuses
+are informational and do not emit GitHub warning annotations or fail the job.
+The existing post-step condition still applies: some failed jobs, including
+those with external cache saving enabled, do not run the post step and receive
+no report.
+
+Generating BEP adds JSON serialization and file-writing overhead; streaming
+analysis adds post-step time. The action uses
+`--nobuild_event_json_file_path_conversion` so this reporting file does not
+trigger uploads of referenced artifacts. Reporting remains opt-in; measure BEP
+size and runtime with equivalent cache states before adopting it broadly.
+Enabling reporting does not enable test-result caching; Bazel's
+`--cache_test_results` setting controls whether prior results are used.
+
 ### Advanced
 
 Further parameters to configure cache behavior:

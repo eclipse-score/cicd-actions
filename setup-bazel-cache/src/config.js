@@ -17,6 +17,7 @@ import path from 'node:path';
 import { executionLogPaths } from './execution-log.js';
 import { CACHE_KEY_NAMESPACE, formatCacheComponent } from './keys.js';
 import { profilePaths } from './profiling.js';
+import { testCachePaths } from './test-cache.js';
 
 const MAX_BAZELISK_VERSION_LENGTH = 400;
 const MAX_DISK_CACHE_KEY_LENGTH = 400;
@@ -122,6 +123,7 @@ function createConfiguration(
     bazeliskVersion,
     enableProfiling = false,
     reportCacheHits = true,
+    reportTestCacheHits = false,
     externalCacheEnabled = false,
     outputBase = null,
   } = {},
@@ -137,6 +139,7 @@ function createConfiguration(
   const platform = `linux-${os.arch()}`;
   const profiles = enableProfiling ? profilePaths(runnerTemp) : null;
   const executionLogs = reportCacheHits ? executionLogPaths(runnerTemp) : null;
+  const testCacheReports = reportTestCacheHits ? testCachePaths(runnerTemp) : null;
   const bazelrcLines = [
     `build --disk_cache=${path.join(cacheRoot, 'bazel-disk')}`,
     `common --repository_cache=${path.join(cacheRoot, 'bazel-repo')}`,
@@ -152,6 +155,17 @@ function createConfiguration(
       `build --execution_log_compact_file=${executionLogs.build}`,
       `test --execution_log_compact_file=${executionLogs.test}`,
       `coverage --execution_log_compact_file=${executionLogs.coverage}`,
+    );
+  }
+  if (testCacheReports) {
+    // Coverage inherits test options, so it needs its own destination to keep
+    // each command's latest invocation. Local path conversion avoids uploading
+    // referenced artifacts solely to collect these counters.
+    bazelrcLines.push(
+      `test --build_event_json_file=${testCacheReports.test}`,
+      'test --nobuild_event_json_file_path_conversion',
+      `coverage --build_event_json_file=${testCacheReports.coverage}`,
+      'coverage --nobuild_event_json_file_path_conversion',
     );
   }
 
@@ -208,6 +222,7 @@ function createConfiguration(
     platform,
     profiles,
     executionLogs,
+    testCacheReports,
     workspace,
   };
 }

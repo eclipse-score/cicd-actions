@@ -71,6 +71,34 @@ test('cache-hit reporting can be disabled without adding execution-log flags', (
   assert.doesNotMatch(configuration.bazelrcContents, /execution_log_compact_file/);
 });
 
+test('test-cache reporting is opt-in and adds independent BEP paths', () => {
+  const disabled = createConfiguration('/workspace', 'test');
+  assert.equal(disabled.testCacheReports, null);
+
+  const enabled = createConfiguration('/workspace', 'test', {
+    reportTestCacheHits: true,
+  });
+  assert.match(
+    enabled.bazelrcContents,
+    /^test --build_event_json_file=.*setup-bazel-cache-test\.bep\.json$/m,
+  );
+  assert.match(enabled.bazelrcContents, /^test --nobuild_event_json_file_path_conversion$/m);
+  assert.match(
+    enabled.bazelrcContents,
+    /^coverage --build_event_json_file=.*setup-bazel-cache-coverage\.bep\.json$/m,
+  );
+  assert.match(enabled.bazelrcContents, /^coverage --nobuild_event_json_file_path_conversion$/m);
+  assert.equal(enabled.executionLogs !== null, true);
+
+  const independent = createConfiguration('/workspace', 'test', {
+    reportCacheHits: false,
+    reportTestCacheHits: true,
+  });
+  assert.equal(independent.executionLogs, null);
+  assert.ok(independent.testCacheReports);
+  assert.match(independent.bazelrcContents, /build_event_json_file/);
+});
+
 test('Bazelisk version is read as a readable cache-key component', (context) => {
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'setup-bazel-cache-config-'));
   context.after(() => fs.rmSync(workspace, { recursive: true, force: true }));

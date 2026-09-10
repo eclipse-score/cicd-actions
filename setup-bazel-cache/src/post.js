@@ -32,6 +32,14 @@ import {
   executionLogPaths,
   summarizeExecutionLog,
 } from './execution-log.js';
+import {
+  TEST_CACHE_HEADERS,
+  TEST_CACHE_METRIC_NOTE,
+  formatTestCacheReport,
+  formatTestCacheTableRow,
+  summarizeTestCacheFile,
+  testCachePaths,
+} from './test-cache.js';
 import { existingProfiles, profilePaths, profilingEnabled } from './profiling.js';
 import { summarizeProfileFile } from './profile-analysis.js';
 
@@ -59,7 +67,7 @@ async function logExecutionCacheSummary() {
   if (reports.length === 0) return;
 
   core.info('Bazel cache report (latest invocation only)');
-  core.warning(
+  core.info(
     'This report covers only the last bazel build/run, test, or coverage call. ' +
     'Repeated calls overwrite earlier data.',
   );
@@ -69,7 +77,7 @@ async function logExecutionCacheSummary() {
   try {
     let summary = core.summary.addHeading('Bazel cache report (latest invocation only)');
     summary = summary.addRaw(
-      '**Warning:** This report covers only the last `bazel build`/`bazel run`, `bazel test`, ' +
+      'This report covers only the last `bazel build`/`bazel run`, `bazel test`, ' +
       'or `bazel coverage` call. Repeated calls overwrite earlier data.\n\n',
     );
     summary = summary.addRaw(`${EXECUTION_LOG_METRIC_NOTE}\n\n`);
@@ -81,6 +89,64 @@ async function logExecutionCacheSummary() {
     await summary.write();
   } catch (error) {
     core.warning(`Bazel cache report summary could not be written: ${error.stack || error}`);
+  }
+}
+
+/** Report cached test attempts from the latest test and coverage invocations. */
+async function logTestCacheSummary() {
+  if (core.getInput('report-test-cache-hits').trim().toLowerCase() !== 'true') return;
+
+  const reports = [];
+  for (const [command, reportPath] of Object.entries(testCachePaths())) {
+    reports.push({ command, ...(await summarizeTestCacheFile(reportPath)) });
+  }
+
+  core.startGroup('Bazel test-result cache');
+  core.info(TEST_CACHE_METRIC_NOTE);
+  core.info(formatTestCacheReport(reports));
+  const notes = [];
+  if (reports.some((report) => !report.available)) notes.push(
+    'Unavailable: no readable BEP data. The command may not have run or may have used another BEP path.',
+  );
+  if (reports.some((report) => report.available && report.partial)) notes.push(
+    'Partial: only readable records are counted; the BEP file is incomplete or contains invalid records.',
+  );
+  if (reports.some((report) => report.cacheSetting === 'no')) notes.push(
+    'Disabled: Bazel was invoked with --cache_test_results=no (or --nocache_test_results).',
+  );
+  if (reports.some((report) => report.available && report.observed === 0)) notes.push(
+    'No observed attempts: the hit rate is n/a.',
+  );
+  for (const note of notes) core.info(note);
+  core.endGroup();
+
+  try {
+    let summary = core.summary.addHeading('Bazel test-result cache');
+    summary = summary.addRaw(`${TEST_CACHE_METRIC_NOTE}\n\n`);
+    summary = summary.addRaw(
+      `| ${TEST_CACHE_HEADERS.join(' | ')} |\n` +
+      '| --- | ---: | ---: | ---: | ---: | ---: | --- | --- |\n',
+    );
+    for (const report of reports) summary = summary.addRaw(formatTestCacheTableRow(report));
+    summary = summary.addRaw('\n');
+    for (const note of notes) summary = summary.addRaw(`${note}\n\n`);
+    summary = summary.addRaw(
+      'BEP test attempts and execution-log spawns overlap; their hit rates must not be combined.\n\n',
+    );
+    await summary.write();
+  } catch {
+    core.summary.emptyBuffer();
+    core.info('Bazel test-result cache: step summary unavailable; see the job log.');
+  }
+}
+
+/** Optional diagnostics must not prevent another report or a cache save. */
+async function reportSafely(name, report) {
+  try {
+    await report();
+  } catch {
+    core.summary.emptyBuffer();
+    core.info(`${name} unavailable; continuing post-step processing.`);
   }
 }
 
@@ -238,7 +304,8 @@ async function run() {
       return;
     }
 
-    await logExecutionCacheSummary();
+    await reportSafely('Bazel execution-log report', logExecutionCacheSummary);
+    await reportSafely('Bazel test-result cache report', logTestCacheSummary);
     await uploadProfiles();
     logProfileAnalysis();
 
