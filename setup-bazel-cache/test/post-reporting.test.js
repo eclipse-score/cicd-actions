@@ -78,6 +78,8 @@ test('test report preserves cache output and renders disabled, partial, and no-a
   assert.ok(actual.output.startsWith(baseline.output.split('Cache saving is disabled')[0]));
   assert.match(actual.summary, /0 \/ 0 \| n\/a.*Disabled \| No attempts/);
   assert.match(actual.summary, /1 \/ 1 \| 100%.*Partial/);
+  assert.match(actual.output, /Bazel test cache\n\+[-+]+\+/);
+  assert.match(actual.output, /::group::Bazel test cache details/);
   assert.match(actual.output, /\+[-+]+\+/);
   assert.doesNotMatch(actual.output + actual.summary, /DO_NOT_PRINT|::warning::|::error::/);
   assert.doesNotMatch(actual.output + actual.summary, /cacheable spawns|BEP|Executed\/non-hits|Remote\/disk/);

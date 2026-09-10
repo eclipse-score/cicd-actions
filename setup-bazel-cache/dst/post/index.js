@@ -108447,10 +108447,7 @@ async function logExecutionCacheSummary() {
   if (getInput("report-cache-hits").trim().toLowerCase() !== "true") return;
   const logs = executionLogPaths();
   const existing = existingExecutionLogs(logs);
-  if (existing.length === 0) {
-    info("Bazel cache reporting enabled, but no cache details were produced");
-    return;
-  }
+  if (existing.length === 0) return;
   const reports = [];
   for (const [command, logPath] of existing) {
     try {
@@ -108460,12 +108457,17 @@ async function logExecutionCacheSummary() {
     }
   }
   if (reports.length === 0) return;
-  info("Bazel build cache report (latest invocation only)");
-  info(
-    "This report covers only the latest Bazel invocation. Repeated calls overwrite earlier data."
+  info("Bazel build cache");
+  logTable(
+    ["Command", "Cached / total", "Hit rate", "Cache hits", "Ran", "Report"],
+    reports.map(executionTableRow)
   );
+  info("");
+  startGroup("Bazel build cache details");
+  info("Latest Bazel invocation only; repeated calls overwrite earlier data.");
   info(EXECUTION_LOG_METRIC_NOTE);
   for (const report of reports) logExecutionReport(report);
+  endGroup();
   try {
     let summary2 = summary.addHeading("Bazel build cache report (latest invocation only)");
     summary2 = summary2.addRaw(
@@ -108475,7 +108477,7 @@ async function logExecutionCacheSummary() {
 
 `);
     summary2 = summary2.addRaw(
-      "| Command | Cached / total | Hit rate | Cache hits | Ran |\n| --- | ---: | ---: | --- | --- |\n"
+      "| Command | Cached / total | Hit rate | Cache hits | Ran | Report |\n| --- | ---: | ---: | --- | --- | --- |\n"
     );
     for (const report of reports) summary2 = summary2.addRaw(formatExecutionTableRow(report));
     await summary2.write();
@@ -108489,8 +108491,7 @@ async function logTestCacheSummary() {
   for (const [command, reportPath] of Object.entries(testCachePaths())) {
     reports.push({ command, ...await summarizeTestCacheFile(reportPath) });
   }
-  startGroup("Bazel test cache");
-  info(TEST_CACHE_METRIC_NOTE);
+  info("Bazel test cache");
   info(formatTestCacheReport(reports));
   const notes = [];
   if (reports.some((report) => !report.available)) notes.push(
@@ -108505,7 +108506,10 @@ async function logTestCacheSummary() {
   if (reports.some((report) => report.available && report.observed === 0)) notes.push(
     "No test runs were observed: the hit rate is n/a."
   );
+  startGroup("Bazel test cache details");
+  info(TEST_CACHE_METRIC_NOTE);
   for (const note of notes) info(note);
+  info("The build-cache and test-cache percentages are different views of cache reuse; do not combine them.");
   endGroup();
   try {
     let summary2 = summary.addHeading("Bazel test cache");
@@ -108558,11 +108562,20 @@ function formatExecutionReport({ command, hits, observed, hitRunners, executedRu
 
 `;
 }
-function formatExecutionTableRow({ command, hits, observed, hitRunners, executedRunners, partial }) {
+function executionTableRow({ command, hits, observed, hitRunners, executedRunners, partial }) {
   const label = command === "build" ? "build/run" : command;
   const percentage = observed === 0 ? "n/a" : `${(hits / observed * 100).toFixed(2).replace(/\.00$/, "")}%`;
-  const warning2 = partial ? " \u26A0\uFE0F partial" : "";
-  return `| ${label} | ${hits} / ${observed} (${percentage})${warning2} | ${escapeTableCell(formatRunnerCounts(hitRunners, "none", true))} | ${escapeTableCell(formatRunnerCounts(executedRunners, "none", false))} |
+  return [
+    label,
+    `${hits} / ${observed}`,
+    percentage,
+    formatRunnerCounts(hitRunners, "none", true),
+    formatRunnerCounts(executedRunners, "none", false),
+    partial ? "Partial" : "Complete"
+  ];
+}
+function formatExecutionTableRow(report) {
+  return `| ${executionTableRow(report).map(escapeTableCell).join(" | ")} |
 `;
 }
 function escapeTableCell(value) {

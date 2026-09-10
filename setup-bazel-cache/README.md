@@ -136,6 +136,10 @@ does not count as a hit.
 
 The log and step summary show the same table:
 
+The job log places the compact cache tables directly in the visible output.
+Invocation scope, metric notes, and incomplete-data details are kept in
+collapsible log groups.
+
 | Command | Cached / total | Hit rate | Local cache | Shared cache | Ran | Caching | Report |
 | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |
 | test | 18 / 20 | 90% | 12 | 6 | 2 | Auto | Complete |
