@@ -108483,14 +108483,8 @@ async function logTestCacheSummary() {
     info(formatTestCacheReport(visibleReports));
   }
   const notes = [];
-  if (reports.some((report) => !report.available)) notes.push(
-    "Unavailable: no readable test-cache data. The command may not have run or may have used another report path."
-  );
   if (reports.some((report) => report.available && report.partial)) notes.push(
     "Partial: only readable test-cache records are counted; some report data was incomplete."
-  );
-  if (reports.some((report) => report.cacheSetting === "no")) notes.push(
-    "Disabled: test-result caching was turned off for this invocation."
   );
   if (reports.some((report) => report.available && report.observed === 0)) notes.push(
     "No test runs were observed: the hit rate is n/a."
@@ -108498,7 +108492,6 @@ async function logTestCacheSummary() {
   startGroup("Bazel test cache details");
   info(TEST_CACHE_METRIC_NOTE);
   for (const note of notes) info(note);
-  info("The build-cache and test-cache percentages are different views of cache reuse; do not combine them.");
   endGroup();
   return { reports, notes };
 }
@@ -108537,11 +108530,6 @@ async function writeCacheSummary(execution, tests, state3) {
   for (const note of notes) summary2 = summary2.addRaw(`${note}
 
 `);
-  if (invocationRows.length > 1) {
-    summary2 = summary2.addRaw(
-      "Build-cache and test-cache percentages are different views; do not add them together.\n\n"
-    );
-  }
   await summary2.write();
 }
 async function reportSafely(name, report) {

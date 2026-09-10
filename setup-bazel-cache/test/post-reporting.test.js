@@ -52,13 +52,13 @@ function runPost(
   return { output, summary: fs.statSync(summaryPath).isFile() ? fs.readFileSync(summaryPath, 'utf8') : '' };
 }
 
-test('post reports unavailable data quietly and continues cache-save eligibility checks', (context) => {
+test('post omits unavailable data quietly and continues cache-save eligibility checks', (context) => {
   const root = fixture(context);
   const { output, summary } = runPost(root, true);
   assert.doesNotMatch(output, /::warning::|::error::/);
-  assert.match(output, /Unavailable/);
+  assert.doesNotMatch(output, /Unavailable/);
   assert.match(output, /Cache saving is disabled on this ref/);
-  assert.match(summary, /Unavailable/);
+  assert.doesNotMatch(summary, /Unavailable/);
   assert.doesNotMatch(summary, /0%/);
 });
 
@@ -111,6 +111,10 @@ test('test report preserves cache output and renders disabled, partial, and no-a
   assert.match(actual.output, /Bazel test cache\n\+[-+]+\+/);
   assert.match(actual.output, /::group::Bazel test cache details/);
   assert.match(actual.output, /\+[-+]+\+/);
+  assert.doesNotMatch(
+    actual.output + actual.summary,
+    /Unavailable: no readable test-cache data|Disabled: test-result caching was turned off|Build-cache and test-cache percentages are different views/,
+  );
   assert.doesNotMatch(actual.output + actual.summary, /DO_NOT_PRINT|::warning::|::error::/);
   assert.doesNotMatch(actual.output + actual.summary, /cacheable spawns|BEP|Executed\/non-hits|Remote\/disk/);
 });

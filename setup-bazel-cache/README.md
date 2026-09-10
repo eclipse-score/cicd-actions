@@ -175,9 +175,10 @@ each managed file is reported. Normal Bazel flag precedence applies: a custom
 does not discover alternative paths. Concurrent invocations sharing a managed
 path are unsupported.
 
-Missing, empty, or unreadable data is shown as Unavailable. Truncated or
-malformed files retain readable counts and are marked Partial. These statuses
-are informational and do not emit GitHub warning annotations or fail the job.
+Missing, empty, or unreadable invocations are omitted from the table. Truncated
+or malformed files retain readable counts and are marked Partial. These
+statuses are informational and do not emit GitHub warning annotations or fail
+the job.
 The existing post-step condition still applies: some failed jobs, including
 those with external cache saving enabled, do not run the post step and receive
 no report.
