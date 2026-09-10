@@ -136,7 +136,7 @@ does not count as a hit.
 
 The log and step summary show the same table:
 
-| Command | Cached / observed | Hit rate | Local | Remote/disk | Executed/non-hits | Test caching | Data |
+| Command | Cached / total | Hit rate | Local cache | Shared cache | Ran | Caching | Report |
 | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |
 | test | 18 / 20 | 90% | 12 | 6 | 2 | Auto | Complete |
 | coverage | 0 / 8 | 0% | 0 | 0 | 8 | Disabled | Complete |

@@ -17,10 +17,10 @@ import path from 'node:path';
 import readline from 'node:readline';
 
 const TEST_CACHE_METRIC_NOTE =
-  'Observed test attempts, including retries, shards, and runs. Latest invocation per command.';
+  'Each test run counts separately, including retries and parallel test pieces. Latest invocation per command.';
 const TEST_CACHE_HEADERS = [
-  'Command', 'Cached / observed', 'Hit rate', 'Local', 'Remote/disk',
-  'Executed/non-hits', 'Test caching', 'Data',
+  'Command', 'Cached / total', 'Hit rate', 'Local cache', 'Shared cache',
+  'Ran', 'Caching', 'Report',
 ];
 
 function testCacheReportingEnabled(value) {

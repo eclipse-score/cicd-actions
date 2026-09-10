@@ -57,7 +57,7 @@ test('post reports unavailable data quietly and continues cache-save eligibility
   assert.doesNotMatch(summary, /0%/);
 });
 
-test('test report preserves spawn output and renders disabled, partial, and no-attempt states', (context) => {
+test('test report preserves cache output and renders disabled, partial, and no-attempt states', (context) => {
   const root = fixture(context);
   fs.writeFileSync(executionLogPaths(root).test, execFileSync('zstd', ['-cq'], { input: Buffer.alloc(0) }));
   fs.writeFileSync(testCachePaths(root).test, [
@@ -80,6 +80,7 @@ test('test report preserves spawn output and renders disabled, partial, and no-a
   assert.match(actual.summary, /1 \/ 1 \| 100%.*Partial/);
   assert.match(actual.output, /\+[-+]+\+/);
   assert.doesNotMatch(actual.output + actual.summary, /DO_NOT_PRINT|::warning::|::error::/);
+  assert.doesNotMatch(actual.output + actual.summary, /cacheable spawns|BEP|Executed\/non-hits|Remote\/disk/);
 });
 
 test('summary write failures do not stop post-step processing', (context) => {

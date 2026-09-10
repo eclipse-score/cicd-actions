@@ -107757,7 +107757,7 @@ var LOG_NAMES = Object.freeze({
   test: "setup-bazel-cache-test.exec.log.zst",
   coverage: "setup-bazel-cache-coverage.exec.log.zst"
 });
-var EXECUTION_LOG_METRIC_NOTE = "Execution-log metric: persistent action-cache results, including some cached tests, are not represented in Bazel execution logs.";
+var EXECUTION_LOG_METRIC_NOTE = "This view counts work that can reuse a cached result; it does not represent every Bazel cache lookup.";
 function executionLogPaths(runnerTemp = process.env.RUNNER_TEMP || import_node_os3.default.tmpdir()) {
   return Object.fromEntries(
     Object.entries(LOG_NAMES).map(([command, fileName]) => [
@@ -107986,16 +107986,16 @@ var import_node_fs5 = __toESM(require("node:fs"), 1);
 var import_node_os5 = __toESM(require("node:os"), 1);
 var import_node_path4 = __toESM(require("node:path"), 1);
 var import_node_readline = __toESM(require("node:readline"), 1);
-var TEST_CACHE_METRIC_NOTE = "Observed test attempts, including retries, shards, and runs. Latest invocation per command.";
+var TEST_CACHE_METRIC_NOTE = "Each test run counts separately, including retries and parallel test pieces. Latest invocation per command.";
 var TEST_CACHE_HEADERS = [
   "Command",
-  "Cached / observed",
+  "Cached / total",
   "Hit rate",
-  "Local",
-  "Remote/disk",
-  "Executed/non-hits",
-  "Test caching",
-  "Data"
+  "Local cache",
+  "Shared cache",
+  "Ran",
+  "Caching",
+  "Report"
 ];
 function testCachePaths(runnerTemp = process.env.RUNNER_TEMP || import_node_os5.default.tmpdir()) {
   return Object.fromEntries(["test", "coverage"].map((command) => [
@@ -108448,7 +108448,7 @@ async function logExecutionCacheSummary() {
   const logs = executionLogPaths();
   const existing = existingExecutionLogs(logs);
   if (existing.length === 0) {
-    info("Bazel cache reporting enabled, but no compact execution logs were produced");
+    info("Bazel cache reporting enabled, but no cache details were produced");
     return;
   }
   const reports = [];
@@ -108460,22 +108460,22 @@ async function logExecutionCacheSummary() {
     }
   }
   if (reports.length === 0) return;
-  info("Bazel cache report (latest invocation only)");
+  info("Bazel build cache report (latest invocation only)");
   info(
-    "This report covers only the last bazel build/run, test, or coverage call. Repeated calls overwrite earlier data."
+    "This report covers only the latest Bazel invocation. Repeated calls overwrite earlier data."
   );
   info(EXECUTION_LOG_METRIC_NOTE);
   for (const report of reports) logExecutionReport(report);
   try {
-    let summary2 = summary.addHeading("Bazel cache report (latest invocation only)");
+    let summary2 = summary.addHeading("Bazel build cache report (latest invocation only)");
     summary2 = summary2.addRaw(
-      "This report covers only the last `bazel build`/`bazel run`, `bazel test`, or `bazel coverage` call. Repeated calls overwrite earlier data.\n\n"
+      "This report covers only the latest Bazel invocation. Repeated calls overwrite earlier data.\n\n"
     );
     summary2 = summary2.addRaw(`${EXECUTION_LOG_METRIC_NOTE}
 
 `);
     summary2 = summary2.addRaw(
-      "| Command | Cacheable spawns hit | Cache hits | Executed/non-hits |\n| --- | ---: | --- | --- |\n"
+      "| Command | Cached / total | Hit rate | Cache hits | Ran |\n| --- | ---: | ---: | --- | --- |\n"
     );
     for (const report of reports) summary2 = summary2.addRaw(formatExecutionTableRow(report));
     await summary2.write();
@@ -108489,26 +108489,26 @@ async function logTestCacheSummary() {
   for (const [command, reportPath] of Object.entries(testCachePaths())) {
     reports.push({ command, ...await summarizeTestCacheFile(reportPath) });
   }
-  startGroup("Bazel test-result cache");
+  startGroup("Bazel test cache");
   info(TEST_CACHE_METRIC_NOTE);
   info(formatTestCacheReport(reports));
   const notes = [];
   if (reports.some((report) => !report.available)) notes.push(
-    "Unavailable: no readable BEP data. The command may not have run or may have used another BEP path."
+    "Unavailable: no readable test-cache data. The command may not have run or may have used another report path."
   );
   if (reports.some((report) => report.available && report.partial)) notes.push(
-    "Partial: only readable records are counted; the BEP file is incomplete or contains invalid records."
+    "Partial: only readable test-cache records are counted; some report data was incomplete."
   );
   if (reports.some((report) => report.cacheSetting === "no")) notes.push(
-    "Disabled: Bazel was invoked with --cache_test_results=no (or --nocache_test_results)."
+    "Disabled: test-result caching was turned off for this invocation."
   );
   if (reports.some((report) => report.available && report.observed === 0)) notes.push(
-    "No observed attempts: the hit rate is n/a."
+    "No test runs were observed: the hit rate is n/a."
   );
   for (const note of notes) info(note);
   endGroup();
   try {
-    let summary2 = summary.addHeading("Bazel test-result cache");
+    let summary2 = summary.addHeading("Bazel test cache");
     summary2 = summary2.addRaw(`${TEST_CACHE_METRIC_NOTE}
 
 `);
@@ -108523,12 +108523,12 @@ async function logTestCacheSummary() {
 
 `);
     summary2 = summary2.addRaw(
-      "BEP test attempts and execution-log spawns overlap; their hit rates must not be combined.\n\n"
+      "The build-cache and test-cache percentages are different views of cache reuse; do not combine them.\n\n"
     );
     await summary2.write();
   } catch {
     summary.emptyBuffer();
-    info("Bazel test-result cache: step summary unavailable; see the job log.");
+    info("Bazel test cache: step summary unavailable; see the job log.");
   }
 }
 async function reportSafely(name, report) {
@@ -108543,18 +108543,16 @@ function logExecutionReport(report) {
   for (const line of formatExecutionReport(report).trimEnd().split("\n")) info(line);
   info("");
 }
-function formatExecutionReport({ command, hits, observed, hitRunners, executedRunners, partial, decoderError }) {
+function formatExecutionReport({ command, hits, observed, hitRunners, executedRunners, partial }) {
   const percentage = observed === 0 ? "n/a" : `${(hits / observed * 100).toFixed(2).replace(/\.00$/, "")}%`;
   const label = command === "build" ? "build/run" : command;
   const lines = [
-    `Bazel ${label} cache: ${hits} / ${observed} observed cacheable spawns hit (${percentage})`,
-    `  Cache hits: ${formatRunnerCounts(hitRunners, "none")}`,
-    `  Executed/non-hits: ${formatRunnerCounts(executedRunners, "none")}`
+    `Bazel ${label} cache: ${hits} / ${observed} cached (${percentage})`,
+    `  Cache hits: ${formatRunnerCounts(hitRunners, "none", true)}`,
+    `  Ran: ${formatRunnerCounts(executedRunners, "none", false)}`
   ];
   if (partial) {
-    lines.push(
-      `Warning: ${decoderError ? `the compact log decoder reported ${decoderError.message}; ` : ""}the execution log was missing records or truncated; counts may be incomplete.`
-    );
+    lines.push("Note: some cache details were incomplete; counts may be incomplete.");
   }
   return `${lines.join("\n")}
 
@@ -108564,15 +108562,28 @@ function formatExecutionTableRow({ command, hits, observed, hitRunners, executed
   const label = command === "build" ? "build/run" : command;
   const percentage = observed === 0 ? "n/a" : `${(hits / observed * 100).toFixed(2).replace(/\.00$/, "")}%`;
   const warning2 = partial ? " \u26A0\uFE0F partial" : "";
-  return `| ${label} | ${hits} / ${observed} (${percentage})${warning2} | ${escapeTableCell(formatRunnerCounts(hitRunners, "none"))} | ${escapeTableCell(formatRunnerCounts(executedRunners, "none"))} |
+  return `| ${label} | ${hits} / ${observed} (${percentage})${warning2} | ${escapeTableCell(formatRunnerCounts(hitRunners, "none", true))} | ${escapeTableCell(formatRunnerCounts(executedRunners, "none", false))} |
 `;
 }
 function escapeTableCell(value) {
   return value.replaceAll("|", "\\|");
 }
-function formatRunnerCounts(runners, emptyValue) {
+function formatRunnerCounts(runners, emptyValue, cached) {
   if (runners.length === 0) return emptyValue;
-  return runners.map(({ runner, count }) => `${count} ${runner}`).join(", ");
+  const totals = /* @__PURE__ */ new Map();
+  for (const { runner, count } of runners) {
+    const label = friendlyRunnerLabel(runner, cached);
+    totals.set(label, (totals.get(label) || 0) + count);
+  }
+  return [...totals.entries()].map(([label, count]) => `${count} ${label}`).join(", ");
+}
+function friendlyRunnerLabel(runner, cached) {
+  const normalized = runner.toLowerCase();
+  if (cached) {
+    if (normalized.includes("disk")) return "disk cache";
+    return "shared cache";
+  }
+  return normalized.includes("remote") ? "remote" : "local";
 }
 function formatDuration(seconds) {
   if (!Number.isFinite(seconds)) return "unknown";
@@ -108670,8 +108681,8 @@ async function run() {
       info("Setup did not complete; caches will not be saved");
       return;
     }
-    await reportSafely("Bazel execution-log report", logExecutionCacheSummary);
-    await reportSafely("Bazel test-result cache report", logTestCacheSummary);
+    await reportSafely("Bazel build cache report", logExecutionCacheSummary);
+    await reportSafely("Bazel test cache report", logTestCacheSummary);
     await uploadProfiles();
     logProfileAnalysis();
     const {

@@ -23,7 +23,7 @@ const LOG_NAMES = Object.freeze({
 });
 
 const EXECUTION_LOG_METRIC_NOTE =
-  'Execution-log metric: persistent action-cache results, including some cached tests, are not represented in Bazel execution logs.';
+  'This view counts work that can reuse a cached result; it does not represent every Bazel cache lookup.';
 
 /** Return the fixed compact-log paths managed by this action. */
 function executionLogPaths(runnerTemp = process.env.RUNNER_TEMP || os.tmpdir()) {
