@@ -70428,11 +70428,10 @@ async function run() {
       info(`Added Bazel 8 compatibility import to ${configuration.userBazelrc}`);
     }
     if (configuration.instrumentation) {
-      const actionPath = process.env.GITHUB_ACTION_PATH;
-      if (!actionPath) throw new Error("GITHUB_ACTION_PATH is not set; cannot install Bazel launchers.");
+      const launcherPath = typeof __dirname === "string" ? import_node_path6.default.resolve(__dirname, "../launcher/index.js") : import_node_path6.default.join(__dirname, "launcher.js");
       const launcherDirectory = wrapperDirectoryPath();
       installBazelLaunchers({
-        launcherPath: import_node_path6.default.join(actionPath, "dst/launcher/index.js"),
+        launcherPath,
         wrapperDirectory: launcherDirectory
       });
       addPath(launcherDirectory);

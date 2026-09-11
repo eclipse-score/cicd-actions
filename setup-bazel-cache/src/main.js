@@ -213,11 +213,14 @@ async function run() {
     }
 
     if (configuration.instrumentation) {
-      const actionPath = process.env.GITHUB_ACTION_PATH;
-      if (!actionPath) throw new Error('GITHUB_ACTION_PATH is not set; cannot install Bazel launchers.');
+      // GITHUB_ACTION_PATH is only provided for composite actions. Resolve from
+      // this module: the CommonJS bundle and ESM sources have different layouts.
+      const launcherPath = typeof __dirname === 'string'
+        ? path.resolve(__dirname, '../launcher/index.js')
+        : path.join(import.meta.dirname, 'launcher.js');
       const launcherDirectory = wrapperDirectoryPath();
       installBazelLaunchers({
-        launcherPath: path.join(actionPath, 'dst/launcher/index.js'),
+        launcherPath,
         wrapperDirectory: launcherDirectory,
       });
       core.addPath(launcherDirectory);
