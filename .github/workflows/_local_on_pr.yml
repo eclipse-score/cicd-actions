@@ -47,6 +47,11 @@ jobs:
     permissions:
       contents: read
 
+  setup-qemu-latest-tests:
+    uses: ./.github/workflows/test-setup-qemu-latest.yml
+    permissions:
+      contents: read
+
   warm-bazel-repository-cache-tests:
     uses: ./.github/workflows/test-warm-bazel-repository-cache.yml
     permissions:
@@ -91,6 +96,7 @@ jobs:
       - common
       - inter-repo-access-tests
       - setup-qnx-sdp-tests
+      - setup-qemu-latest-tests
       - unblock-user-namespace-for-linux-sandbox-tests
       - setup-bazel-cache-tests
       - warm-bazel-repository-cache-tests
