@@ -69,12 +69,18 @@ runs:
     - name: Compute cache key and paths
       id: vars
       shell: bash
+      env:
+        INSTALL_PREFIX_BASE: ${{ inputs.install-prefix }}
+        QEMU_VERSION: ${{ inputs.qemu-version }}
+        QEMU_TARGETS: ${{ inputs.qemu-targets }}
+        CONFIGURE_ARGS: ${{ inputs.configure-args }}
+        EXTRA_BUILD_DEPS: ${{ inputs.extra-build-deps }}
       run: |
         set -euo pipefail
-        install_prefix="${{ inputs.install-prefix }}/${{ inputs.qemu-version }}"
+        install_prefix="$INSTALL_PREFIX_BASE/$QEMU_VERSION"
         prefix_hash="$(printf '%s' "$install_prefix" | sha256sum | cut -d' ' -f1)"
-        config_hash="$(printf '%s' "${{ inputs.qemu-targets }}|${{ inputs.configure-args }}|${{ inputs.extra-build-deps }}" | sha256sum | cut -d' ' -f1)"
-        cache_key="qemu-${{ runner.os }}-${{ inputs.qemu-version }}-${prefix_hash}-${config_hash}"
+        config_hash="$(printf '%s' "$QEMU_TARGETS|$CONFIGURE_ARGS|$EXTRA_BUILD_DEPS" | sha256sum | cut -d' ' -f1)"
+        cache_key="qemu-${{ runner.os }}-$QEMU_VERSION-${prefix_hash}-${config_hash}"
 
         echo "install-prefix=$install_prefix" >> "$GITHUB_OUTPUT"
         echo "cache-key=$cache_key" >> "$GITHUB_OUTPUT"
@@ -82,9 +88,11 @@ runs:
 
     - name: Prepare QEMU install prefix
       shell: bash
+      env:
+        INSTALL_PREFIX: ${{ steps.vars.outputs.install-prefix }}
       run: |
         set -euo pipefail
-        sudo install -d -o "$(id -u)" -g "$(id -g)" "${{ steps.vars.outputs.install-prefix }}"
+        sudo install -d -o "$(id -u)" -g "$(id -g)" "$INSTALL_PREFIX"
 
     - name: Restore or save QEMU build cache
       id: cache
@@ -96,10 +104,14 @@ runs:
     - name: Remove apt-installed QEMU
       if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
+      env:
+        QEMU_TARGETS: ${{ inputs.qemu-targets }}
+        QEMU_VERSION: ${{ inputs.qemu-version }}
+        ALLOW_DOWNGRADE: ${{ inputs.allow-downgrade }}
       run: |
         set -euo pipefail
         qemu_target=""
-        IFS=',' read -ra qemu_targets <<< "${{ inputs.qemu-targets }}"
+        IFS=',' read -ra qemu_targets <<< "$QEMU_TARGETS"
         for target in "${qemu_targets[@]}"; do
           target="${target//[[:space:]]/}"
           if [[ "$target" == *-softmmu ]]; then
@@ -108,8 +120,8 @@ runs:
           fi
         done
         qemu_binary="qemu-system-${qemu_target}"
-        requested_version="${{ inputs.qemu-version }}"
-        allow_downgrade="${{ inputs.allow-downgrade }}"
+        requested_version="$QEMU_VERSION"
+        allow_downgrade="$ALLOW_DOWNGRADE"
         installed_version=""
 
         if command -v "$qemu_binary" >/dev/null; then
@@ -129,16 +141,22 @@ runs:
     - name: Install build dependencies
       if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
+      env:
+        EXTRA_BUILD_DEPS: ${{ inputs.extra-build-deps }}
       run: |
+        set -euo pipefail
+        read -ra extra_build_deps <<< "$EXTRA_BUILD_DEPS"
         sudo apt-get update
         sudo apt-get install -y \
           ninja-build build-essential libglib2.0-dev libpixman-1-dev \
           libfdt-dev zlib1g-dev flex bison pkg-config python3 python3-venv gnupg \
-          ${{ inputs.extra-build-deps }}
+          "${extra_build_deps[@]}"
 
     - name: Download, verify, extract QEMU source and cleanup downloads.
       if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
+      env:
+        QEMU_VERSION: ${{ inputs.qemu-version }}
       run: |
         set -euo pipefail
         qemu_signing_key_fingerprint="CEACC9E15534EBABB82D3FA03353C9CEF108B584"
@@ -146,30 +164,36 @@ runs:
         chmod 700 "$GNUPGHOME"
         trap 'rm -rf "$GNUPGHOME"' EXIT
 
-        curl -fsSLO "https://download.qemu.org/qemu-${{ inputs.qemu-version }}.tar.xz"
-        curl -fsSLO "https://download.qemu.org/qemu-${{ inputs.qemu-version }}.tar.xz.sig"
+        curl -fsSLO "https://download.qemu.org/qemu-$QEMU_VERSION.tar.xz"
+        curl -fsSLO "https://download.qemu.org/qemu-$QEMU_VERSION.tar.xz.sig"
         curl -fsSL "https://keys.openpgp.org/vks/v1/by-fingerprint/${qemu_signing_key_fingerprint}" | gpg --batch --import
         actual_fingerprint="$(gpg --batch --with-colons --fingerprint "$qemu_signing_key_fingerprint" | awk -F: '/^fpr:/ { print $10; exit }')"
         if [[ "$actual_fingerprint" != "$qemu_signing_key_fingerprint" ]]; then
           echo "Imported QEMU signing key fingerprint '$actual_fingerprint' does not match expected '$qemu_signing_key_fingerprint'." >&2
           exit 1
         fi
-        gpg --batch --verify "qemu-${{ inputs.qemu-version }}.tar.xz.sig" "qemu-${{ inputs.qemu-version }}.tar.xz"
-        tar xf "qemu-${{ inputs.qemu-version }}.tar.xz"
-        rm -rf "qemu-${{ inputs.qemu-version }}.tar.xz" "qemu-${{ inputs.qemu-version }}.tar.xz.sig"
+        gpg --batch --verify "qemu-$QEMU_VERSION.tar.xz.sig" "qemu-$QEMU_VERSION.tar.xz"
+        tar xf "qemu-$QEMU_VERSION.tar.xz"
+        rm -rf "qemu-$QEMU_VERSION.tar.xz" "qemu-$QEMU_VERSION.tar.xz.sig"
 
     - name: Build and install QEMU and cleanup QEMU sources.
       if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
       working-directory: qemu-${{ inputs.qemu-version }}
+      env:
+        INSTALL_PREFIX: ${{ steps.vars.outputs.install-prefix }}
+        QEMU_TARGETS: ${{ inputs.qemu-targets }}
+        CONFIGURE_ARGS: ${{ inputs.configure-args }}
+        NPROC: ${{ inputs.nproc }}
       run: |
         set -euo pipefail
+        read -ra configure_args <<< "$CONFIGURE_ARGS"
         ./configure \
-          --prefix="${{ steps.vars.outputs.install-prefix }}" \
-          --target-list="${{ inputs.qemu-targets }}" \
+          --prefix="$INSTALL_PREFIX" \
+          --target-list="$QEMU_TARGETS" \
           --disable-docs --disable-gtk --disable-sdl \
-          ${{ inputs.configure-args }}
-        build_jobs="${{ inputs.nproc }}"
+          "${configure_args[@]}"
+        build_jobs="$NPROC"
         if [[ -z "$build_jobs" || "$build_jobs" == "0" ]]; then
           build_jobs="$(nproc)"
         fi
@@ -179,7 +203,9 @@ runs:
     - name: Clean QEMU source
       if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
-      run: rm -rf "qemu-${{ inputs.qemu-version }}"
+      env:
+        QEMU_VERSION: ${{ inputs.qemu-version }}
+      run: rm -rf "qemu-$QEMU_VERSION"
 
     - name: Add QEMU to PATH
       shell: bash
@@ -188,25 +214,29 @@ runs:
     - name: Validate the installation
       if: inputs.validation-target != ''
       shell: bash
+      env:
+        VALIDATION_TARGET: ${{ inputs.validation-target }}
+        QEMU_TARGETS: ${{ inputs.qemu-targets }}
+        BIN_PATH: ${{ steps.vars.outputs.bin-path }}
       run: |
         set -euo pipefail
-        validation_target="${{ inputs.validation-target }}"
+        validation_target="$VALIDATION_TARGET"
         target_configured=0
-        IFS=',' read -ra qemu_targets <<< "${{ inputs.qemu-targets }}"
+        IFS=',' read -ra qemu_targets <<< "$QEMU_TARGETS"
         for target in "${qemu_targets[@]}"; do
           target="${target//[[:space:]]/}"
-          if [[ "$target" == "$validation_target" || "$target" == "${validation_target}-softmmu" || "$target" == "${validation_target}-linux-user" || "$target" == "${validation_target}-bsd-user" ]]; then
+          if [[ "$target" == "${validation_target}-softmmu" ]]; then
             target_configured=1
             break
           fi
         done
 
         if [[ "$target_configured" -ne 1 ]]; then
-          echo "Skipping validation for target '$validation_target'; it is not present in qemu-targets '${{ inputs.qemu-targets }}'."
+          echo "Skipping validation for target '$validation_target'; it is not present as a softmmu target in qemu-targets '$QEMU_TARGETS'."
           exit 0
         fi
 
-        "${{ steps.vars.outputs.bin-path }}/qemu-system-${validation_target}" -machine help
+        "$BIN_PATH/qemu-system-${validation_target}" -machine help
 
     - name: Enable KVM group permissions
       shell: bash
@@ -220,3 +250,8 @@ runs:
         echo "KERNEL==\"kvm\", GROUP=\"kvm\", MODE=\"$KVM_MODE\", OPTIONS+=\"static_node=kvm\"" | sudo tee /etc/udev/rules.d/99-kvm4all.rules
         sudo udevadm control --reload-rules
         sudo udevadm trigger --name-match=kvm
+        # Group membership changes don't apply to the current session, so chown
+        # directly to guarantee access without requiring a new login.
+        if [[ -e /dev/kvm ]]; then
+          sudo chown "$(id -u)":kvm /dev/kvm
+        fi

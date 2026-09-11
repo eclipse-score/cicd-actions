@@ -41,7 +41,7 @@ Pin the action to a commit SHA for immutable builds:
 | `extra-build-deps` | Empty | Additional space-separated apt packages required by custom configurations. |
 | `nproc` | Automatic | Number of parallel `make` jobs. Empty uses the runner CPU count. |
 | `validation-target` | `aarch64` | Target validated with `-machine help`. Empty disables validation. |
-| `kvm-mode` | `0666` | Four-digit octal access mode for the `/dev/kvm` device udev rule. |
+| `kvm-mode` | `0660` | Four-digit octal access mode for the `/dev/kvm` device udev rule. |
 
 For example, build multiple targets with a custom configure option:
 
