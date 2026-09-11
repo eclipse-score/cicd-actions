@@ -18,7 +18,11 @@ inputs:
   qemu-version:
     description: QEMU release version to build from source.
     required: false
-    default: "10.2.4"
+    default: "11.1.1"
+  allow-downgrade:
+    description: Allow replacing an installed newer QEMU with qemu-version.
+    required: false
+    default: "false"
   qemu-targets:
     description: Comma-separated list passed to QEMU's --target-list configure option.
     required: false
@@ -91,7 +95,29 @@ runs:
     - name: Remove apt-installed QEMU
       if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
-      run: sudo apt-get remove -y --purge 'qemu-system*' 'qemu-utils' || true
+      run: |
+        set -euo pipefail
+        qemu_target="${{ inputs.qemu-targets }}"
+        qemu_target="${qemu_target%%,*}"
+        qemu_target="${qemu_target//[[:space:]]/}"
+        qemu_binary="qemu-system-${qemu_target%-softmmu}"
+        requested_version="${{ inputs.qemu-version }}"
+        allow_downgrade="${{ inputs.allow-downgrade }}"
+        installed_version=""
+
+        if command -v "$qemu_binary" >/dev/null; then
+          version_output="$("$qemu_binary" --version 2>/dev/null || true)"
+          installed_version="$(awk '$1 == "QEMU" && $2 == "emulator" && $3 == "version" { print $4; exit }' <<< "$version_output")"
+        fi
+
+        if [[ -n "$installed_version" ]] \
+          && dpkg --compare-versions "$installed_version" ge "$requested_version" \
+          && { [[ "$allow_downgrade" != "true" ]] || dpkg --compare-versions "$installed_version" eq "$requested_version"; }; then
+          echo "Keeping $qemu_binary $installed_version (requested: $requested_version)."
+        else
+          echo "Removing apt-installed QEMU; ${qemu_binary} version '${installed_version:-not installed}' does not satisfy the requested installation policy."
+          sudo apt-get remove -y --purge 'qemu-system*' 'qemu-utils' || true
+        fi
 
     - name: Install build dependencies
       if: steps.cache.outputs.cache-hit != 'true'

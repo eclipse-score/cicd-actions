@@ -69,6 +69,7 @@ jobs:
           fi
 
           "$qemu_bin" --version
+          "$qemu_bin" -machine help | grep -Eq '(^|[[:space:]])raspi4b([[:space:]]|$)'
 
       - name: Verify KVM udev mode was applied
         shell: bash

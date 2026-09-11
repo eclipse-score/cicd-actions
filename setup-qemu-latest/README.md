@@ -33,7 +33,8 @@ Pin the action to a commit SHA for immutable builds:
 
 | Input | Default | Description |
 | --- | --- | --- |
-| `qemu-version` | `10.2.4` | QEMU release to download from `download.qemu.org` and build. |
+| `qemu-version` | `11.1.1` | QEMU release to download from `download.qemu.org` and build. |
+| `allow-downgrade` | `false` | Allow replacing an installed newer QEMU with `qemu-version`. |
 | `qemu-targets` | `aarch64-softmmu` | Comma-separated targets passed to `--target-list`. |
 | `install-prefix` | `/opt/qemu` | Base installation directory. The QEMU version is appended. |
 | `configure-args` | Empty | Additional flags appended to `./configure`. |
@@ -54,6 +55,8 @@ For example, build multiple targets with a custom configure option:
     kvm-mode: "0660"
 ```
 
+  To replace a newer installed QEMU with the requested version, set `allow-downgrade: "true"`.
+
 ## Outputs
 
 | Output | Description |
@@ -73,10 +76,10 @@ The action adds `bin-path` to `PATH` for subsequent steps in the same job. Outpu
 
 ## Behavior
 
-- Existing apt-installed `qemu-system*` and `qemu-utils` packages are purged on a cache miss to avoid binary and dependency conflicts with the source-built QEMU version.
+- On a cache miss, apt-installed `qemu-system*` and `qemu-utils` packages are retained when the first configured system target reports a QEMU version equal to or newer than `qemu-version`. When `allow-downgrade` is `true`, only an equal version is retained.
 - QEMU source archives are verified with the published detached GPG signature before extraction.
 - Builds are cached by runner OS, QEMU version, targets, configure arguments, and extra build dependencies.
-- Build dependencies remain installed for the rest of the job so later build or test steps can use them.
+- On a cache miss, build dependencies remain installed for the rest of the job so later build or test steps can use them.
 - KVM device permissions are configured for the runner.
 
 ## Requirements
