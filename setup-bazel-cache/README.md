@@ -25,6 +25,10 @@ default branch may publish new cache generations. To allow other branches:
         release/**
 ```
 
+Run `actions/checkout` before this action. If checkout metadata is missing, the
+action emits a warning and continues with its normal setup; workspace-dependent
+Bazel cache behavior may not work as intended.
+
 In branch patterns, `*` stays within one path component and `**` also matches
 across `/`.
 
@@ -106,14 +110,14 @@ is used instead.
 
 ### Build/action cache
 
-`report-cache-hits` reads Bazel's compact execution log for the latest
-`build`/`run`, `test`, and `coverage` invocation. It counts cacheable work that
+`report-cache-hits` reads a separate Bazel compact execution log for every
+`build`, `run`, `test`, and `coverage` invocation. It counts cacheable work that
 was reused; it is not a complete measure of every Bazel action-cache lookup.
 
 ### Test-result cache
 
-`report-test-cache-hits` reads Bazel Build Event Protocol test results for the
-latest `test` and `coverage` invocations. It counts attempts, including retries,
+`report-test-cache-hits` reads Bazel Build Event Protocol test results for every
+`test` and `coverage` invocation. It counts attempts, including retries,
 shards, and repeated runs. `cachedLocally` and `executionInfo.cachedRemotely`
 are counted as hits; remote execution alone is not a cache hit. A disabled
 test-result cache is shown as `⚠️ Disabled`, without changing the observed
@@ -122,20 +126,33 @@ counts.
 Reporting does not enable test-result caching. Bazel's normal
 `--cache_test_results` setting controls whether results may be reused.
 
-The action manages one temporary report file per command. Repeated invocations
-overwrite the previous file, so only the latest invocation is reported. A
-custom `--build_event_json_file` path is not discovered. Malformed data keeps
-readable records and is marked partial; missing invocations are omitted.
-Reporting errors are non-fatal.
+The action installs a temporary `bazel`/`bazelisk` launcher on `PATH`. Each
+measured invocation receives a three-digit sequence (`000` through `999`) and
+its own temporary report directory, so concurrent or repeated build commands
+remain distinct. The 1000th measured invocation fails before Bazel starts;
+there is no wraparound or overwrite. Only `build`, `run`, `test`, and
+`coverage` consume a sequence; other Bazel commands pass through unchanged.
+Malformed data keeps readable records and is marked partial; missing reports
+are shown as unavailable in invocation details. Reporting errors are
+non-fatal.
+
+The launcher-provided output destinations are used for reporting. A later
+user-supplied `--execution_log_compact_file`, `--build_event_json_file`, or
+`--profile` option can override its destination; such custom output is not
+discovered by the post step.
+
+The launcher is used when Bazel is invoked through the normal `bazel` or
+`bazelisk` command found on `PATH`. Direct absolute executable paths, aliases,
+and Bazel invocations isolated inside another container are outside its scope.
 
 ### Profiling
 
-Set `enable-profiling: true` to upload the latest build/test profiles and show
-profile analysis in the post step. The artifact is named
+Set `enable-profiling: true` to upload all captured build/run/test/coverage
+profiles and show profile analysis in the post step. The artifact is named
 `bazel-profiles-<disk-cache-key>`, so matrix jobs can identify their artifacts.
 Unsafe or unusually long keys are made readable and disambiguated. Profiling
 adds JSON writing and post-step processing time; no artifact is uploaded when
-neither command produces a profile.
+no measured invocation produces a profile.
 
 ## Permissions and security
 

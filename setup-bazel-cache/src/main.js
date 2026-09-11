@@ -13,6 +13,7 @@
 
 import * as core from '@actions/core';
 import fs from 'node:fs';
+import path from 'node:path';
 import {
   cacheLabel,
   canSaveAfterFailure,
@@ -27,9 +28,13 @@ import {
   resolveOutputBase,
   restoreExternalCaches,
 } from './external.js';
-import { clearExecutionLogs } from './execution-log.js';
-import { clearTestCacheReports, testCacheReportingEnabled } from './test-cache.js';
-import { cacheHitReportingEnabled, clearProfiles, profilingEnabled } from './profiling.js';
+import { testCacheReportingEnabled } from './test-cache.js';
+import { cacheHitReportingEnabled, profilingEnabled } from './profiling.js';
+import {
+  initializeInvocationStore,
+  installBazelLaunchers,
+  wrapperDirectoryPath,
+} from './invocation.js';
 import {
   ensureComparisonHistory,
   lockFileChanged,
@@ -46,6 +51,7 @@ import {
   resolveSaveModes,
 } from './inputs.js';
 import { restoreSummaryRows } from './summary.js';
+import { warnIfMissingCheckout } from './workspace.js';
 
 /**
  * Configure Bazel and restore the selected caches before the caller's build.
@@ -62,6 +68,7 @@ async function run() {
 
     const workspace = process.env.GITHUB_WORKSPACE;
     if (!workspace) throw new Error('GITHUB_WORKSPACE is not set.');
+    warnIfMissingCheckout(workspace, core.warning);
 
     const diskCacheKey = core.getInput('disk-cache-key', { required: true });
     const enableProfiling = profilingEnabled(core.getInput('enable-profiling'));
@@ -89,17 +96,24 @@ async function run() {
       reportTestCacheHits,
       externalCacheEnabled: cacheModes.restore.external || cacheModes.save.external,
     });
-    if (configuration.profiles) {
-      clearProfiles(configuration.profiles);
-      core.info('Bazel profiling enabled; later build/test invocations overwrite their profiles.');
-    }
-    if (configuration.executionLogs) {
-      clearExecutionLogs(configuration.executionLogs);
-      core.info('Bazel cache reporting enabled; repeated invocations overwrite the latest command log.');
-    }
-    if (configuration.testCacheReports) {
-      clearTestCacheReports(configuration.testCacheReports);
-      core.info('Bazel test-cache reporting enabled; repeated invocations overwrite the latest test or coverage report.');
+    if (configuration.instrumentation) {
+      initializeInvocationStore(configuration.instrumentation.root);
+      core.exportVariable(
+        'SETUP_BAZEL_CACHE_INVOCATION_ROOT',
+        configuration.instrumentation.root,
+      );
+      core.exportVariable(
+        'SETUP_BAZEL_CACHE_ENABLE_PROFILING',
+        configuration.instrumentation.enableProfiling.toString(),
+      );
+      core.exportVariable(
+        'SETUP_BAZEL_CACHE_REPORT_CACHE_HITS',
+        configuration.instrumentation.reportCacheHits.toString(),
+      );
+      core.exportVariable(
+        'SETUP_BAZEL_CACHE_REPORT_TEST_CACHE_HITS',
+        configuration.instrumentation.reportTestCacheHits.toString(),
+      );
     }
 
     const ref = process.env.GITHUB_REF || '';
@@ -198,6 +212,20 @@ async function run() {
       core.info(`Added Bazel 8 compatibility import to ${configuration.userBazelrc}`);
     }
 
+    if (configuration.instrumentation) {
+      const actionPath = process.env.GITHUB_ACTION_PATH;
+      if (!actionPath) throw new Error('GITHUB_ACTION_PATH is not set; cannot install Bazel launchers.');
+      const launcherDirectory = wrapperDirectoryPath();
+      installBazelLaunchers({
+        launcherPath: path.join(actionPath, 'dst/launcher/index.js'),
+        wrapperDirectory: launcherDirectory,
+      });
+      core.addPath(launcherDirectory);
+      core.info(
+        `Bazel invocation instrumentation enabled; records are stored in ${configuration.instrumentation.root}`,
+      );
+    }
+
     // The post condition is shared by all cache families. If external saving
     // is selected, suppress the whole failed-job path so external repositories
     // can only be published after a successful workflow.
@@ -227,6 +255,7 @@ async function run() {
           Object.entries(restoreDetails.external.repositories).map(([name, detail]) => [name, detail.result]),
         ),
         outputBase: configuration.external?.outputBase || null,
+        invocationRoot: configuration.instrumentation?.root || null,
         restoreResults,
         repositoryCacheStartSize,
       }),

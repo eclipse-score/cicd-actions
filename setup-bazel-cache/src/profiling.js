@@ -11,18 +11,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // *******************************************************************************
 
-import fs from 'node:fs';
 import { createHash } from 'node:crypto';
-import os from 'node:os';
-import path from 'node:path';
 
 const PROFILE_ARTIFACT_PREFIX = 'bazel-profiles';
 const PROFILE_ARTIFACT_MAX_LENGTH = 200;
 const PROFILE_ARTIFACT_HASH_LENGTH = 10;
-const PROFILE_NAMES = Object.freeze({
-  build: 'setup-bazel-cache-build.profile.gz',
-  test: 'setup-bazel-cache-test.profile.gz',
-});
 
 /** Build a readable, matrix-safe artifact name from the disk-cache key. */
 function profileArtifactName(diskCacheKey) {
@@ -60,33 +53,8 @@ function profilingEnabled(value, runnerDebug = process.env.RUNNER_DEBUG === '1')
   throw new Error("Input 'enable-profiling' must be one of: auto, true, false");
 }
 
-/** Return the fixed profile paths used by the managed Bazel configuration. */
-function profilePaths(runnerTemp = process.env.RUNNER_TEMP || os.tmpdir()) {
-  return Object.fromEntries(
-    Object.entries(PROFILE_NAMES).map(([command, fileName]) => [
-      command,
-      path.join(runnerTemp, fileName),
-    ]),
-  );
-}
-
-/** Remove profiles left by an earlier action invocation in the same job. */
-function clearProfiles(profiles) {
-  for (const profile of Object.values(profiles)) {
-    fs.rmSync(profile, { force: true });
-  }
-}
-
-/** Return only profiles produced by the current job invocation. */
-function existingProfiles(profiles) {
-  return Object.values(profiles).filter((profile) => fs.existsSync(profile));
-}
-
 export {
   cacheHitReportingEnabled,
-  clearProfiles,
-  existingProfiles,
   profileArtifactName,
-  profilePaths,
   profilingEnabled,
 };

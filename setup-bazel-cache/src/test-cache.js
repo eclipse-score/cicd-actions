@@ -12,12 +12,12 @@
 // *******************************************************************************
 
 import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import readline from 'node:readline';
 
 const TEST_CACHE_METRIC_NOTE =
-  'Each test run counts separately, including retries and parallel test pieces. Latest invocation per command.';
+  'Each test run counts separately, including retries and parallel test pieces. Reports include every captured invocation.';
+const TEST_CACHE_DISABLED_NOTE =
+  '⚠️ Disabled means test-result caching was turned off for this invocation; test attempts were not eligible for reuse.';
 const DISABLED_CACHE_STATUS = '⚠️ Disabled';
 const TEST_CACHE_HEADERS = [
   'Command', 'Cached / total', 'Hit rate', 'Local cache', 'Shared cache',
@@ -29,16 +29,6 @@ function testCacheReportingEnabled(value) {
   if (normalized === 'true') return true;
   if (normalized === 'false') return false;
   throw new Error("Input 'report-test-cache-hits' must be one of: true, false");
-}
-
-function testCachePaths(runnerTemp = process.env.RUNNER_TEMP || os.tmpdir()) {
-  return Object.fromEntries(['test', 'coverage'].map((command) => [
-    command, path.join(runnerTemp, `setup-bazel-cache-${command}.bep.json`),
-  ]));
-}
-
-function clearTestCacheReports(reports) {
-  for (const report of Object.values(reports)) fs.rmSync(report, { force: true });
 }
 
 function isObject(value) {
@@ -154,14 +144,22 @@ function testCacheRow(report) {
   const { command, hits, observed, localHits, remoteHits, executed, cacheSetting, partial, available } = report;
   const rate = !available || observed === 0
     ? 'n/a' : `${((hits / observed) * 100).toFixed(2).replace(/\.00$/, '')}%`;
-  const setting = { yes: 'Enabled', no: 'Disabled', auto: 'Auto', unknown: 'Unknown' }[cacheSetting];
+  const setting = {
+    yes: 'Enabled',
+    no: 'Disabled',
+    auto: 'Auto',
+    mixed: 'Mixed',
+    unknown: 'Unknown',
+  }[cacheSetting];
   const status = !available
     ? 'Unavailable'
     : observed === 0
       ? 'No attempts'
       : partial
         ? 'Partial data'
-        : cacheSetting === 'no'
+        : cacheSetting === 'mixed'
+          ? 'Mixed settings'
+          : cacheSetting === 'no'
           ? DISABLED_CACHE_STATUS
           : hits > 0
             ? 'Used'
@@ -172,6 +170,11 @@ function testCacheRow(report) {
     setting || 'Unknown',
     status,
   ];
+}
+
+/** Return whether the report row is showing the disabled-cache status. */
+function testCacheReportIsDisabled(report) {
+  return report.available && report.observed > 0 && !report.partial && report.cacheSetting === 'no';
 }
 
 function formatTestCacheTableRow(report) {
@@ -191,11 +194,11 @@ function formatTestCacheReport(reports) {
 export {
   TEST_CACHE_HEADERS,
   TEST_CACHE_METRIC_NOTE,
+  TEST_CACHE_DISABLED_NOTE,
   DISABLED_CACHE_STATUS,
-  clearTestCacheReports,
   formatTestCacheReport,
   formatTestCacheTableRow,
   summarizeTestCacheFile,
-  testCachePaths,
+  testCacheReportIsDisabled,
   testCacheReportingEnabled,
 };

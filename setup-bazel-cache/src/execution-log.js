@@ -12,39 +12,9 @@
 // *******************************************************************************
 
 import { spawn } from 'node:child_process';
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-
-const LOG_NAMES = Object.freeze({
-  build: 'setup-bazel-cache-build.exec.log.zst',
-  run: 'setup-bazel-cache-run.exec.log.zst',
-  test: 'setup-bazel-cache-test.exec.log.zst',
-  coverage: 'setup-bazel-cache-coverage.exec.log.zst',
-});
 
 const EXECUTION_LOG_METRIC_NOTE =
   'This view counts work that can reuse a cached result; it does not represent every Bazel cache lookup.';
-
-/** Return the fixed compact-log paths managed by this action. */
-function executionLogPaths(runnerTemp = process.env.RUNNER_TEMP || os.tmpdir()) {
-  return Object.fromEntries(
-    Object.entries(LOG_NAMES).map(([command, fileName]) => [
-      command,
-      path.join(runnerTemp, fileName),
-    ]),
-  );
-}
-
-/** Remove logs left by an earlier invocation of this action in the same job. */
-function clearExecutionLogs(logs) {
-  for (const log of Object.values(logs)) fs.rmSync(log, { force: true });
-}
-
-/** Return only compact logs produced during this job. */
-function existingExecutionLogs(logs) {
-  return Object.entries(logs).filter(([, log]) => fs.existsSync(log));
-}
 
 /**
  * Read the compact log stream emitted by Bazel's --execution_log_compact_file.
@@ -270,9 +240,6 @@ class CompactExecutionLogParser {
 
 export {
   EXECUTION_LOG_METRIC_NOTE,
-  clearExecutionLogs,
-  existingExecutionLogs,
-  executionLogPaths,
   parseExecutionLogEntry,
   summarizeExecutionLog,
   summarizeSpawns,

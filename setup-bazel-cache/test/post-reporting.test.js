@@ -18,8 +18,12 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { executionLogPaths } from '../src/execution-log.js';
-import { testCachePaths } from '../src/test-cache.js';
+import {
+  claimInvocation,
+  finishInvocation,
+  initializeInvocationStore,
+  invocationRootPath,
+} from '../src/invocation.js';
 
 function fixture(context) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'post-reporting-'));
@@ -31,7 +35,7 @@ function runPost(
   root,
   enabled,
   summaryPath = path.join(root, 'summary.md'),
-  state = { cacheSaveAllowed: false },
+  state = { cacheSaveAllowed: false, invocationRoot: invocationRootPath(root) },
 ) {
   if (!fs.existsSync(summaryPath)) fs.writeFileSync(summaryPath, '');
   const output = execFileSync(process.execPath, [
@@ -64,8 +68,15 @@ test('post omits unavailable data quietly and continues cache-save eligibility c
 
 test('test report preserves cache output and renders disabled, partial, and no-attempt states', (context) => {
   const root = fixture(context);
-  fs.writeFileSync(executionLogPaths(root).test, execFileSync('zstd', ['-cq'], { input: Buffer.alloc(0) }));
-  fs.writeFileSync(testCachePaths(root).test, [
+  const invocationRoot = invocationRootPath(root);
+  initializeInvocationStore(invocationRoot);
+  const testInvocation = claimInvocation(invocationRoot, 'test', {
+    executionLog: true,
+    testCache: true,
+    profile: false,
+  });
+  fs.writeFileSync(testInvocation.files.executionLog, execFileSync('zstd', ['-cq'], { input: Buffer.alloc(0) }));
+  fs.writeFileSync(testInvocation.files.testCache, [
     JSON.stringify({ structuredCommandLine: {
       commandLineLabel: 'canonical',
       sections: [{ optionList: { option: [{ optionName: 'cache_test_results', optionValue: '0' }] } }],
@@ -76,10 +87,17 @@ test('test report preserves cache output and renders disabled, partial, and no-a
     }),
     JSON.stringify({ lastMessage: true }),
   ].join('\n'));
-  fs.writeFileSync(testCachePaths(root).coverage, [
+  finishInvocation(testInvocation, 0);
+  const coverageInvocation = claimInvocation(invocationRoot, 'coverage', {
+    executionLog: true,
+    testCache: true,
+    profile: false,
+  });
+  fs.writeFileSync(coverageInvocation.files.testCache, [
     '{"private":"DO_NOT_PRINT',
     JSON.stringify({ id: { testResult: { label: '//:t' } }, testResult: { cachedLocally: true } }),
   ].join('\n'));
+  finishInvocation(coverageInvocation, 0);
   const baseline = runPost(root, false);
   fs.writeFileSync(path.join(root, 'summary.md'), '');
   const actual = runPost(root, true, path.join(root, 'summary.md'), {
@@ -94,7 +112,8 @@ test('test report preserves cache output and renders disabled, partial, and no-a
   assert.match(baseline.summary, /<h1>Bazel cache summary<\/h1>/);
   assert.match(actual.summary, /<h1>Bazel cache summary<\/h1>/);
   assert.match(actual.summary, /\| Cache \| Cached \/ total \| Hit rate \| Status \|/);
-  assert.match(actual.summary, /\| test \(test cache \(off\)\) \| 0 \/ 1 \| 0% \| ⚠️ Disabled \|/);
+  assert.match(actual.summary, /\| test \(test cache\) \| 0 \/ 1 \| 0% \| ⚠️ Disabled \|/);
+  assert.match(actual.summary, /⚠️ Disabled means test-result caching was turned off for this invocation/);
   assert.match(actual.summary, /\| coverage \(test cache\) \| 1 \/ 1 \| 100% \| Partial data \|/);
   assert.match(actual.summary, /\| Bazelisk cache \| 1 \/ 1 \| 100% \| Used \|/);
   assert.match(actual.summary, /\| Disk cache \| 1 \/ 1 \| 100% \| Used \|/);
@@ -115,14 +134,45 @@ test('test report preserves cache output and renders disabled, partial, and no-a
   assert.doesNotMatch(actual.summary, /0 \/ 0/);
   assert.doesNotMatch(actual.summary, /Local cache \| Shared cache \| Ran \|/);
   assert.match(actual.output, /Bazel test cache\n\+[-+]+\+/);
+  assert.match(actual.output, /⚠️ Disabled means test-result caching was turned off for this invocation/);
+  assert.equal(
+    actual.output.match(/⚠️ Disabled means test-result caching was turned off for this invocation/g)?.length,
+    1,
+  );
   assert.match(actual.output, /::group::Bazel test cache details/);
   assert.match(actual.output, /\+[-+]+\+/);
   assert.doesNotMatch(
     actual.output + actual.summary,
-    /Unavailable: no readable test-cache data|Disabled: test-result caching was turned off|Build-cache and test-cache percentages are different views/,
+    /Unavailable: no readable test-cache data|Build-cache and test-cache percentages are different views/,
   );
   assert.doesNotMatch(actual.output + actual.summary, /DO_NOT_PRINT|::warning::|::error::/);
   assert.doesNotMatch(actual.output + actual.summary, /cacheable spawns|BEP|Executed\/non-hits|Remote\/disk/);
+});
+
+test('post aggregates repeated test invocations while retaining per-invocation details', (context) => {
+  const root = fixture(context);
+  const invocationRoot = invocationRootPath(root);
+  initializeInvocationStore(invocationRoot);
+  for (let sequence = 0; sequence < 2; sequence += 1) {
+    const invocation = claimInvocation(invocationRoot, 'test', {
+      executionLog: false,
+      testCache: true,
+      profile: false,
+    });
+    fs.writeFileSync(invocation.files.testCache, [
+      JSON.stringify({
+        id: { testResult: { label: `//:test-${sequence}` } },
+        testResult: { cachedLocally: true },
+      }),
+      JSON.stringify({ lastMessage: true }),
+    ].join('\n'));
+    finishInvocation(invocation, 0);
+  }
+
+  const { output, summary } = runPost(root, true);
+  assert.match(summary, /\| test \(2 invocations\) \(test cache\) \| 2 \/ 2 \| 100% \| Used \|/);
+  assert.match(output, /000-test/);
+  assert.match(output, /001-test/);
 });
 
 test('summary write failures do not stop post-step processing', (context) => {

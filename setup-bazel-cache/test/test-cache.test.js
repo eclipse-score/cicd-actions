@@ -17,11 +17,9 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import {
-  clearTestCacheReports,
   formatTestCacheReport,
   formatTestCacheTableRow,
   summarizeTestCacheFile,
-  testCachePaths,
   testCacheReportingEnabled,
 } from '../src/test-cache.js';
 
@@ -149,19 +147,6 @@ test('disabled test-result caching reports zero hits with the effective setting'
   assert.equal(summary.hits, 0);
   assert.equal(summary.observed, 1);
   assert.match(formatTestCacheReport([{ command: 'test', ...summary }]), /0%/);
-});
-
-test('managed BEP paths are separate, discoverable, and removable', (context) => {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'setup-bazel-cache-bep-paths-'));
-  context.after(() => fs.rmSync(directory, { recursive: true, force: true }));
-  const reports = testCachePaths(directory);
-  for (const report of Object.values(reports)) fs.writeFileSync(report, 'stale');
-  const unrelated = path.join(directory, 'caller.bep.json');
-  fs.writeFileSync(unrelated, 'caller data');
-  assert.notEqual(reports.test, reports.coverage);
-  clearTestCacheReports(reports);
-  assert.deepEqual(Object.values(reports).map(fs.existsSync), [false, false]);
-  assert.equal(fs.readFileSync(unrelated, 'utf8'), 'caller data');
 });
 
 async function summarize(context, records) {

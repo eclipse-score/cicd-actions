@@ -38,22 +38,9 @@ test('configuration uses readable Linux cache names and a temporary bazelrc', ()
   );
   assert.match(configuration.bazelrcContents, /^build --disk_cache=.*bazel-disk$/m);
   assert.match(configuration.bazelrcContents, /^common --repository_cache=.*bazel-repo$/m);
-  assert.match(
-    configuration.bazelrcContents,
-    /^build --execution_log_compact_file=.*setup-bazel-cache-build\.exec\.log\.zst$/m,
-  );
-  assert.match(
-    configuration.bazelrcContents,
-    /^run --execution_log_compact_file=.*setup-bazel-cache-run\.exec\.log\.zst$/m,
-  );
-  assert.match(
-    configuration.bazelrcContents,
-    /^test --execution_log_compact_file=.*setup-bazel-cache-test\.exec\.log\.zst$/m,
-  );
-  assert.match(
-    configuration.bazelrcContents,
-    /^coverage --execution_log_compact_file=.*setup-bazel-cache-coverage\.exec\.log\.zst$/m,
-  );
+  assert.doesNotMatch(configuration.bazelrcContents, /execution_log_compact_file/);
+  assert.doesNotMatch(configuration.bazelrcContents, /build_event_json_file/);
+  assert.doesNotMatch(configuration.bazelrcContents, /--profile=/);
   assert.doesNotMatch(configuration.bazelrcContents, /output_base/);
   assert.equal(configuration.caches.disk.generational, true);
   assert.equal(configuration.caches.repository.generational, true);
@@ -71,41 +58,33 @@ test('cache-hit reporting can be disabled without adding execution-log flags', (
     reportCacheHits: false,
   });
 
-  assert.equal(configuration.executionLogs, null);
+  assert.equal(configuration.instrumentation.reportCacheHits, false);
+  assert.equal(configuration.instrumentation.reportTestCacheHits, true);
   assert.doesNotMatch(configuration.bazelrcContents, /execution_log_compact_file/);
 });
 
 test('test-cache reporting is enabled by default and can be disabled independently', () => {
   const defaultConfiguration = createConfiguration('/workspace', 'test');
-  assert.ok(defaultConfiguration.testCacheReports);
+  assert.equal(defaultConfiguration.instrumentation.reportTestCacheHits, true);
 
   const disabled = createConfiguration('/workspace', 'test', {
     reportTestCacheHits: false,
   });
-  assert.equal(disabled.testCacheReports, null);
+  assert.equal(disabled.instrumentation.reportTestCacheHits, false);
 
   const enabled = createConfiguration('/workspace', 'test', {
     reportTestCacheHits: true,
   });
-  assert.match(
-    enabled.bazelrcContents,
-    /^test --build_event_json_file=.*setup-bazel-cache-test\.bep\.json$/m,
-  );
-  assert.match(enabled.bazelrcContents, /^test --nobuild_event_json_file_path_conversion$/m);
-  assert.match(
-    enabled.bazelrcContents,
-    /^coverage --build_event_json_file=.*setup-bazel-cache-coverage\.bep\.json$/m,
-  );
-  assert.match(enabled.bazelrcContents, /^coverage --nobuild_event_json_file_path_conversion$/m);
-  assert.equal(enabled.executionLogs !== null, true);
+  assert.equal(enabled.instrumentation.reportTestCacheHits, true);
+  assert.doesNotMatch(enabled.bazelrcContents, /build_event_json_file/);
 
   const independent = createConfiguration('/workspace', 'test', {
     reportCacheHits: false,
     reportTestCacheHits: true,
   });
-  assert.equal(independent.executionLogs, null);
-  assert.ok(independent.testCacheReports);
-  assert.match(independent.bazelrcContents, /build_event_json_file/);
+  assert.equal(independent.instrumentation.reportCacheHits, false);
+  assert.equal(independent.instrumentation.reportTestCacheHits, true);
+  assert.doesNotMatch(independent.bazelrcContents, /build_event_json_file/);
 });
 
 test('Bazelisk version is read as a readable cache-key component', (context) => {
@@ -144,20 +123,13 @@ test('external identity prefers the Bzlmod lockfile and includes legacy workspac
   ]);
 });
 
-test('profiling adds separate fixed paths for build and test', () => {
+test('profiling is enabled through launcher state rather than fixed Bazelrc paths', () => {
   const configuration = createConfiguration('/workspace', 'test', {
     enableProfiling: true,
   });
 
-  assert.match(
-    configuration.bazelrcContents,
-    /^build --profile=.*setup-bazel-cache-build\.profile\.gz$/m,
-  );
-  assert.match(
-    configuration.bazelrcContents,
-    /^test --profile=.*setup-bazel-cache-test\.profile\.gz$/m,
-  );
-  assert.deepEqual(Object.keys(configuration.profiles), ['build', 'test']);
+  assert.equal(configuration.instrumentation.enableProfiling, true);
+  assert.doesNotMatch(configuration.bazelrcContents, /--profile=/);
 });
 
 test('Bazel 8 compatibility import preserves the user bazelrc', (context) => {

@@ -35,26 +35,26 @@ inputs:
 
   enable-profiling:
     description: >
-      Add fixed build and test profile paths to the managed Bazelrc and upload
-      the last profiles in the post step. Accepts auto, true, or false. With
-      auto, profiling is enabled when GitHub Actions debug logging is enabled.
+      Capture a profile for every measured Bazel invocation and upload them in
+      the post step. Accepts auto, true, or false. With auto, profiling is
+      enabled when GitHub Actions debug logging is enabled.
     required: false
     default: "auto"
 
   report-cache-hits:
     description: >
       Report cacheable spawns from Bazel compact execution logs in the job log
-      and step summary. Repeated invocations of the same Bazel command retain
-      only the latest invocation. Accepts true or false.
+      and step summary for every measured Bazel invocation. Accepts true or
+      false.
     required: false
     default: "true"
 
   report-test-cache-hits:
     description: >
       Report cached Bazel test attempts from Build Event Protocol JSON in the
-      job log and step summary. Covers the latest test and coverage invocation
-      separately, including retries, shards, and repeated runs. Accepts true or
-      false and defaults to true.
+      job log and step summary for every test and coverage invocation,
+      including retries, shards, and repeated runs. Accepts true or false and
+      defaults to true.
     required: false
     default: "true"
 

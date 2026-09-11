@@ -14,10 +14,8 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { executionLogPaths } from './execution-log.js';
+import { invocationRootPath } from './invocation.js';
 import { CACHE_KEY_NAMESPACE, formatCacheComponent } from './keys.js';
-import { profilePaths } from './profiling.js';
-import { testCachePaths } from './test-cache.js';
 
 const MAX_BAZELISK_VERSION_LENGTH = 400;
 const MAX_DISK_CACHE_KEY_LENGTH = 400;
@@ -134,38 +132,22 @@ function createConfiguration(
   const runnerTemp = process.env.RUNNER_TEMP || os.tmpdir();
   const baseKey = CACHE_KEY_NAMESPACE;
   const platform = `linux-${os.arch()}`;
-  const profiles = enableProfiling ? profilePaths(runnerTemp) : null;
-  const executionLogs = reportCacheHits ? executionLogPaths(runnerTemp) : null;
-  const testCacheReports = reportTestCacheHits ? testCachePaths(runnerTemp) : null;
+  const instrumentation = enableProfiling || reportCacheHits || reportTestCacheHits
+    ? {
+      root: invocationRootPath(runnerTemp),
+      enableProfiling,
+      reportCacheHits,
+      reportTestCacheHits,
+    }
+    : null;
+  // Cache locations are stable job configuration and belong in the generated
+  // rc file. Invocation-scoped measurement destinations are deliberately not
+  // put here: every Bazel process needs a fresh path, which the PATH launcher
+  // allocates immediately before starting that process.
   const bazelrcLines = [
     `build --disk_cache=${path.join(cacheRoot, 'bazel-disk')}`,
     `common --repository_cache=${path.join(cacheRoot, 'bazel-repo')}`,
   ];
-  if (profiles) {
-    bazelrcLines.push(
-      `build --profile=${profiles.build}`,
-      `test --profile=${profiles.test}`,
-    );
-  }
-  if (executionLogs) {
-    bazelrcLines.push(
-      `build --execution_log_compact_file=${executionLogs.build}`,
-      `run --execution_log_compact_file=${executionLogs.run}`,
-      `test --execution_log_compact_file=${executionLogs.test}`,
-      `coverage --execution_log_compact_file=${executionLogs.coverage}`,
-    );
-  }
-  if (testCacheReports) {
-    // Coverage inherits test options, so it needs its own destination to keep
-    // each command's latest invocation. Local path conversion avoids uploading
-    // referenced artifacts solely to collect these counters.
-    bazelrcLines.push(
-      `test --build_event_json_file=${testCacheReports.test}`,
-      'test --nobuild_event_json_file_path_conversion',
-      `coverage --build_event_json_file=${testCacheReports.coverage}`,
-      'coverage --nobuild_event_json_file_path_conversion',
-    );
-  }
 
   return {
     additiveCacheSaveEnvironment:
@@ -218,9 +200,7 @@ function createConfiguration(
       }
       : null,
     platform,
-    profiles,
-    executionLogs,
-    testCacheReports,
+    instrumentation,
     workspace,
   };
 }

@@ -13,7 +13,7 @@
 
 import * as core from '@actions/core';
 import { DefaultArtifactClient } from '@actions/artifact';
-import path from 'node:path';
+import fs from 'node:fs';
 import {
   cacheLabel,
   deleteCacheByKey,
@@ -28,44 +28,65 @@ import { createConfiguration } from './config.js';
 import { configureExternalCache, saveExternalCaches } from './external.js';
 import {
   EXECUTION_LOG_METRIC_NOTE,
-  existingExecutionLogs,
-  executionLogPaths,
   summarizeExecutionLog,
 } from './execution-log.js';
 import {
+  invocationFilePaths,
+  invocationLabel,
+  invocationRootPath,
+  listInvocations,
+} from './invocation.js';
+import {
   DISABLED_CACHE_STATUS,
+  TEST_CACHE_DISABLED_NOTE,
   TEST_CACHE_METRIC_NOTE,
   formatTestCacheReport,
   summarizeTestCacheFile,
-  testCachePaths,
+  testCacheReportIsDisabled,
 } from './test-cache.js';
 import {
-  existingProfiles,
   profileArtifactName,
-  profilePaths,
   profilingEnabled,
 } from './profiling.js';
 import { summarizeProfileFile } from './profile-analysis.js';
 
-/** Report cache reuse from the latest invocation of each Bazel command. */
-async function logExecutionCacheSummary() {
+/** Report cache reuse from every captured build-like Bazel invocation. */
+async function logExecutionCacheSummary(root = invocationRootPath()) {
   if (core.getInput('report-cache-hits').trim().toLowerCase() !== 'true') return null;
 
-  const logs = executionLogPaths();
-  const existing = existingExecutionLogs(logs);
-  if (existing.length === 0) return null;
+  const invocations = listInvocations(root)
+    .filter((invocation) => invocation.metrics?.executionLog === true);
+  if (invocations.length === 0) return null;
 
   const reports = [];
-  for (const [command, logPath] of existing) {
+  for (const invocation of invocations) {
+    const logPath = invocationFilePaths(invocation.directory).executionLog;
     try {
-      reports.push({ command, ...(await summarizeExecutionLog(logPath)) });
+      const report = fs.existsSync(logPath)
+        ? await summarizeExecutionLog(logPath)
+        : unavailableExecutionReport();
+      reports.push({
+        ...report,
+        command: invocationLabel(invocation),
+        baseCommand: invocation.command,
+        sequence: invocation.sequence,
+      });
     } catch (error) {
-      core.warning(`Bazel ${command} execution-log analysis failed: ${error.stack || error}`);
+      core.warning(
+        `Bazel ${invocationLabel(invocation)} execution-log analysis failed: ${error.stack || error}`,
+      );
+      reports.push({
+        ...unavailableExecutionReport(),
+        command: invocationLabel(invocation),
+        baseCommand: invocation.command,
+        sequence: invocation.sequence,
+      });
     }
   }
   if (reports.length === 0) return null;
 
-  const visibleReports = reports.filter(hasObservedData);
+  const aggregates = aggregateExecutionReports(reports);
+  const visibleReports = aggregates.filter(hasObservedData);
   if (visibleReports.length > 0) {
     core.info('Bazel build cache');
     logTable(
@@ -75,57 +96,194 @@ async function logExecutionCacheSummary() {
     core.info('');
   }
   core.startGroup('Bazel build cache details');
-  core.info('Latest Bazel invocation only; repeated calls overwrite earlier data.');
+  core.info('Every captured Bazel build, run, test, and coverage invocation is reported separately.');
   core.info(EXECUTION_LOG_METRIC_NOTE);
   for (const report of reports) logExecutionReport(report);
   core.endGroup();
-  return { reports };
+  return { reports, aggregates };
 }
 
-/** Report cached test attempts from the latest test and coverage invocations. */
-async function logTestCacheSummary() {
+/** Report cached test attempts from every captured test and coverage invocation. */
+async function logTestCacheSummary(root = invocationRootPath()) {
   if (core.getInput('report-test-cache-hits').trim().toLowerCase() !== 'true') return null;
 
+  const invocations = listInvocations(root)
+    .filter((invocation) => invocation.metrics?.testCache === true);
+  if (invocations.length === 0) return null;
+
   const reports = [];
-  for (const [command, reportPath] of Object.entries(testCachePaths())) {
-    reports.push({ command, ...(await summarizeTestCacheFile(reportPath)) });
+  for (const invocation of invocations) {
+    const reportPath = invocationFilePaths(invocation.directory).testCache;
+    const report = fs.existsSync(reportPath)
+      ? await summarizeTestCacheFile(reportPath)
+      : unavailableTestCacheReport();
+    reports.push({
+      ...report,
+      command: invocationLabel(invocation),
+      baseCommand: invocation.command,
+      sequence: invocation.sequence,
+    });
   }
 
-  const visibleReports = reports.filter(hasObservedData);
+  const aggregates = aggregateTestCacheReports(reports);
+  const visibleReports = aggregates.filter(hasObservedData);
+  const detailsNotes = [];
+  const summaryNotes = [];
+  if (reports.some(testCacheReportIsDisabled)) {
+    if (visibleReports.length > 0) core.info(TEST_CACHE_DISABLED_NOTE);
+    summaryNotes.push(TEST_CACHE_DISABLED_NOTE);
+  }
   if (visibleReports.length > 0) {
     core.info('Bazel test cache');
     core.info(formatTestCacheReport(visibleReports));
   }
-  const notes = [];
-  if (reports.some((report) => report.available && report.partial)) notes.push(
-    'Partial: only readable test-cache records are counted; some report data was incomplete.',
-  );
-  if (reports.some((report) => report.available && report.observed === 0)) notes.push(
-    'No test runs were observed: the hit rate is n/a.',
-  );
+  if (reports.some((report) => report.available && report.partial)) {
+    const note = 'Partial: only readable test-cache records are counted; some report data was incomplete.';
+    detailsNotes.push(note);
+    summaryNotes.push(note);
+  }
+  if (reports.some((report) => report.available && report.observed === 0)) {
+    const note = 'No test runs were observed: the hit rate is n/a.';
+    detailsNotes.push(note);
+    summaryNotes.push(note);
+  }
   core.startGroup('Bazel test cache details');
   core.info(TEST_CACHE_METRIC_NOTE);
-  for (const note of notes) core.info(note);
+  core.info('Per-invocation details:');
+  core.info(formatTestCacheReport(reports));
+  for (const note of detailsNotes) core.info(note);
   core.endGroup();
-  return { reports, notes };
+  return { reports, aggregates, notes: summaryNotes };
+}
+
+function unavailableExecutionReport() {
+  return {
+    hits: 0,
+    executed: 0,
+    observed: 0,
+    hitRunners: [],
+    executedRunners: [],
+    available: false,
+    partial: true,
+  };
+}
+
+function unavailableTestCacheReport() {
+  return {
+    hits: 0,
+    observed: 0,
+    localHits: 0,
+    remoteHits: 0,
+    executed: 0,
+    cacheSetting: 'unknown',
+    completed: false,
+    malformedLines: 0,
+    validEvents: 0,
+    readError: 'ENOENT',
+    available: false,
+    partial: true,
+  };
+}
+
+function aggregateExecutionReports(reports) {
+  const groups = new Map();
+  for (const report of reports) {
+    const current = groups.get(report.baseCommand) || {
+      command: report.baseCommand,
+      baseCommand: report.baseCommand,
+      invocationCount: 0,
+      hits: 0,
+      executed: 0,
+      observed: 0,
+      hitRunners: new Map(),
+      executedRunners: new Map(),
+      available: false,
+      partial: false,
+    };
+    current.invocationCount += 1;
+    current.hits += report.hits;
+    current.executed += report.executed;
+    current.observed += report.observed;
+    current.available ||= report.available !== false;
+    current.partial ||= report.partial;
+    mergeRunnerCounts(current.hitRunners, report.hitRunners);
+    mergeRunnerCounts(current.executedRunners, report.executedRunners);
+    groups.set(report.baseCommand, current);
+  }
+  return [...groups.values()].map((report) => ({
+    ...report,
+    hitRunners: sortRunnerCounts(report.hitRunners),
+    executedRunners: sortRunnerCounts(report.executedRunners),
+  }));
+}
+
+function aggregateTestCacheReports(reports) {
+  const groups = new Map();
+  for (const report of reports) {
+    const current = groups.get(report.baseCommand) || {
+      command: report.baseCommand,
+      baseCommand: report.baseCommand,
+      invocationCount: 0,
+      hits: 0,
+      observed: 0,
+      localHits: 0,
+      remoteHits: 0,
+      executed: 0,
+      cacheSettings: new Set(),
+      available: false,
+      partial: false,
+    };
+    current.invocationCount += 1;
+    current.hits += report.hits;
+    current.observed += report.observed;
+    current.localHits += report.localHits;
+    current.remoteHits += report.remoteHits;
+    current.executed += report.executed;
+    if (report.available && report.cacheSetting !== 'unknown') {
+      current.cacheSettings.add(report.cacheSetting);
+    }
+    current.available ||= report.available !== false;
+    current.partial ||= report.partial;
+    groups.set(report.baseCommand, current);
+  }
+  return [...groups.values()].map((report) => ({
+    ...report,
+    cacheSetting: report.cacheSettings.size === 0
+      ? 'unknown'
+      : report.cacheSettings.size === 1
+        ? [...report.cacheSettings][0]
+        : 'mixed',
+  }));
+}
+
+function mergeRunnerCounts(target, counts) {
+  for (const { runner, count } of counts || []) {
+    target.set(runner, (target.get(runner) || 0) + count);
+  }
+}
+
+function sortRunnerCounts(counts) {
+  return [...counts.entries()]
+    .sort(([leftName, leftCount], [rightName, rightCount]) =>
+      rightCount - leftCount || leftName.localeCompare(rightName))
+    .map(([runner, count]) => ({ runner, count }));
 }
 
 /** Write one compact step-summary table for invocation metrics and cache restores. */
 async function writeCacheSummary(execution, tests, state) {
   // Keep the summary opt-in with the two reporting inputs. Restore details
   // enrich an enabled report; they do not create an otherwise empty report.
-  if (!execution && !tests) return;
+  const reportingEnabled = core.getInput('report-cache-hits').trim().toLowerCase() === 'true' ||
+    core.getInput('report-test-cache-hits').trim().toLowerCase() === 'true';
+  if (!execution && !tests && !reportingEnabled) return;
 
   const invocationRows = [
-    ...(execution?.reports || [])
+    ...(execution?.aggregates || [])
       .filter(hasObservedData)
       .map((report) => cacheSummaryRow('Build cache', report)),
-    ...(tests?.reports || [])
+    ...(tests?.aggregates || [])
       .filter(hasObservedData)
-      .map((report) => cacheSummaryRow(
-        report.cacheSetting === 'no' ? 'Test cache (off)' : 'Test cache',
-        report,
-      )),
+      .map((report) => cacheSummaryRow('Test cache', report)),
   ];
   const rows = [
     ...invocationRows,
@@ -135,7 +293,7 @@ async function writeCacheSummary(execution, tests, state) {
 
   let summary = core.summary.addHeading('Bazel cache summary');
   summary = summary.addRaw(
-    'Latest invocation per command. Restore rows show which setup caches were available.\n\n',
+    'All captured Bazel invocations are included. Restore rows show which setup caches were available.\n\n',
   );
   if (rows.length === 0) {
     summary = summary.addRaw('No cache data was available for this job.\n\n');
@@ -176,9 +334,12 @@ function cacheSummaryRow(cache, report) {
   const rate = report.observed === 0
     ? 'n/a'
     : `${((report.hits / report.observed) * 100).toFixed(2).replace(/\.00$/, '')}%`;
-  const command = report.command;
+  const command = report.baseCommand || report.command;
+  const invocationCount = report.invocationCount > 1
+    ? ` (${report.invocationCount} invocations)`
+    : '';
   return {
-    cache: `${command} (${cache.toLowerCase()})`,
+    cache: `${command}${invocationCount} (${cache.toLowerCase()})`,
     cached: `${report.hits} / ${report.observed}`,
     rate,
     status: invocationStatus(report),
@@ -188,7 +349,9 @@ function cacheSummaryRow(cache, report) {
 
 /** Use outcome words in the overview; report completeness belongs in details. */
 function invocationStatus(report) {
+  if (report.available === false) return 'Unavailable';
   if (report.partial) return 'Partial data';
+  if (report.cacheSetting === 'mixed') return 'Mixed settings';
   if (report.cacheSetting === 'no') return DISABLED_CACHE_STATUS;
   return report.hits > 0 ? 'Used' : 'No hits';
 }
@@ -306,16 +469,25 @@ function formatDuration(seconds) {
 }
 
 /** Print a compact performance summary from the profiles already collected. */
-function logProfileAnalysis() {
+function logProfileAnalysis(root = invocationRootPath()) {
   if (!profilingEnabled(core.getInput('enable-profiling'))) return;
 
-  const files = existingProfiles(profilePaths());
-  if (files.length === 0) return;
+  const profiles = listInvocations(root)
+    .filter((invocation) => invocation.metrics?.profile === true)
+    .map((invocation) => ({
+      invocation,
+      path: invocationFilePaths(invocation.directory).profile,
+    }))
+    .filter(({ path: profile }) => fs.existsSync(profile));
+  if (profiles.length === 0) return;
 
   const summaries = [];
-  for (const profile of files) {
+  for (const { invocation, path: profile } of profiles) {
     try {
-      summaries.push(summarizeProfileFile(profile));
+      summaries.push({
+        label: invocationLabel(invocation),
+        summary: summarizeProfileFile(profile),
+      });
     } catch (error) {
       core.warning(`Bazel profile analysis failed for ${profile}: ${error.stack || error}`);
     }
@@ -325,8 +497,8 @@ function logProfileAnalysis() {
   core.startGroup('Bazel profile analysis');
   core.info('Action durations are cumulative across concurrent actions, not wall-clock time.');
   const summaryHeaders = ['Profile', 'Bazel', 'Elapsed', 'Critical path', 'Action events'];
-  const summaryRows = summaries.map((summary) => [
-    path.basename(summary.name),
+  const summaryRows = summaries.map(({ label, summary }) => [
+    label,
     summary.bazelVersion,
     formatDuration(summary.totalSeconds),
     formatDuration(summary.criticalPathSeconds),
@@ -334,8 +506,8 @@ function logProfileAnalysis() {
   ]);
   logTable(summaryHeaders, summaryRows);
 
-  const phaseRows = summaries.flatMap((summary) => summary.phaseDurations.map((phase) => [
-    path.basename(summary.name),
+  const phaseRows = summaries.flatMap(({ label, summary }) => summary.phaseDurations.map((phase) => [
+    label,
     `${phase.from} -> ${phase.to}`,
     formatDuration(phase.seconds),
   ]));
@@ -344,8 +516,8 @@ function logProfileAnalysis() {
     logTable(['Profile', 'Interval', 'Duration'], phaseRows);
   }
 
-  const actionRows = summaries.flatMap((summary) => summary.actionStats.slice(0, 8).map((action) => [
-    path.basename(summary.name),
+  const actionRows = summaries.flatMap(({ label, summary }) => summary.actionStats.slice(0, 8).map((action) => [
+    label,
     action.mnemonic,
     action.count.toString(),
     formatDuration(action.totalSeconds),
@@ -415,15 +587,22 @@ async function run() {
       return;
     }
 
-    const executionReport = await reportSafely('Bazel build cache report', logExecutionCacheSummary);
-    const testReport = await reportSafely('Bazel test cache report', logTestCacheSummary);
     const savedState = JSON.parse(state);
+    const invocationRoot = savedState.invocationRoot || invocationRootPath();
+    const executionReport = await reportSafely(
+      'Bazel build cache report',
+      () => logExecutionCacheSummary(invocationRoot),
+    );
+    const testReport = await reportSafely(
+      'Bazel test cache report',
+      () => logTestCacheSummary(invocationRoot),
+    );
     await reportSafely(
       'Bazel cache summary',
       () => writeCacheSummary(executionReport, testReport, savedState),
     );
-    await uploadProfiles(savedState.diskCacheKey);
-    logProfileAnalysis();
+    await uploadProfiles(savedState.diskCacheKey, invocationRoot);
+    logProfileAnalysis(invocationRoot);
 
     const {
       cacheSaveAllowed,
@@ -528,14 +707,16 @@ async function run() {
   }
 }
 
-/** Upload the last build and test profiles without modifying them. */
-async function uploadProfiles(diskCacheKey) {
+/** Upload every captured profile without modifying the per-invocation files. */
+async function uploadProfiles(diskCacheKey, root = invocationRootPath()) {
   if (!profilingEnabled(core.getInput('enable-profiling'))) return;
 
-  const profiles = profilePaths();
-  const files = existingProfiles(profiles);
+  const files = listInvocations(root)
+    .filter((invocation) => invocation.metrics?.profile === true)
+    .map((invocation) => invocationFilePaths(invocation.directory).profile)
+    .filter((profile) => fs.existsSync(profile));
   if (files.length === 0) {
-    core.info('Bazel profiling enabled, but no build or test profile was produced');
+    core.info('Bazel profiling enabled, but no measured invocation produced a profile');
     return;
   }
 
@@ -545,7 +726,7 @@ async function uploadProfiles(diskCacheKey) {
     const result = await artifact.uploadArtifact(
       artifactName,
       files,
-      path.dirname(files[0]),
+      root,
       { compressionLevel: 0 },
     );
     core.info(
