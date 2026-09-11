@@ -72,9 +72,10 @@ function writeJsonAtomically(filePath, value) {
 /**
  * Claim the first unused sequence with O_EXCL. Keeping claims forever makes
  * sequence allocation monotonic without requiring a shared lock or a counter
- * that could be corrupted by two concurrent Bazel launchers.
+ * that could be corrupted by two concurrent Bazel launchers. Label-like target
+ * patterns are retained as optional metadata for the post-step summary.
  */
-function claimInvocation(root, command, metrics = {}) {
+function claimInvocation(root, command, metrics = {}, targets = []) {
   if (!MEASURED_COMMANDS.includes(command)) {
     throw new Error(`Cannot capture unsupported Bazel command '${command}'.`);
   }
@@ -98,10 +99,14 @@ function claimInvocation(root, command, metrics = {}) {
     const directory = path.join(root, invocationDirectoryName(sequence, command));
     fs.mkdirSync(directory);
     const files = invocationFilePaths(directory);
+    const capturedTargets = Array.isArray(targets)
+      ? targets.filter((target) => typeof target === 'string' && target.length > 0)
+      : [];
     const metadata = {
       schemaVersion: 1,
       sequence,
       command,
+      targets: capturedTargets,
       startedAt: new Date().toISOString(),
       finishedAt: null,
       completed: false,

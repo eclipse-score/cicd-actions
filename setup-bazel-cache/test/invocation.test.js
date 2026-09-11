@@ -28,7 +28,7 @@ import {
   invocationFilePaths,
   invocationRootPath,
 } from '../src/invocation.js';
-import { findMeasuredCommand } from '../src/launcher.js';
+import { findMeasuredCommand, findTargetPatterns } from '../src/launcher.js';
 
 function temporaryRoot(context, prefix = 'setup-bazel-cache-invocations-') {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -43,6 +43,13 @@ test('launcher recognizes measured Bazel commands after startup options', () => 
   assert.equal(findMeasuredCommand(['--', 'build']), null);
 });
 
+test('launcher captures target patterns while excluding options and run arguments', () => {
+  assert.deepEqual(
+    findTargetPatterns(['run', '--run_under', 'value', '//pkg:binary', '@rules//:tool', '--', '//:program-arg'], 0),
+    ['//pkg:binary', '@rules//:tool'],
+  );
+});
+
 test('invocation claims are unique, ordered, and retain completed metadata', (context) => {
   const root = temporaryRoot(context);
   initializeInvocationStore(root);
@@ -50,7 +57,7 @@ test('invocation claims are unique, ordered, and retain completed metadata', (co
     executionLog: true,
     testCache: false,
     profile: true,
-  });
+  }, ['//:all']);
   const second = claimInvocation(root, 'test', {
     executionLog: false,
     testCache: true,
@@ -62,6 +69,7 @@ test('invocation claims are unique, ordered, and retain completed metadata', (co
   assert.equal(second.metadata.sequence, 1);
   assert.equal(fs.existsSync(invocationFilePaths(first.directory).executionLog), false);
   assert.equal(JSON.parse(fs.readFileSync(first.metadataPath, 'utf8')).completed, true);
+  assert.deepEqual(JSON.parse(fs.readFileSync(first.metadataPath, 'utf8')).targets, ['//:all']);
   assert.deepEqual(listInvocations(root).map(({ sequence, command }) => ({ sequence, command })), [
     { sequence: 0, command: 'build' },
     { sequence: 1, command: 'test' },

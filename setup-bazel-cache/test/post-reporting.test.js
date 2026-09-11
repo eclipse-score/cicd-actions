@@ -56,6 +56,34 @@ function runPost(
   return { output, summary: fs.statSync(summaryPath).isFile() ? fs.readFileSync(summaryPath, 'utf8') : '' };
 }
 
+function varint(value) {
+  const bytes = [];
+  let remaining = BigInt(value);
+  do {
+    let byte = Number(remaining & 0x7fn);
+    remaining >>= 7n;
+    if (remaining !== 0n) byte |= 0x80;
+    bytes.push(byte);
+  } while (remaining !== 0n);
+  return Buffer.from(bytes);
+}
+
+function field(number, wireType, value) {
+  const key = varint((BigInt(number) << 3n) | BigInt(wireType));
+  if (wireType === 0) return Buffer.concat([key, varint(value)]);
+  return Buffer.concat([key, varint(value.length), value]);
+}
+
+function compressedExecutionLog() {
+  const spawn = Buffer.concat([
+    field(11, 2, Buffer.from('local')),
+    field(12, 0, 1),
+    field(14, 0, 1),
+  ]);
+  const entry = field(7, 2, spawn);
+  return execFileSync('zstd', ['-cq'], { input: Buffer.concat([varint(entry.length), entry]) });
+}
+
 test('post omits unavailable data quietly and continues cache-save eligibility checks', (context) => {
   const root = fixture(context);
   const { output, summary } = runPost(root, true);
@@ -111,13 +139,13 @@ test('test report preserves cache output and renders disabled, partial, and no-a
   });
   assert.match(baseline.summary, /<h1>Bazel cache summary<\/h1>/);
   assert.match(actual.summary, /<h1>Bazel cache summary<\/h1>/);
-  assert.match(actual.summary, /\| Cache \| Cached \/ total \| Hit rate \| Status \|/);
-  assert.match(actual.summary, /\| test \(test cache\) \| 0 \/ 1 \| 0% \| ⚠️ Disabled \|/);
+  assert.match(actual.summary, /\| Invocation \| Targets \| Cache \| Cached \/ total \| Hit rate \| Status \|/);
+  assert.match(actual.summary, /\| 000-test \| not captured \| Test cache \| 0 \/ 1 \| 0% \| ⚠️ Disabled \|/);
   assert.match(actual.summary, /⚠️ Disabled means test-result caching was turned off for this invocation/);
-  assert.match(actual.summary, /\| coverage \(test cache\) \| 1 \/ 1 \| 100% \| Partial data \|/);
-  assert.match(actual.summary, /\| Bazelisk cache \| 1 \/ 1 \| 100% \| Used \|/);
-  assert.match(actual.summary, /\| Disk cache \| 1 \/ 1 \| 100% \| Used \|/);
-  assert.match(actual.summary, /\| Repository cache \| 0 \/ 1 \| 0% \| Not used \|/);
+  assert.match(actual.summary, /\| 001-coverage \| not captured \| Test cache \| 1 \/ 1 \| 100% \| Partial data \|/);
+  assert.match(actual.summary, /\| — \| — \| Bazelisk cache \| 1 \/ 1 \| 100% \| Used \|/);
+  assert.match(actual.summary, /\| — \| — \| Repository cache \| 0 \/ 1 \| 0% \| Not used \|/);
+  assert.doesNotMatch(actual.summary, /Disk cache/);
   assert.doesNotMatch(actual.summary, /\| External cache \|/);
   fs.writeFileSync(path.join(root, 'summary.md'), '');
   const withExternal = runPost(root, true, path.join(root, 'summary.md'), {
@@ -131,7 +159,7 @@ test('test report preserves cache output and renders disabled, partial, and no-a
     },
   });
   assert.match(withExternal.summary, /\| External cache \| 2 \/ 3 \| 66.67% \| Used \|/);
-  assert.doesNotMatch(actual.summary, /0 \/ 0/);
+  assert.match(actual.summary, /\| 000-test \| not captured \| Build cache \| 0 \/ 0 \| n\/a \| No data \|/);
   assert.doesNotMatch(actual.summary, /Local cache \| Shared cache \| Ran \|/);
   assert.match(actual.output, /Bazel test cache\n\+[-+]+\+/);
   assert.match(actual.output, /⚠️ Disabled means test-result caching was turned off for this invocation/);
@@ -149,16 +177,17 @@ test('test report preserves cache output and renders disabled, partial, and no-a
   assert.doesNotMatch(actual.output + actual.summary, /cacheable spawns|BEP|Executed\/non-hits|Remote\/disk/);
 });
 
-test('post aggregates repeated test invocations while retaining per-invocation details', (context) => {
+test('summary lists repeated invocations with their target patterns', (context) => {
   const root = fixture(context);
   const invocationRoot = invocationRootPath(root);
   initializeInvocationStore(invocationRoot);
-  for (let sequence = 0; sequence < 2; sequence += 1) {
+  for (let sequence = 0; sequence < 3; sequence += 1) {
     const invocation = claimInvocation(invocationRoot, 'test', {
-      executionLog: false,
+      executionLog: true,
       testCache: true,
       profile: false,
-    });
+    }, [`//:test-${sequence}`]);
+    fs.writeFileSync(invocation.files.executionLog, compressedExecutionLog());
     fs.writeFileSync(invocation.files.testCache, [
       JSON.stringify({
         id: { testResult: { label: `//:test-${sequence}` } },
@@ -170,7 +199,18 @@ test('post aggregates repeated test invocations while retaining per-invocation d
   }
 
   const { output, summary } = runPost(root, true);
-  assert.match(summary, /\| test \(2 invocations\) \(test cache\) \| 2 \/ 2 \| 100% \| Used \|/);
+  assert.match(summary, /\| Invocation \| Targets \| Cache \| Cached \/ total \| Hit rate \| Status \|/);
+  for (let sequence = 0; sequence < 3; sequence += 1) {
+    assert.match(
+      summary,
+      new RegExp(`\\| 00${sequence}-test \\| \\/\\/:test-${sequence} \\| Build cache \\| 1 \\/ 1 \\| 100% \\| Used \\|`),
+    );
+    assert.match(
+      summary,
+      new RegExp(`\\| 00${sequence}-test \\| \\/\\/:test-${sequence} \\| Test cache \\| 1 \\/ 1 \\| 100% \\| Used \\|`),
+    );
+  }
+  assert.doesNotMatch(summary, /test \(3 invocations\)/);
   assert.match(output, /000-test/);
   assert.match(output, /001-test/);
 });

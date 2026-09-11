@@ -32,6 +32,7 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var launcher_exports = {};
 __export(launcher_exports, {
   findMeasuredCommand: () => findMeasuredCommand,
+  findTargetPatterns: () => findTargetPatterns,
   instrumentedArgs: () => instrumentedArgs,
   resolveRealExecutable: () => resolveRealExecutable,
   run: () => run,
@@ -76,7 +77,7 @@ function writeJsonAtomically(filePath, value) {
 `);
   import_node_fs.default.renameSync(temporaryPath, filePath);
 }
-function claimInvocation(root, command, metrics = {}) {
+function claimInvocation(root, command, metrics = {}, targets = []) {
   if (!MEASURED_COMMANDS.includes(command)) {
     throw new Error(`Cannot capture unsupported Bazel command '${command}'.`);
   }
@@ -99,10 +100,12 @@ function claimInvocation(root, command, metrics = {}) {
     const directory = import_node_path.default.join(root, invocationDirectoryName(sequence, command));
     import_node_fs.default.mkdirSync(directory);
     const files = invocationFilePaths(directory);
+    const capturedTargets = Array.isArray(targets) ? targets.filter((target) => typeof target === "string" && target.length > 0) : [];
     const metadata = {
       schemaVersion: 1,
       sequence,
       command,
+      targets: capturedTargets,
       startedAt: (/* @__PURE__ */ new Date()).toISOString(),
       finishedAt: null,
       completed: false,
@@ -156,6 +159,17 @@ function findMeasuredCommand(args) {
     return null;
   }
   return null;
+}
+function findTargetPatterns(args, commandIndex) {
+  const targets = [];
+  for (const argument of args.slice(commandIndex + 1)) {
+    if (argument === "--") break;
+    if (argument.startsWith("-")) continue;
+    if (argument === "..." || argument.startsWith("//") || argument.startsWith(":") || argument.startsWith("@") && argument.includes("//")) {
+      targets.push(argument);
+    }
+  }
+  return targets;
 }
 function envEnabled(name) {
   return process.env[name]?.trim().toLowerCase() === "true";
@@ -241,7 +255,12 @@ async function run() {
   }
   let record;
   try {
-    record = claimInvocation(root, commandInfo.command, metrics);
+    record = claimInvocation(
+      root,
+      commandInfo.command,
+      metrics,
+      findTargetPatterns(args, commandInfo.index)
+    );
   } catch (error) {
     console.error(error.message || error);
     process.exitCode = 1;
@@ -273,6 +292,7 @@ if (process.env.SETUP_BAZEL_CACHE_LAUNCHER_RUN === "true") {
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   findMeasuredCommand,
+  findTargetPatterns,
   instrumentedArgs,
   resolveRealExecutable,
   run,

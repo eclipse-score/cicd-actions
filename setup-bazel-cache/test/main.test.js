@@ -79,6 +79,9 @@ for (const entry of ['src/main.js', 'dst/main/index.js']) {
       assert.match(result, /--build_event_json_file=/);
       assert.match(result, /\/\/:example/);
     }
-    assert.equal(listInvocations(invocationRootPath(root)).length, 2);
+    assert.deepEqual(
+      listInvocations(invocationRootPath(root)).map(({ targets }) => targets),
+      [['//:example'], ['//:example']],
+    );
   });
 }

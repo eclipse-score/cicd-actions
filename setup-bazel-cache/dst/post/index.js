@@ -108479,6 +108479,7 @@ async function logExecutionCacheSummary(root = invocationRootPath()) {
         ...report,
         command: invocationLabel(invocation),
         baseCommand: invocation.command,
+        targets: invocation.targets || [],
         sequence: invocation.sequence
       });
     } catch (error2) {
@@ -108489,6 +108490,7 @@ async function logExecutionCacheSummary(root = invocationRootPath()) {
         ...unavailableExecutionReport(),
         command: invocationLabel(invocation),
         baseCommand: invocation.command,
+        targets: invocation.targets || [],
         sequence: invocation.sequence
       });
     }
@@ -108523,6 +108525,7 @@ async function logTestCacheSummary(root = invocationRootPath()) {
       ...report,
       command: invocationLabel(invocation),
       baseCommand: invocation.command,
+      targets: invocation.targets || [],
       sequence: invocation.sequence
     });
   }
@@ -108660,8 +108663,8 @@ async function writeCacheSummary(execution, tests, state3) {
   const reportingEnabled = getInput("report-cache-hits").trim().toLowerCase() === "true" || getInput("report-test-cache-hits").trim().toLowerCase() === "true";
   if (!execution && !tests && !reportingEnabled) return;
   const invocationRows = [
-    ...(execution?.aggregates || []).filter(hasObservedData).map((report) => cacheSummaryRow("Build cache", report)),
-    ...(tests?.aggregates || []).filter(hasObservedData).map((report) => cacheSummaryRow("Test cache", report))
+    ...(execution?.reports || []).map((report) => cacheSummaryRow("Build cache", report)),
+    ...(tests?.reports || []).map((report) => cacheSummaryRow("Test cache", report))
   ];
   const rows = [
     ...invocationRows,
@@ -108670,17 +108673,17 @@ async function writeCacheSummary(execution, tests, state3) {
   const notes = tests?.notes || [];
   let summary2 = summary.addHeading("Bazel cache summary");
   summary2 = summary2.addRaw(
-    "All captured Bazel invocations are included. Restore rows show which setup caches were available.\n\n"
+    "Each cache row represents one captured Bazel invocation. Target patterns are shown when recognized; restore rows show which setup caches were available.\n\n"
   );
   if (rows.length === 0) {
     summary2 = summary2.addRaw("No cache data was available for this job.\n\n");
   } else {
     summary2 = summary2.addRaw(
-      "| Cache | Cached / total | Hit rate | Status |\n| --- | ---: | ---: | --- |\n"
+      "| Invocation | Targets | Cache | Cached / total | Hit rate | Status |\n| --- | --- | --- | ---: | ---: | --- |\n"
     );
     for (const row of rows) {
       summary2 = summary2.addRaw(
-        `| ${row.cache} | ${row.cached} | ${row.rate} | ${row.status} |
+        `| ${row.invocation || "\u2014"} | ${row.targets || "\u2014"} | ${row.cache} | ${row.cached} | ${row.rate} | ${row.status} |
 `
       );
     }
@@ -108704,20 +108707,29 @@ function hasObservedData(report) {
   return report.available === void 0 ? report.observed > 0 : report.available && report.observed > 0;
 }
 function cacheSummaryRow(cache, report) {
-  const rate = report.observed === 0 ? "n/a" : `${(report.hits / report.observed * 100).toFixed(2).replace(/\.00$/, "")}%`;
+  const available = report.available !== false;
+  const rate = !available || report.observed === 0 ? "n/a" : `${(report.hits / report.observed * 100).toFixed(2).replace(/\.00$/, "")}%`;
   const command = report.baseCommand || report.command;
-  const invocationCount = report.invocationCount > 1 ? ` (${report.invocationCount} invocations)` : "";
   return {
-    cache: `${command}${invocationCount} (${cache.toLowerCase()})`,
-    cached: `${report.hits} / ${report.observed}`,
+    invocation: report.command || command,
+    targets: formatSummaryTargets(report.targets),
+    cache,
+    cached: available ? `${report.hits} / ${report.observed}` : "\u2014",
     rate,
     status: invocationStatus(report),
-    order: commandOrder(command) * 2 + (cache.startsWith("Test") ? 1 : 0)
+    // Sequence order makes repeated and concurrent Bazel commands easy to
+    // correlate. Restore rows use a separate range and stay at the end.
+    order: report.sequence === void 0 ? 1e4 + commandOrder(command) * 2 + (cache.startsWith("Test") ? 1 : 0) : report.sequence * 2 + (cache.startsWith("Test") ? 1 : 0)
   };
+}
+function formatSummaryTargets(targets) {
+  if (!Array.isArray(targets) || targets.length === 0) return "not captured";
+  return targets.map((target) => String(target).replaceAll("\\", "\\\\").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll("|", "\\|").replaceAll("\r", " ").replaceAll("\n", " ")).join(", ");
 }
 function invocationStatus(report) {
   if (report.available === false) return "Unavailable";
   if (report.partial) return "Partial data";
+  if (report.observed === 0) return "No data";
   if (report.cacheSetting === "mixed") return "Mixed settings";
   if (report.cacheSetting === "no") return DISABLED_CACHE_STATUS;
   return report.hits > 0 ? "Used" : "No hits";
@@ -108729,7 +108741,6 @@ function cacheRestoreSummaryRows(state3 = {}) {
   const restoreResults = state3.restoreResults || {};
   const caches = [
     ["bazelisk", "Bazelisk cache"],
-    ["disk", "Disk cache"],
     ["repository", "Repository cache"],
     ["external", "External cache"]
   ];

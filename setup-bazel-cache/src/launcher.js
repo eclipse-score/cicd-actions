@@ -34,6 +34,22 @@ function findMeasuredCommand(args) {
   return null;
 }
 
+/** Capture label-like target patterns without persisting arbitrary Bazel options. */
+function findTargetPatterns(args, commandIndex) {
+  const targets = [];
+  for (const argument of args.slice(commandIndex + 1)) {
+    // A double dash separates Bazel arguments from command-specific arguments
+    // (for example, the arguments passed to a `run` binary).
+    if (argument === '--') break;
+    if (argument.startsWith('-')) continue;
+    if (argument === '...' || argument.startsWith('//') || argument.startsWith(':') ||
+        (argument.startsWith('@') && argument.includes('//'))) {
+      targets.push(argument);
+    }
+  }
+  return targets;
+}
+
 function envEnabled(name) {
   return process.env[name]?.trim().toLowerCase() === 'true';
 }
@@ -136,7 +152,12 @@ async function run() {
 
   let record;
   try {
-    record = claimInvocation(root, commandInfo.command, metrics);
+    record = claimInvocation(
+      root,
+      commandInfo.command,
+      metrics,
+      findTargetPatterns(args, commandInfo.index),
+    );
   } catch (error) {
     console.error(error.message || error);
     process.exitCode = 1;
@@ -171,6 +192,7 @@ if (process.env.SETUP_BAZEL_CACHE_LAUNCHER_RUN === 'true') {
 
 export {
   findMeasuredCommand,
+  findTargetPatterns,
   instrumentedArgs,
   resolveRealExecutable,
   run,

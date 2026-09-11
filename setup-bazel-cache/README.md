@@ -96,16 +96,18 @@ not override the branch policy.
 
 ## Cache reports
 
-The action shows a compact cache overview in the job summary and job log. It
-keeps these two percentages separate because they measure different things:
+The action shows a compact cache overview in the job summary and job log. The
+summary has one row per captured cache report, including the invocation
+sequence and recognized target patterns, and keeps these two percentages
+separate because they measure different things:
 
-| Cache | Cached / total | Hit rate | Status |
-| --- | ---: | ---: | --- |
-| test (test cache) | 18 / 20 | 90% | Used |
-| coverage (build cache) | 3058 / 3603 | 84.87% | Used |
-| Bazelisk cache | 1 / 1 | 100% | Used |
-| Repository cache | 0 / 1 | 0% | Not used |
-| External cache | 2 / 3 | 66.67% | Used |
+| Invocation | Targets | Cache | Cached / total | Hit rate | Status |
+| --- | --- | --- | ---: | ---: | --- |
+| 000-test | //:tests | Build cache | 3058 / 3603 | 84.87% | Used |
+| 000-test | //:tests | Test cache | 18 / 20 | 90% | Used |
+| — | — | Bazelisk cache | 1 / 1 | 100% | Used |
+| — | — | Repository cache | 0 / 1 | 0% | Not used |
+| — | — | External cache | 2 / 3 | 66.67% | Used |
 
 `Used` means at least one result was reused or restored; `Not used` means no
 result was. `⚠️ Disabled`, `Partial data`, and `Unavailable` identify disabled,
