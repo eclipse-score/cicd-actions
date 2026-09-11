@@ -703,7 +703,7 @@ async function run() {
     }
     logSaveSummary(results);
   } catch (error) {
-    core.setFailed(error.stack || error.message);
+    core.warning(`Bazel cache post-processing stopped: ${error.stack || error.message || error}`);
   }
 }
 

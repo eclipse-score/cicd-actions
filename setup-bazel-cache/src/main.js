@@ -264,7 +264,7 @@ async function run() {
       }),
     );
   } catch (error) {
-    core.setFailed(error.stack || error.message);
+    core.warning(`Bazel cache setup stopped: ${error.stack || error.message || error}`);
   }
 }
 

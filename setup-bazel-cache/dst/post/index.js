@@ -59294,10 +59294,6 @@ function getInput(name, options) {
   }
   return val.trim();
 }
-function setFailed(message) {
-  process.exitCode = ExitCode.Failure;
-  error(message);
-}
 function isDebug() {
   return process.env["RUNNER_DEBUG"] === "1";
 }
@@ -109026,7 +109022,7 @@ async function run() {
     }
     logSaveSummary(results);
   } catch (error2) {
-    setFailed(error2.stack || error2.message);
+    warning(`Bazel cache post-processing stopped: ${error2.stack || error2.message || error2}`);
   }
 }
 async function uploadProfiles(diskCacheKey, root = invocationRootPath()) {
