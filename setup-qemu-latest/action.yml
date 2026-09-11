@@ -32,7 +32,7 @@ inputs:
     required: false
     default: "/opt/qemu"
   configure-args:
-    description: Extra flags appended to the ./configure invocation.
+    description: Newline-delimited arguments appended to the ./configure invocation; each non-empty line is one argument.
     required: false
     default: ""
   extra-build-deps:
@@ -61,7 +61,7 @@ outputs:
     value: ${{ steps.vars.outputs.cache-key }}
   bin-path:
     description: Path to the QEMU bin directory.
-    value: ${{ steps.vars.outputs.bin-path }}
+    value: ${{ steps.qemu-policy.outputs.bin-path }}
 
 runs:
   using: composite
@@ -94,22 +94,38 @@ runs:
         set -euo pipefail
         sudo install -d -o "$(id -u)" -g "$(id -g)" "$INSTALL_PREFIX"
 
+    - name: Install QEMU runtime dependencies
+      shell: bash
+      run: |
+        set -euo pipefail
+        sudo apt-get update
+        sudo apt-get install -y libfdt1
+
     - name: Restore or save QEMU build cache
       id: cache
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.vars.outputs.install-prefix }}
         key: ${{ steps.vars.outputs.cache-key }}
 
-    - name: Remove apt-installed QEMU
-      if: steps.cache.outputs.cache-hit != 'true'
+    - name: Select existing QEMU or source build
+      id: qemu-policy
       shell: bash
       env:
+        CACHE_HIT: ${{ steps.cache.outputs.cache-hit }}
         QEMU_TARGETS: ${{ inputs.qemu-targets }}
         QEMU_VERSION: ${{ inputs.qemu-version }}
         ALLOW_DOWNGRADE: ${{ inputs.allow-downgrade }}
+        BUILT_BIN_PATH: ${{ steps.vars.outputs.bin-path }}
       run: |
         set -euo pipefail
+        if [[ "$CACHE_HIT" == "true" ]]; then
+          echo "Using cached QEMU installation."
+          echo "use-system=false" >> "$GITHUB_OUTPUT"
+          echo "bin-path=$BUILT_BIN_PATH" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
         qemu_target=""
         IFS=',' read -ra qemu_targets <<< "$QEMU_TARGETS"
         for target in "${qemu_targets[@]}"; do
@@ -120,40 +136,41 @@ runs:
           fi
         done
         qemu_binary="qemu-system-${qemu_target}"
-        requested_version="$QEMU_VERSION"
-        allow_downgrade="$ALLOW_DOWNGRADE"
         installed_version=""
 
         if command -v "$qemu_binary" >/dev/null; then
-          version_output="$("$qemu_binary" --version 2>/dev/null || true)"
+          version_output="$($qemu_binary --version 2>/dev/null || true)"
           installed_version="$(awk '$1 == "QEMU" && $2 == "emulator" && $3 == "version" { print $4; exit }' <<< "$version_output")"
         fi
 
         if [[ -n "$installed_version" ]] \
-          && dpkg --compare-versions "$installed_version" ge "$requested_version" \
-          && { [[ "$allow_downgrade" != "true" ]] || dpkg --compare-versions "$installed_version" eq "$requested_version"; }; then
-          echo "Keeping $qemu_binary $installed_version (requested: $requested_version)."
+          && dpkg --compare-versions "$installed_version" ge "$QEMU_VERSION" \
+          && { [[ "$ALLOW_DOWNGRADE" != "true" ]] || dpkg --compare-versions "$installed_version" eq "$QEMU_VERSION"; }; then
+          echo "Keeping $qemu_binary $installed_version (requested: $QEMU_VERSION)."
+          echo "use-system=true" >> "$GITHUB_OUTPUT"
+          echo "bin-path=$(dirname "$(command -v "$qemu_binary")")" >> "$GITHUB_OUTPUT"
         else
           echo "Removing apt-installed QEMU; ${qemu_binary} version '${installed_version:-not installed}' does not satisfy the requested installation policy."
           sudo apt-get remove -y --purge 'qemu-system*' 'qemu-utils' || true
+          echo "use-system=false" >> "$GITHUB_OUTPUT"
+          echo "bin-path=$BUILT_BIN_PATH" >> "$GITHUB_OUTPUT"
         fi
 
     - name: Install build dependencies
-      if: steps.cache.outputs.cache-hit != 'true'
+      if: steps.qemu-policy.outputs.use-system != 'true' && steps.cache.outputs.cache-hit != 'true'
       shell: bash
       env:
         EXTRA_BUILD_DEPS: ${{ inputs.extra-build-deps }}
       run: |
         set -euo pipefail
         read -ra extra_build_deps <<< "$EXTRA_BUILD_DEPS"
-        sudo apt-get update
         sudo apt-get install -y \
           ninja-build build-essential libglib2.0-dev libpixman-1-dev \
           libfdt-dev zlib1g-dev flex bison pkg-config python3 python3-venv gnupg \
           "${extra_build_deps[@]}"
 
     - name: Download, verify, extract QEMU source and cleanup downloads.
-      if: steps.cache.outputs.cache-hit != 'true'
+      if: steps.qemu-policy.outputs.use-system != 'true' && steps.cache.outputs.cache-hit != 'true'
       shell: bash
       env:
         QEMU_VERSION: ${{ inputs.qemu-version }}
@@ -177,7 +194,7 @@ runs:
         rm -rf "qemu-$QEMU_VERSION.tar.xz" "qemu-$QEMU_VERSION.tar.xz.sig"
 
     - name: Build and install QEMU and cleanup QEMU sources.
-      if: steps.cache.outputs.cache-hit != 'true'
+      if: steps.qemu-policy.outputs.use-system != 'true' && steps.cache.outputs.cache-hit != 'true'
       shell: bash
       working-directory: qemu-${{ inputs.qemu-version }}
       env:
@@ -187,7 +204,11 @@ runs:
         NPROC: ${{ inputs.nproc }}
       run: |
         set -euo pipefail
-        read -ra configure_args <<< "$CONFIGURE_ARGS"
+        configure_args=()
+        while IFS= read -r configure_arg || [[ -n "$configure_arg" ]]; do
+          [[ -z "$configure_arg" ]] && continue
+          configure_args+=("$configure_arg")
+        done <<< "$CONFIGURE_ARGS"
         ./configure \
           --prefix="$INSTALL_PREFIX" \
           --target-list="$QEMU_TARGETS" \
@@ -201,15 +222,23 @@ runs:
         make install
 
     - name: Clean QEMU source
-      if: steps.cache.outputs.cache-hit != 'true'
+      if: steps.qemu-policy.outputs.use-system != 'true' && steps.cache.outputs.cache-hit != 'true'
       shell: bash
       env:
         QEMU_VERSION: ${{ inputs.qemu-version }}
       run: rm -rf "qemu-$QEMU_VERSION"
 
+    - name: Save QEMU build cache
+      if: steps.qemu-policy.outputs.use-system != 'true' && steps.cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.vars.outputs.install-prefix }}
+        key: ${{ steps.vars.outputs.cache-key }}
+
     - name: Add QEMU to PATH
+      if: steps.qemu-policy.outputs.use-system != 'true'
       shell: bash
-      run: echo "${{ steps.vars.outputs.bin-path }}" >> "$GITHUB_PATH"
+      run: echo "${{ steps.qemu-policy.outputs.bin-path }}" >> "$GITHUB_PATH"
 
     - name: Validate the installation
       if: inputs.validation-target != ''
@@ -217,7 +246,7 @@ runs:
       env:
         VALIDATION_TARGET: ${{ inputs.validation-target }}
         QEMU_TARGETS: ${{ inputs.qemu-targets }}
-        BIN_PATH: ${{ steps.vars.outputs.bin-path }}
+        BIN_PATH: ${{ steps.qemu-policy.outputs.bin-path }}
       run: |
         set -euo pipefail
         validation_target="$VALIDATION_TARGET"
@@ -232,8 +261,8 @@ runs:
         done
 
         if [[ "$target_configured" -ne 1 ]]; then
-          echo "Skipping validation for target '$validation_target'; it is not present as a softmmu target in qemu-targets '$QEMU_TARGETS'."
-          exit 0
+          echo "Validation target '$validation_target' is not present as a softmmu target in qemu-targets '$QEMU_TARGETS'. Set validation-target to an empty value to disable validation." >&2
+          exit 1
         fi
 
         "$BIN_PATH/qemu-system-${validation_target}" -machine help

@@ -37,7 +37,7 @@ Pin the action to a commit SHA for immutable builds:
 | `allow-downgrade` | `false` | Allow replacing an installed newer QEMU with `qemu-version`. |
 | `qemu-targets` | `aarch64-softmmu` | Comma-separated targets passed to `--target-list`. |
 | `install-prefix` | `/opt/qemu` | Base installation directory. The QEMU version is appended. |
-| `configure-args` | Empty | Additional flags appended to `./configure`. |
+| `configure-args` | Empty | Newline-delimited arguments appended to `./configure`; each non-empty line is one argument. |
 | `extra-build-deps` | Empty | Additional space-separated apt packages required by custom configurations. |
 | `nproc` | Automatic | Number of parallel `make` jobs. Empty uses the runner CPU count. |
 | `validation-target` | `aarch64` | Target validated with `-machine help`. Empty disables validation. |
@@ -50,7 +50,9 @@ For example, build multiple targets with a custom configure option:
   uses: eclipse-score/cicd-actions/setup-qemu-latest@main
   with:
     qemu-targets: aarch64-softmmu,arm-softmmu
-    configure-args: --enable-slirp
+    configure-args: |
+      --enable-slirp
+      --extra-cflags=-O2 -g
     nproc: "4"
     kvm-mode: "0660"
 ```
