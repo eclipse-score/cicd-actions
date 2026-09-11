@@ -84,6 +84,11 @@ function compressedExecutionLog() {
   return execFileSync('zstd', ['-cq'], { input: Buffer.concat([varint(entry.length), entry]) });
 }
 
+function updateInvocationMetadata(invocation, changes) {
+  const metadata = JSON.parse(fs.readFileSync(invocation.metadataPath, 'utf8'));
+  fs.writeFileSync(invocation.metadataPath, `${JSON.stringify({ ...metadata, ...changes })}\n`);
+}
+
 test('post omits unavailable data quietly and continues cache-save eligibility checks', (context) => {
   const root = fixture(context);
   const { output, summary } = runPost(root, true);
@@ -116,6 +121,10 @@ test('test report preserves cache output and renders disabled, partial, and no-a
     JSON.stringify({ lastMessage: true }),
   ].join('\n'));
   finishInvocation(testInvocation, 0);
+  updateInvocationMetadata(testInvocation, {
+    startedAt: '2026-01-01T00:00:00.000Z',
+    finishedAt: '2026-01-01T00:00:12.400Z',
+  });
   const coverageInvocation = claimInvocation(invocationRoot, 'coverage', {
     executionLog: true,
     testCache: true,
@@ -126,6 +135,10 @@ test('test report preserves cache output and renders disabled, partial, and no-a
     JSON.stringify({ id: { testResult: { label: '//:t' } }, testResult: { cachedLocally: true } }),
   ].join('\n'));
   finishInvocation(coverageInvocation, 0);
+  updateInvocationMetadata(coverageInvocation, {
+    startedAt: '2026-01-01T00:01:00.000Z',
+    finishedAt: '2026-01-01T00:02:48.000Z',
+  });
   const baseline = runPost(root, false);
   fs.writeFileSync(path.join(root, 'summary.md'), '');
   const actual = runPost(root, true, path.join(root, 'summary.md'), {
@@ -139,12 +152,12 @@ test('test report preserves cache output and renders disabled, partial, and no-a
   });
   assert.match(baseline.summary, /<h1>Bazel cache summary<\/h1>/);
   assert.match(actual.summary, /<h1>Bazel cache summary<\/h1>/);
-  assert.match(actual.summary, /\| Invocation \| Targets \| Cache \| Cached \/ total \| Hit rate \| Status \|/);
-  assert.match(actual.summary, /\| 000-test \| not captured \| Test cache \| 0 \/ 1 \| 0% \| ⚠️ Disabled \|/);
+  assert.match(actual.summary, /\| Invocation \| Targets \| Elapsed \| Cache \| Cached \/ total \| Hit rate \| Status \|/);
+  assert.match(actual.summary, /\| 000-test \| not captured \| 12\.4 s \| Test cache \| 0 \/ 1 \| 0% \| ⚠️ Disabled \|/);
   assert.match(actual.summary, /⚠️ Disabled means test-result caching was turned off for this invocation/);
-  assert.match(actual.summary, /\| 001-coverage \| not captured \| Test cache \| 1 \/ 1 \| 100% \| Partial data \|/);
-  assert.match(actual.summary, /\| — \| — \| Bazelisk cache \| 1 \/ 1 \| 100% \| Used \|/);
-  assert.match(actual.summary, /\| — \| — \| Repository cache \| 0 \/ 1 \| 0% \| Not used \|/);
+  assert.match(actual.summary, /\| 001-coverage \| not captured \| 1\.8 min \| Test cache \| 1 \/ 1 \| 100% \| Partial data \|/);
+  assert.match(actual.summary, /\| — \| — \| — \| Bazelisk cache \| 1 \/ 1 \| 100% \| Used \|/);
+  assert.match(actual.summary, /\| — \| — \| — \| Repository cache \| 0 \/ 1 \| 0% \| Not used \|/);
   assert.doesNotMatch(actual.summary, /Disk cache/);
   assert.doesNotMatch(actual.summary, /\| External cache \|/);
   fs.writeFileSync(path.join(root, 'summary.md'), '');
@@ -158,8 +171,8 @@ test('test report preserves cache output and renders disabled, partial, and no-a
       'repo-c': 'false',
     },
   });
-  assert.match(withExternal.summary, /\| External cache \| 2 \/ 3 \| 66.67% \| Used \|/);
-  assert.match(actual.summary, /\| 000-test \| not captured \| Build cache \| 0 \/ 0 \| n\/a \| No data \|/);
+  assert.match(withExternal.summary, /\| — \| — \| — \| External cache \| 2 \/ 3 \| 66.67% \| Used \|/);
+  assert.match(actual.summary, /\| 000-test \| not captured \| 12\.4 s \| Build cache \| 0 \/ 0 \| n\/a \| No data \|/);
   assert.doesNotMatch(actual.summary, /Local cache \| Shared cache \| Ran \|/);
   assert.match(actual.output, /Bazel test cache\n\+[-+]+\+/);
   assert.match(actual.output, /⚠️ Disabled means test-result caching was turned off for this invocation/);
@@ -196,23 +209,58 @@ test('summary lists repeated invocations with their target patterns', (context) 
       JSON.stringify({ lastMessage: true }),
     ].join('\n'));
     finishInvocation(invocation, 0);
+    updateInvocationMetadata(invocation, {
+      startedAt: '2026-01-01T00:00:00.000Z',
+      finishedAt: [
+        '2026-01-01T00:00:12.400Z',
+        '2026-01-01T00:01:48.000Z',
+        '2026-01-01T00:00:00.400Z',
+      ][sequence],
+    });
   }
 
   const { output, summary } = runPost(root, true);
-  assert.match(summary, /\| Invocation \| Targets \| Cache \| Cached \/ total \| Hit rate \| Status \|/);
+  assert.match(summary, /\| Invocation \| Targets \| Elapsed \| Cache \| Cached \/ total \| Hit rate \| Status \|/);
   for (let sequence = 0; sequence < 3; sequence += 1) {
+    const elapsed = ['12\\.4 s', '1\\.8 min', '0\\.4 s'][sequence];
     assert.match(
       summary,
-      new RegExp(`\\| 00${sequence}-test \\| \\/\\/:test-${sequence} \\| Build cache \\| 1 \\/ 1 \\| 100% \\| Used \\|`),
+      new RegExp(`\\| 00${sequence}-test \\| \\/\\/:test-${sequence} \\| ${elapsed} \\| Build cache \\| 1 \\/ 1 \\| 100% \\| Used \\|`),
     );
     assert.match(
       summary,
-      new RegExp(`\\| 00${sequence}-test \\| \\/\\/:test-${sequence} \\| Test cache \\| 1 \\/ 1 \\| 100% \\| Used \\|`),
+      new RegExp(`\\| 00${sequence}-test \\| \\/\\/:test-${sequence} \\| ${elapsed} \\| Test cache \\| 1 \\/ 1 \\| 100% \\| Used \\|`),
     );
   }
   assert.doesNotMatch(summary, /test \(3 invocations\)/);
   assert.match(output, /000-test/);
   assert.match(output, /001-test/);
+});
+
+test('summary uses n/a for incomplete or invalid invocation timestamps', (context) => {
+  const root = fixture(context);
+  const invocationRoot = invocationRootPath(root);
+  initializeInvocationStore(invocationRoot);
+
+  const missingFinish = claimInvocation(invocationRoot, 'build', {
+    executionLog: true,
+    testCache: false,
+    profile: false,
+  });
+  finishInvocation(missingFinish, 0);
+  updateInvocationMetadata(missingFinish, { finishedAt: null });
+
+  const invalidStart = claimInvocation(invocationRoot, 'build', {
+    executionLog: true,
+    testCache: false,
+    profile: false,
+  });
+  finishInvocation(invalidStart, 0);
+  updateInvocationMetadata(invalidStart, { startedAt: 'not-a-timestamp' });
+
+  const { summary } = runPost(root, false);
+  assert.match(summary, /\| 000-build \| not captured \| n\/a \| Build cache \| — \| n\/a \| Unavailable \|/);
+  assert.match(summary, /\| 001-build \| not captured \| n\/a \| Build cache \| — \| n\/a \| Unavailable \|/);
 });
 
 test('summary write failures do not stop post-step processing', (context) => {

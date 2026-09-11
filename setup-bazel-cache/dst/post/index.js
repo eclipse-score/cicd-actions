@@ -108480,7 +108480,9 @@ async function logExecutionCacheSummary(root = invocationRootPath()) {
         command: invocationLabel(invocation),
         baseCommand: invocation.command,
         targets: invocation.targets || [],
-        sequence: invocation.sequence
+        sequence: invocation.sequence,
+        startedAt: invocation.startedAt,
+        finishedAt: invocation.finishedAt
       });
     } catch (error2) {
       warning(
@@ -108491,7 +108493,9 @@ async function logExecutionCacheSummary(root = invocationRootPath()) {
         command: invocationLabel(invocation),
         baseCommand: invocation.command,
         targets: invocation.targets || [],
-        sequence: invocation.sequence
+        sequence: invocation.sequence,
+        startedAt: invocation.startedAt,
+        finishedAt: invocation.finishedAt
       });
     }
   }
@@ -108526,7 +108530,9 @@ async function logTestCacheSummary(root = invocationRootPath()) {
       command: invocationLabel(invocation),
       baseCommand: invocation.command,
       targets: invocation.targets || [],
-      sequence: invocation.sequence
+      sequence: invocation.sequence,
+      startedAt: invocation.startedAt,
+      finishedAt: invocation.finishedAt
     });
   }
   const aggregates = aggregateTestCacheReports(reports);
@@ -108679,11 +108685,11 @@ async function writeCacheSummary(execution, tests, state3) {
     summary2 = summary2.addRaw("No cache data was available for this job.\n\n");
   } else {
     summary2 = summary2.addRaw(
-      "| Invocation | Targets | Cache | Cached / total | Hit rate | Status |\n| --- | --- | --- | ---: | ---: | --- |\n"
+      "| Invocation | Targets | Elapsed | Cache | Cached / total | Hit rate | Status |\n| --- | --- | ---: | --- | ---: | ---: | --- |\n"
     );
     for (const row of rows) {
       summary2 = summary2.addRaw(
-        `| ${row.invocation || "\u2014"} | ${row.targets || "\u2014"} | ${row.cache} | ${row.cached} | ${row.rate} | ${row.status} |
+        `| ${row.invocation || "\u2014"} | ${row.targets || "\u2014"} | ${row.elapsed} | ${row.cache} | ${row.cached} | ${row.rate} | ${row.status} |
 `
       );
     }
@@ -108713,6 +108719,7 @@ function cacheSummaryRow(cache, report) {
   return {
     invocation: report.command || command,
     targets: formatSummaryTargets(report.targets),
+    elapsed: formatInvocationElapsed(report.startedAt, report.finishedAt),
     cache,
     cached: available ? `${report.hits} / ${report.observed}` : "\u2014",
     rate,
@@ -108737,6 +108744,13 @@ function invocationStatus(report) {
 function commandOrder(command) {
   return { build: 0, run: 1, test: 2, coverage: 3 }[command] ?? 99;
 }
+function formatInvocationElapsed(startedAt, finishedAt) {
+  if (typeof startedAt !== "string" || typeof finishedAt !== "string") return "n/a";
+  const start = Date.parse(startedAt);
+  const finish = Date.parse(finishedAt);
+  if (!Number.isFinite(start) || !Number.isFinite(finish) || finish < start) return "n/a";
+  return formatDuration((finish - start) / 1e3);
+}
 function cacheRestoreSummaryRows(state3 = {}) {
   const restoreResults = state3.restoreResults || {};
   const caches = [
@@ -108750,6 +108764,7 @@ function cacheRestoreSummaryRows(state3 = {}) {
     const counts = name === "external" ? externalRestoreCounts(state3, result) : restoreCounts(result);
     return [{
       cache: label,
+      elapsed: "\u2014",
       ...counts,
       status: restoreStatusLabel(result, counts),
       order: 10 + index

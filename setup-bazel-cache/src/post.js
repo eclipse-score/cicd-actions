@@ -71,6 +71,8 @@ async function logExecutionCacheSummary(root = invocationRootPath()) {
         baseCommand: invocation.command,
         targets: invocation.targets || [],
         sequence: invocation.sequence,
+        startedAt: invocation.startedAt,
+        finishedAt: invocation.finishedAt,
       });
     } catch (error) {
       core.warning(
@@ -82,6 +84,8 @@ async function logExecutionCacheSummary(root = invocationRootPath()) {
         baseCommand: invocation.command,
         targets: invocation.targets || [],
         sequence: invocation.sequence,
+        startedAt: invocation.startedAt,
+        finishedAt: invocation.finishedAt,
       });
     }
   }
@@ -125,6 +129,8 @@ async function logTestCacheSummary(root = invocationRootPath()) {
       baseCommand: invocation.command,
       targets: invocation.targets || [],
       sequence: invocation.sequence,
+      startedAt: invocation.startedAt,
+      finishedAt: invocation.finishedAt,
     });
   }
 
@@ -300,12 +306,12 @@ async function writeCacheSummary(execution, tests, state) {
     summary = summary.addRaw('No cache data was available for this job.\n\n');
   } else {
     summary = summary.addRaw(
-      '| Invocation | Targets | Cache | Cached / total | Hit rate | Status |\n' +
-      '| --- | --- | --- | ---: | ---: | --- |\n',
+      '| Invocation | Targets | Elapsed | Cache | Cached / total | Hit rate | Status |\n' +
+      '| --- | --- | ---: | --- | ---: | ---: | --- |\n',
     );
     for (const row of rows) {
       summary = summary.addRaw(
-        `| ${row.invocation || '—'} | ${row.targets || '—'} | ${row.cache} | ` +
+        `| ${row.invocation || '—'} | ${row.targets || '—'} | ${row.elapsed} | ${row.cache} | ` +
         `${row.cached} | ${row.rate} | ${row.status} |\n`,
       );
     }
@@ -341,6 +347,7 @@ function cacheSummaryRow(cache, report) {
   return {
     invocation: report.command || command,
     targets: formatSummaryTargets(report.targets),
+    elapsed: formatInvocationElapsed(report.startedAt, report.finishedAt),
     cache,
     cached: available ? `${report.hits} / ${report.observed}` : '—',
     rate,
@@ -380,6 +387,15 @@ function commandOrder(command) {
   return { build: 0, run: 1, test: 2, coverage: 3 }[command] ?? 99;
 }
 
+/** Format the actual wall-clock time recorded for one Bazel invocation. */
+function formatInvocationElapsed(startedAt, finishedAt) {
+  if (typeof startedAt !== 'string' || typeof finishedAt !== 'string') return 'n/a';
+  const start = Date.parse(startedAt);
+  const finish = Date.parse(finishedAt);
+  if (!Number.isFinite(start) || !Number.isFinite(finish) || finish < start) return 'n/a';
+  return formatDuration((finish - start) / 1000);
+}
+
 /** Show setup-time cache restores only when a restore was actually attempted. */
 function cacheRestoreSummaryRows(state = {}) {
   const restoreResults = state.restoreResults || {};
@@ -396,6 +412,7 @@ function cacheRestoreSummaryRows(state = {}) {
       : restoreCounts(result);
     return [{
       cache: label,
+      elapsed: '—',
       ...counts,
       status: restoreStatusLabel(result, counts),
       order: 10 + index,
