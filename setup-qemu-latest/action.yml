@@ -50,7 +50,7 @@ inputs:
   kvm-mode:
     description: Access mode for the /dev/kvm device udev rule.
     required: false
-    default: "0666"
+    default: "0660"
 
 outputs:
   install-prefix:
@@ -72,8 +72,9 @@ runs:
       run: |
         set -euo pipefail
         install_prefix="${{ inputs.install-prefix }}/${{ inputs.qemu-version }}"
+        prefix_hash="$(printf '%s' "$install_prefix" | sha256sum | cut -d' ' -f1)"
         config_hash="$(printf '%s' "${{ inputs.qemu-targets }}|${{ inputs.configure-args }}|${{ inputs.extra-build-deps }}" | sha256sum | cut -d' ' -f1)"
-        cache_key="qemu-${{ runner.os }}-${{ inputs.qemu-version }}-${config_hash}"
+        cache_key="qemu-${{ runner.os }}-${{ inputs.qemu-version }}-${prefix_hash}-${config_hash}"
 
         echo "install-prefix=$install_prefix" >> "$GITHUB_OUTPUT"
         echo "cache-key=$cache_key" >> "$GITHUB_OUTPUT"
@@ -97,10 +98,16 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        qemu_target="${{ inputs.qemu-targets }}"
-        qemu_target="${qemu_target%%,*}"
-        qemu_target="${qemu_target//[[:space:]]/}"
-        qemu_binary="qemu-system-${qemu_target%-softmmu}"
+        qemu_target=""
+        IFS=',' read -ra qemu_targets <<< "${{ inputs.qemu-targets }}"
+        for target in "${qemu_targets[@]}"; do
+          target="${target//[[:space:]]/}"
+          if [[ "$target" == *-softmmu ]]; then
+            qemu_target="${target%-softmmu}"
+            break
+          fi
+        done
+        qemu_binary="qemu-system-${qemu_target}"
         requested_version="${{ inputs.qemu-version }}"
         allow_downgrade="${{ inputs.allow-downgrade }}"
         installed_version=""
@@ -163,7 +170,7 @@ runs:
           --disable-docs --disable-gtk --disable-sdl \
           ${{ inputs.configure-args }}
         build_jobs="${{ inputs.nproc }}"
-        if [[ -z "$build_jobs" ]]; then
+        if [[ -z "$build_jobs" || "$build_jobs" == "0" ]]; then
           build_jobs="$(nproc)"
         fi
         make -j"$build_jobs"
@@ -181,7 +188,25 @@ runs:
     - name: Validate the installation
       if: inputs.validation-target != ''
       shell: bash
-      run: "${{ steps.vars.outputs.bin-path }}/qemu-system-${{ inputs.validation-target }} -machine help"
+      run: |
+        set -euo pipefail
+        validation_target="${{ inputs.validation-target }}"
+        target_configured=0
+        IFS=',' read -ra qemu_targets <<< "${{ inputs.qemu-targets }}"
+        for target in "${qemu_targets[@]}"; do
+          target="${target//[[:space:]]/}"
+          if [[ "$target" == "$validation_target" || "$target" == "${validation_target}-softmmu" || "$target" == "${validation_target}-linux-user" || "$target" == "${validation_target}-bsd-user" ]]; then
+            target_configured=1
+            break
+          fi
+        done
+
+        if [[ "$target_configured" -ne 1 ]]; then
+          echo "Skipping validation for target '$validation_target'; it is not present in qemu-targets '${{ inputs.qemu-targets }}'."
+          exit 0
+        fi
+
+        "${{ steps.vars.outputs.bin-path }}/qemu-system-${validation_target}" -machine help
 
     - name: Enable KVM group permissions
       shell: bash
