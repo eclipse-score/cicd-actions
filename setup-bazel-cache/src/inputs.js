@@ -94,15 +94,15 @@ function parseCacheSaveBranchPatterns(value, defaultBranch) {
 }
 
 /** Resolve one positive restore mode into the decision used by the cache layer. */
-function resolveRestoreMode(mode, cacheSaveAllowed, lockFileChanged) {
-  return mode !== 'false' && !(mode === 'auto' && cacheSaveAllowed && lockFileChanged);
+function resolveRestoreMode(mode, diskCacheWillSave, lockFileChanged) {
+  return mode !== 'false' && !(mode === 'auto' && diskCacheWillSave && lockFileChanged);
 }
 
 /** Resolve every cache independently so the cache layer contains no input policy. */
-function resolveRestoreModes(configuration, cacheSaveAllowed, lockFileChanged) {
+function resolveRestoreModes(configuration, diskCacheWillSave, lockFileChanged) {
   return {
     bazelisk: configuration.bazelisk === 'true',
-    disk: resolveRestoreMode(configuration.disk, cacheSaveAllowed, lockFileChanged),
+    disk: resolveRestoreMode(configuration.disk, diskCacheWillSave, lockFileChanged),
     external: configuration.external === 'true',
     repository: configuration.repository === 'true',
   };
@@ -144,12 +144,10 @@ function cacheSaveDisallowReason(ref, branchPatterns) {
 
 /**
  * Avoid Git inspection unless the automatic disk-restore decision can affect this run.
- * Non-writing refs always restore and therefore do not need a parent commit.
+ * A disk cache that will not be saved later always restores and therefore does not need a parent commit.
  */
-function needsLockFileCheck(configuration, cacheSaveAllowed) {
-  return cacheSaveAllowed && (
-    configuration.disk === 'auto'
-  );
+function needsLockFileCheck(configuration, diskCacheWillSave) {
+  return diskCacheWillSave && configuration.disk === 'auto';
 }
 
 export {

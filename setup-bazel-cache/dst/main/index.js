@@ -70181,13 +70181,13 @@ function parseCacheSaveBranchPatterns(value, defaultBranch) {
   }
   return patterns.map((pattern) => parseBranchPattern(pattern));
 }
-function resolveRestoreMode(mode, cacheSaveAllowed, lockFileChanged2) {
-  return mode !== "false" && !(mode === "auto" && cacheSaveAllowed && lockFileChanged2);
+function resolveRestoreMode(mode, diskCacheWillSave, lockFileChanged2) {
+  return mode !== "false" && !(mode === "auto" && diskCacheWillSave && lockFileChanged2);
 }
-function resolveRestoreModes(configuration, cacheSaveAllowed, lockFileChanged2) {
+function resolveRestoreModes(configuration, diskCacheWillSave, lockFileChanged2) {
   return {
     bazelisk: configuration.bazelisk === "true",
-    disk: resolveRestoreMode(configuration.disk, cacheSaveAllowed, lockFileChanged2),
+    disk: resolveRestoreMode(configuration.disk, diskCacheWillSave, lockFileChanged2),
     external: configuration.external === "true",
     repository: configuration.repository === "true"
   };
@@ -70220,8 +70220,8 @@ function cacheSaveDisallowReason(ref, branchPatterns) {
   }
   return "branch does not match cache-save-branch-patterns";
 }
-function needsLockFileCheck(configuration, cacheSaveAllowed) {
-  return cacheSaveAllowed && configuration.disk === "auto";
+function needsLockFileCheck(configuration, diskCacheWillSave) {
+  return diskCacheWillSave && configuration.disk === "auto";
 }
 
 // src/summary.js
@@ -70349,14 +70349,14 @@ async function run() {
     const saves = resolveSaveModes(cacheModes.save, cacheSaveAllowed);
     let checkoutHistory = "skipped";
     let changed = null;
-    if (needsLockFileCheck(cacheModes.restore, cacheSaveAllowed)) {
+    if (needsLockFileCheck(cacheModes.restore, saves.disk)) {
       const comparisonBase = resolveComparisonBase();
       checkoutHistory = ensureComparisonHistory(workspace, comparisonBase);
       changed = lockFileChanged(workspace, comparisonBase);
     }
     const restores = resolveRestoreModes(
       cacheModes.restore,
-      cacheSaveAllowed,
+      saves.disk,
       changed === true
     );
     import_node_fs8.default.writeFileSync(configuration.bazelrc, configuration.bazelrcContents, { flag: "wx" });
@@ -70509,7 +70509,7 @@ function logDecision({
     `Cache saving allowed: ${cacheSaveAllowed}` + (cacheSaveAllowed ? "" : ` (${cacheSaveReason})`)
   );
   logModeTable(cacheModes, restores, saves);
-  if (cacheModes.restore.disk === "auto" && cacheSaveAllowed) {
+  if (cacheModes.restore.disk === "auto" && saves.disk) {
     info(
       `Automatic disk-cache decision: MODULE.bazel.lock changed=${changed === null ? "unknown" : changed}; checkout history=${checkoutHistory}`
     );

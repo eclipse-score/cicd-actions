@@ -122,14 +122,14 @@ async function run() {
     const saves = resolveSaveModes(cacheModes.save, cacheSaveAllowed);
     let checkoutHistory = 'skipped';
     let changed = null;
-    if (needsLockFileCheck(cacheModes.restore, cacheSaveAllowed)) {
+    if (needsLockFileCheck(cacheModes.restore, saves.disk)) {
       const comparisonBase = resolveComparisonBase();
       checkoutHistory = ensureComparisonHistory(workspace, comparisonBase);
       changed = lockFileChanged(workspace, comparisonBase);
     }
     const restores = resolveRestoreModes(
       cacheModes.restore,
-      cacheSaveAllowed,
+      saves.disk,
       changed === true,
     );
 
@@ -305,7 +305,7 @@ function logDecision({
       : ` (${cacheSaveReason})`),
   );
   logModeTable(cacheModes, restores, saves);
-  if (cacheModes.restore.disk === 'auto' && cacheSaveAllowed) {
+  if (cacheModes.restore.disk === 'auto' && saves.disk) {
     core.info(
       `Automatic disk-cache decision: MODULE.bazel.lock changed=${changed === null ? 'unknown' : changed}; ` +
       `checkout history=${checkoutHistory}`,
