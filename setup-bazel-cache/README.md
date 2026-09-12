@@ -97,19 +97,23 @@ not override the branch policy.
 ## Cache reports
 
 The action shows a compact cache overview in the job summary and job log. The
-summary has one row per captured cache report, including the invocation
-sequence, recognized target patterns, and the Bazel invocation's wall-clock
-duration. Restore rows do not belong to an invocation and therefore show `—`
-for the duration. The two cache percentages stay separate because they measure
-different things:
+summary groups build, run, test, and coverage cache reports by Bazel
+invocation. Each group shows the invocation command, sequence, recognized
+target patterns, and wall-clock duration, followed by its cache outcomes:
 
-| Invocation | Targets | Elapsed | Cache | Cached / total | Hit rate | Status |
-| --- | --- | ---: | --- | ---: | ---: | --- |
-| 000-test | //:tests | 12.4 s | Build cache | 3058 / 3603 | 84.87% | Used |
-| 000-test | //:tests | 12.4 s | Test cache | 18 / 20 | 90% | Used |
-| — | — | — | Bazelisk cache | 1 / 1 | 100% | Used |
-| — | — | — | Repository cache | 0 / 1 | 0% | Not used |
-| — | — | — | External cache | 2 / 3 | 66.67% | Used |
+```text
+### test · 000 · 12.4 s
+**Targets:** //:tests
+
+| Cache | Reused / total | Hit rate | Status |
+| --- | ---: | ---: | --- |
+| Build cache | 3058 / 3603 | 84.87% | Used |
+| Test cache | 18 / 20 | 90% | Used |
+```
+
+Setup-cache restore results are shown in a separate `Restored caches` table
+because they do not belong to a Bazel invocation or target list. The two cache
+percentages stay separate because they measure different things.
 
 Elapsed is calculated from the recorded invocation start and finish times; it
 is not an estimate of time saved by the cache. Missing or invalid timestamps

@@ -108672,33 +108672,76 @@ async function writeCacheSummary(execution, tests, state3) {
     ...(execution?.reports || []).map((report) => cacheSummaryRow("Build cache", report)),
     ...(tests?.reports || []).map((report) => cacheSummaryRow("Test cache", report))
   ];
-  const rows = [
-    ...invocationRows,
-    ...cacheRestoreSummaryRows(state3)
-  ].sort((left, right) => left.order - right.order);
+  const invocationGroups = groupInvocationRows(invocationRows);
+  const restoreRows = cacheRestoreSummaryRows(state3);
   const notes = tests?.notes || [];
   let summary2 = summary.addHeading("Bazel cache summary");
   summary2 = summary2.addRaw(
-    "Each cache row represents one captured Bazel invocation. Target patterns are shown when recognized; restore rows show which setup caches were available.\n\n"
+    "Each invocation is shown once with its targets and duration. Cache results are grouped below the invocation; setup-cache restores are listed separately.\n\n"
   );
-  if (rows.length === 0) {
+  if (invocationGroups.length === 0 && restoreRows.length === 0) {
     summary2 = summary2.addRaw("No cache data was available for this job.\n\n");
   } else {
-    summary2 = summary2.addRaw(
-      "| Invocation | Targets | Elapsed | Cache | Cached / total | Hit rate | Status |\n| --- | --- | ---: | --- | ---: | ---: | --- |\n"
-    );
-    for (const row of rows) {
+    for (const group of invocationGroups) {
+      summary2 = summary2.addHeading(formatInvocationHeading(group), 3);
+      summary2 = summary2.addRaw(`**Targets:** ${group.targets}
+
+`);
       summary2 = summary2.addRaw(
-        `| ${row.invocation || "\u2014"} | ${row.targets || "\u2014"} | ${row.elapsed} | ${row.cache} | ${row.cached} | ${row.rate} | ${row.status} |
-`
+        "| Cache | Reused / total | Hit rate | Status |\n| --- | ---: | ---: | --- |\n"
       );
+      for (const row of group.rows) {
+        summary2 = summary2.addRaw(
+          `| ${row.cache} | ${row.cached} | ${row.rate} | ${row.status} |
+`
+        );
+      }
+      summary2 = summary2.addRaw("\n");
     }
-    summary2 = summary2.addRaw("\n");
+    if (restoreRows.length > 0) {
+      summary2 = summary2.addHeading("Restored caches", 3);
+      summary2 = summary2.addRaw(
+        "| Cache | Restored / total | Rate | Status |\n| --- | ---: | ---: | --- |\n"
+      );
+      for (const row of restoreRows) {
+        summary2 = summary2.addRaw(
+          `| ${row.cache} | ${row.cached} | ${row.rate} | ${row.status} |
+`
+        );
+      }
+      summary2 = summary2.addRaw("\n");
+    }
   }
   for (const note of notes) summary2 = summary2.addRaw(`${note}
 
 `);
   await summary2.write();
+}
+function groupInvocationRows(rows) {
+  const groups = /* @__PURE__ */ new Map();
+  for (const row of [...rows].sort((left, right) => left.order - right.order)) {
+    const key = row.sequence === void 0 ? `label:${row.invocation || row.command}` : `sequence:${row.sequence}`;
+    let group = groups.get(key);
+    if (!group) {
+      group = {
+        sequence: row.sequence,
+        invocation: row.invocation,
+        command: row.command,
+        targets: row.targets,
+        elapsed: row.elapsed,
+        order: row.order,
+        rows: []
+      };
+      groups.set(key, group);
+    }
+    group.rows.push(row);
+  }
+  return [...groups.values()].sort((left, right) => left.order - right.order);
+}
+function formatInvocationHeading(group) {
+  const command = group.command || group.invocation || "unknown";
+  const sequence = group.sequence === void 0 ? "" : ` \xB7 ${formatInvocationSequence(group.sequence)}`;
+  return `${command}${sequence} \xB7 ${group.elapsed}`;
 }
 async function reportSafely(name, report) {
   try {
@@ -108718,6 +108761,8 @@ function cacheSummaryRow(cache, report) {
   const command = report.baseCommand || report.command;
   return {
     invocation: report.command || command,
+    command,
+    sequence: report.sequence,
     targets: formatSummaryTargets(report.targets),
     elapsed: formatInvocationElapsed(report.startedAt, report.finishedAt),
     cache,

@@ -31,6 +31,7 @@ import {
   summarizeExecutionLog,
 } from './execution-log.js';
 import {
+  formatInvocationSequence,
   invocationFilePaths,
   invocationLabel,
   invocationRootPath,
@@ -278,7 +279,7 @@ function sortRunnerCounts(counts) {
     .map(([runner, count]) => ({ runner, count }));
 }
 
-/** Write one step-summary row per invocation, followed by cache restore rows. */
+/** Write grouped invocation details and a separate setup-cache restore table. */
 async function writeCacheSummary(execution, tests, state) {
   // Keep the summary opt-in with the two reporting inputs. Restore details
   // enrich an enabled report; they do not create an otherwise empty report.
@@ -292,33 +293,80 @@ async function writeCacheSummary(execution, tests, state) {
     ...(tests?.reports || [])
       .map((report) => cacheSummaryRow('Test cache', report)),
   ];
-  const rows = [
-    ...invocationRows,
-    ...cacheRestoreSummaryRows(state),
-  ].sort((left, right) => left.order - right.order);
+  const invocationGroups = groupInvocationRows(invocationRows);
+  const restoreRows = cacheRestoreSummaryRows(state);
   const notes = tests?.notes || [];
 
   let summary = core.summary.addHeading('Bazel cache summary');
   summary = summary.addRaw(
-    'Each cache row represents one captured Bazel invocation. Target patterns are shown when recognized; restore rows show which setup caches were available.\n\n',
+    'Each invocation is shown once with its targets and duration. Cache results are grouped below the invocation; setup-cache restores are listed separately.\n\n',
   );
-  if (rows.length === 0) {
+  if (invocationGroups.length === 0 && restoreRows.length === 0) {
     summary = summary.addRaw('No cache data was available for this job.\n\n');
   } else {
-    summary = summary.addRaw(
-      '| Invocation | Targets | Elapsed | Cache | Cached / total | Hit rate | Status |\n' +
-      '| --- | --- | ---: | --- | ---: | ---: | --- |\n',
-    );
-    for (const row of rows) {
+    for (const group of invocationGroups) {
+      summary = summary.addHeading(formatInvocationHeading(group), 3);
+      summary = summary.addRaw(`**Targets:** ${group.targets}\n\n`);
       summary = summary.addRaw(
-        `| ${row.invocation || '—'} | ${row.targets || '—'} | ${row.elapsed} | ${row.cache} | ` +
-        `${row.cached} | ${row.rate} | ${row.status} |\n`,
+        '| Cache | Reused / total | Hit rate | Status |\n' +
+        '| --- | ---: | ---: | --- |\n',
       );
+      for (const row of group.rows) {
+        summary = summary.addRaw(
+          `| ${row.cache} | ${row.cached} | ${row.rate} | ${row.status} |\n`,
+        );
+      }
+      summary = summary.addRaw('\n');
     }
-    summary = summary.addRaw('\n');
+
+    if (restoreRows.length > 0) {
+      summary = summary.addHeading('Restored caches', 3);
+      summary = summary.addRaw(
+        '| Cache | Restored / total | Rate | Status |\n' +
+        '| --- | ---: | ---: | --- |\n',
+      );
+      for (const row of restoreRows) {
+        summary = summary.addRaw(
+          `| ${row.cache} | ${row.cached} | ${row.rate} | ${row.status} |\n`,
+        );
+      }
+      summary = summary.addRaw('\n');
+    }
   }
   for (const note of notes) summary = summary.addRaw(`${note}\n\n`);
   await summary.write();
+}
+
+/** Combine build and test metrics that belong to the same Bazel invocation. */
+function groupInvocationRows(rows) {
+  const groups = new Map();
+  for (const row of [...rows].sort((left, right) => left.order - right.order)) {
+    const key = row.sequence === undefined
+      ? `label:${row.invocation || row.command}`
+      : `sequence:${row.sequence}`;
+    let group = groups.get(key);
+    if (!group) {
+      group = {
+        sequence: row.sequence,
+        invocation: row.invocation,
+        command: row.command,
+        targets: row.targets,
+        elapsed: row.elapsed,
+        order: row.order,
+        rows: [],
+      };
+      groups.set(key, group);
+    }
+    group.rows.push(row);
+  }
+  return [...groups.values()].sort((left, right) => left.order - right.order);
+}
+
+/** Give each invocation a compact heading that remains easy to correlate. */
+function formatInvocationHeading(group) {
+  const command = group.command || group.invocation || 'unknown';
+  const sequence = group.sequence === undefined ? '' : ` · ${formatInvocationSequence(group.sequence)}`;
+  return `${command}${sequence} · ${group.elapsed}`;
 }
 
 /** Optional diagnostics must not prevent another report or a cache save. */
@@ -346,6 +394,8 @@ function cacheSummaryRow(cache, report) {
   const command = report.baseCommand || report.command;
   return {
     invocation: report.command || command,
+    command,
+    sequence: report.sequence,
     targets: formatSummaryTargets(report.targets),
     elapsed: formatInvocationElapsed(report.startedAt, report.finishedAt),
     cache,

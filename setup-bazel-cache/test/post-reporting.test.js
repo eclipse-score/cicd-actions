@@ -152,12 +152,17 @@ test('test report preserves cache output and renders disabled, partial, and no-a
   });
   assert.match(baseline.summary, /<h1>Bazel cache summary<\/h1>/);
   assert.match(actual.summary, /<h1>Bazel cache summary<\/h1>/);
-  assert.match(actual.summary, /\| Invocation \| Targets \| Elapsed \| Cache \| Cached \/ total \| Hit rate \| Status \|/);
-  assert.match(actual.summary, /\| 000-test \| not captured \| 12\.4 s \| Test cache \| 0 \/ 1 \| 0% \| ⚠️ Disabled \|/);
+  assert.match(actual.summary, /<h3>test · 000 · 12\.4 s<\/h3>/);
+  assert.match(actual.summary, /\*\*Targets:\*\* not captured/);
+  assert.match(actual.summary, /\| Cache \| Reused \/ total \| Hit rate \| Status \|/);
+  assert.match(actual.summary, /\| Test cache \| 0 \/ 1 \| 0% \| ⚠️ Disabled \|/);
   assert.match(actual.summary, /⚠️ Disabled means test-result caching was turned off for this invocation/);
-  assert.match(actual.summary, /\| 001-coverage \| not captured \| 1\.8 min \| Test cache \| 1 \/ 1 \| 100% \| Partial data \|/);
-  assert.match(actual.summary, /\| — \| — \| — \| Bazelisk cache \| 1 \/ 1 \| 100% \| Used \|/);
-  assert.match(actual.summary, /\| — \| — \| — \| Repository cache \| 0 \/ 1 \| 0% \| Not used \|/);
+  assert.match(actual.summary, /<h3>coverage · 001 · 1\.8 min<\/h3>/);
+  assert.match(actual.summary, /\| Test cache \| 1 \/ 1 \| 100% \| Partial data \|/);
+  assert.match(actual.summary, /<h3>Restored caches<\/h3>/);
+  assert.match(actual.summary, /\| Cache \| Restored \/ total \| Rate \| Status \|/);
+  assert.match(actual.summary, /\| Bazelisk cache \| 1 \/ 1 \| 100% \| Used \|/);
+  assert.match(actual.summary, /\| Repository cache \| 0 \/ 1 \| 0% \| Not used \|/);
   assert.doesNotMatch(actual.summary, /Disk cache/);
   assert.doesNotMatch(actual.summary, /\| External cache \|/);
   fs.writeFileSync(path.join(root, 'summary.md'), '');
@@ -171,8 +176,8 @@ test('test report preserves cache output and renders disabled, partial, and no-a
       'repo-c': 'false',
     },
   });
-  assert.match(withExternal.summary, /\| — \| — \| — \| External cache \| 2 \/ 3 \| 66.67% \| Used \|/);
-  assert.match(actual.summary, /\| 000-test \| not captured \| 12\.4 s \| Build cache \| 0 \/ 0 \| n\/a \| No data \|/);
+  assert.match(withExternal.summary, /<h3>Restored caches<\/h3>[\s\S]*\| External cache \| 2 \/ 3 \| 66\.67% \| Used \|/);
+  assert.match(actual.summary, /\| Build cache \| 0 \/ 0 \| n\/a \| No data \|/);
   assert.doesNotMatch(actual.summary, /Local cache \| Shared cache \| Ran \|/);
   assert.match(actual.output, /Bazel test cache\n\+[-+]+\+/);
   assert.match(actual.output, /⚠️ Disabled means test-result caching was turned off for this invocation/);
@@ -190,7 +195,7 @@ test('test report preserves cache output and renders disabled, partial, and no-a
   assert.doesNotMatch(actual.output + actual.summary, /cacheable spawns|BEP|Executed\/non-hits|Remote\/disk/);
 });
 
-test('summary lists repeated invocations with their target patterns', (context) => {
+test('summary groups repeated invocations with their target patterns', (context) => {
   const root = fixture(context);
   const invocationRoot = invocationRootPath(root);
   initializeInvocationStore(invocationRoot);
@@ -220,19 +225,19 @@ test('summary lists repeated invocations with their target patterns', (context) 
   }
 
   const { output, summary } = runPost(root, true);
-  assert.match(summary, /\| Invocation \| Targets \| Elapsed \| Cache \| Cached \/ total \| Hit rate \| Status \|/);
+  assert.match(summary, /\| Cache \| Reused \/ total \| Hit rate \| Status \|/);
   for (let sequence = 0; sequence < 3; sequence += 1) {
     const elapsed = ['12\\.4 s', '1\\.8 min', '0\\.4 s'][sequence];
     assert.match(
       summary,
-      new RegExp(`\\| 00${sequence}-test \\| \\/\\/:test-${sequence} \\| ${elapsed} \\| Build cache \\| 1 \\/ 1 \\| 100% \\| Used \\|`),
+      new RegExp(`<h3>test · 00${sequence} · ${elapsed}<\\/h3>[\\s\\S]*?\\*\\*Targets:\\*\\* \\/\\/:test-${sequence}[\\s\\S]*?\\| Build cache \\| 1 \\/ 1 \\| 100% \\| Used \\|`),
     );
     assert.match(
       summary,
-      new RegExp(`\\| 00${sequence}-test \\| \\/\\/:test-${sequence} \\| ${elapsed} \\| Test cache \\| 1 \\/ 1 \\| 100% \\| Used \\|`),
+      new RegExp(`<h3>test · 00${sequence} · ${elapsed}<\\/h3>[\\s\\S]*?\\| Test cache \\| 1 \\/ 1 \\| 100% \\| Used \\|`),
     );
   }
-  assert.doesNotMatch(summary, /test \(3 invocations\)/);
+  assert.equal((summary.match(/<h3>test · 00[0-2] ·/g) || []).length, 3);
   assert.match(output, /000-test/);
   assert.match(output, /001-test/);
 });
@@ -259,8 +264,8 @@ test('summary uses n/a for incomplete or invalid invocation timestamps', (contex
   updateInvocationMetadata(invalidStart, { startedAt: 'not-a-timestamp' });
 
   const { summary } = runPost(root, false);
-  assert.match(summary, /\| 000-build \| not captured \| n\/a \| Build cache \| — \| n\/a \| Unavailable \|/);
-  assert.match(summary, /\| 001-build \| not captured \| n\/a \| Build cache \| — \| n\/a \| Unavailable \|/);
+  assert.match(summary, /<h3>build · 000 · n\/a<\/h3>[\s\S]*?\| Build cache \| — \| n\/a \| Unavailable \|/);
+  assert.match(summary, /<h3>build · 001 · n\/a<\/h3>[\s\S]*?\| Build cache \| — \| n\/a \| Unavailable \|/);
 });
 
 test('summary write failures do not stop post-step processing', (context) => {
