@@ -151,16 +151,13 @@ test('test report preserves cache output and renders disabled, partial, and no-a
     },
   });
   assert.match(baseline.summary, /<h1>Bazel cache summary<\/h1>/);
-  assert.match(actual.summary, /<h1>Bazel cache summary<\/h1>/);
-  assert.match(actual.summary, /<h3>test · 000 · 12\.4 s<\/h3>/);
-  assert.match(actual.summary, /\*\*Targets:\*\* not captured/);
-  assert.match(actual.summary, /\| Cache \| Reused \/ total \| Hit rate \| Status \|/);
+  assert.match(actual.summary, /<h1>Bazel cache summary<\/h1>\n\nEach invocation/);
+  assert.match(actual.summary, /<h3>test · 000 · 12\.4 s<\/h3>\n\n\*\*Targets:\*\* not captured\n\n\| Cache \| Reused \/ total \| Hit rate \| Status \|/);
   assert.match(actual.summary, /\| Test cache \| 0 \/ 1 \| 0% \| ⚠️ Disabled \|/);
   assert.match(actual.summary, /⚠️ Disabled means test-result caching was turned off for this invocation/);
   assert.match(actual.summary, /<h3>coverage · 001 · 1\.8 min<\/h3>/);
   assert.match(actual.summary, /\| Test cache \| 1 \/ 1 \| 100% \| Partial data \|/);
-  assert.match(actual.summary, /<h3>Restored caches<\/h3>/);
-  assert.match(actual.summary, /\| Cache \| Restored \/ total \| Rate \| Status \|/);
+  assert.match(actual.summary, /<h3>Restored caches<\/h3>\n\n\| Cache \| Restored \/ total \| Rate \| Status \|/);
   assert.match(actual.summary, /\| Bazelisk cache \| 1 \/ 1 \| 100% \| Used \|/);
   assert.match(actual.summary, /\| Repository cache \| 0 \/ 1 \| 0% \| Not used \|/);
   assert.doesNotMatch(actual.summary, /Disk cache/);

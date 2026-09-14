@@ -108675,7 +108675,7 @@ async function writeCacheSummary(execution, tests, state3) {
   const invocationGroups = groupInvocationRows(invocationRows);
   const restoreRows = cacheRestoreSummaryRows(state3);
   const notes = tests?.notes || [];
-  let summary2 = summary.addHeading("Bazel cache summary");
+  let summary2 = summary.addHeading("Bazel cache summary").addEOL();
   summary2 = summary2.addRaw(
     "Each invocation is shown once with its targets and duration. Cache results are grouped below the invocation; setup-cache restores are listed separately.\n\n"
   );
@@ -108683,7 +108683,7 @@ async function writeCacheSummary(execution, tests, state3) {
     summary2 = summary2.addRaw("No cache data was available for this job.\n\n");
   } else {
     for (const group of invocationGroups) {
-      summary2 = summary2.addHeading(formatInvocationHeading(group), 3);
+      summary2 = summary2.addHeading(formatInvocationHeading(group), 3).addEOL();
       summary2 = summary2.addRaw(`**Targets:** ${group.targets}
 
 `);
@@ -108699,7 +108699,7 @@ async function writeCacheSummary(execution, tests, state3) {
       summary2 = summary2.addRaw("\n");
     }
     if (restoreRows.length > 0) {
-      summary2 = summary2.addHeading("Restored caches", 3);
+      summary2 = summary2.addHeading("Restored caches", 3).addEOL();
       summary2 = summary2.addRaw(
         "| Cache | Restored / total | Rate | Status |\n| --- | ---: | ---: | --- |\n"
       );
