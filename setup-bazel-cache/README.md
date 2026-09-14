@@ -4,6 +4,9 @@ This Linux-only action configures Bazelisk, Bazel disk, and Bazel repository
 caches for Bazel 8.6 or newer. It can also cache large extracted external
 repositories and report cache reuse.
 
+For Bazel-specific flags, report formats, cache semantics, and diagnostics, see
+the [Bazel expert guide](./EXPERT.md).
+
 Errors caught during setup or post-processing, including invalid action inputs,
 produce warnings instead of failing the calling workflow. The affected phase
 stops; if setup did not complete, the post step skips cache saving. Partial setup
