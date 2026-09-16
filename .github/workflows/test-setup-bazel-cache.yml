@@ -11,10 +11,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # *******************************************************************************
 
-# Self-test for the setup-bazel-cache action, which can save caches. Cache-writing
-# jobs run only on manual main-branch dispatches or write-capable contexts
-# (same-repository pull requests and the merge queue). The explicit-mode test
-# does not save a cache and can therefore run for fork pull requests as well.
+# Self-tests for setup-bazel-cache. The separate
+# persistence workflow exercises cache writes automatically on branch pushes.
 
 name: Test Setup Bazel Cache
 
@@ -46,7 +44,7 @@ jobs:
         continue-on-error: true
         uses: ./setup-bazel-cache
         with:
-          unique-cache-name: ${{ github.workflow }}-${{ github.job }}
+          disk-cache-key: ${{ github.workflow }}-${{ github.job }}
 
       - name: Verify auto mode refused unavailable history
         shell: bash
@@ -67,7 +65,7 @@ jobs:
           - fetch-depth: 2
             history-method: existing
           - fetch-depth: 1
-            history-method: deepened
+            history-method: fetched
     steps:
       - name: Check out action source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
@@ -78,7 +76,7 @@ jobs:
         id: setup-bazel-cache
         uses: ./setup-bazel-cache
         with:
-          unique-cache-name: ${{ github.workflow }}-${{ github.job }}-${{ matrix.history-method }}
+          disk-cache-key: ${{ github.workflow }}-${{ github.job }}-${{ matrix.history-method }}
 
       - name: Verify history was ${{ matrix.history-method }}
         shell: bash
@@ -87,14 +85,14 @@ jobs:
             echo "ERROR: setup-bazel-cache failed"
             exit 1
           fi
-          if [[ "${{ steps.setup-bazel-cache.outputs.checkout-history }}" != "${{ matrix.history-method }}" ]]; then
-            echo "ERROR: expected '${{ matrix.history-method }}', got '${{ steps.setup-bazel-cache.outputs.checkout-history }}'"
+          if [[ "${{ steps.setup-bazel-cache.outputs._checkout-history }}" != "${{ matrix.history-method }}" ]]; then
+            echo "ERROR: expected '${{ matrix.history-method }}', got '${{ steps.setup-bazel-cache.outputs._checkout-history }}'"
             exit 1
           fi
-          case "${{ steps.setup-bazel-cache.outputs.lock-file-changed }}" in
+          case "${{ steps.setup-bazel-cache.outputs._lock-file-changed }}" in
             true|false) ;;
             *)
-              echo "ERROR: expected a lockfile change result, got '${{ steps.setup-bazel-cache.outputs.lock-file-changed }}'"
+              echo "ERROR: expected a lockfile change result, got '${{ steps.setup-bazel-cache.outputs._lock-file-changed }}'"
               exit 1
               ;;
           esac
@@ -117,7 +115,7 @@ jobs:
         continue-on-error: true
         uses: ./setup-bazel-cache
         with:
-          unique-cache-name: ${{ github.workflow }}-${{ github.job }}
+          disk-cache-key: ${{ github.workflow }}-${{ github.job }}
 
       - name: Verify auto mode refused missing checkout history
         shell: bash
@@ -131,19 +129,21 @@ jobs:
             exit 1
           fi
 
-  modes-skip-history-check:
-    name: Non-saving modes skip history check
+  modes-without-history-check:
+    name: Explicit cache modes skip history check
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
-          - skip-cache-restore: false
-            expected-skip-cache-restore: false
-          - skip-cache-restore: true
-            expected-skip-cache-restore: true
-          - skip-cache-restore: auto
-            expected-skip-cache-restore: false
+          - disk-cache-restore: true
+            repository-cache-restore: true
+          - disk-cache-restore: false
+            repository-cache-restore: true
+          - disk-cache-restore: auto
+            repository-cache-restore: true
+          - disk-cache-restore: true
+            repository-cache-restore: false
     steps:
       - name: Check out action source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
@@ -156,9 +156,10 @@ jobs:
         id: setup-bazel-cache
         uses: ./setup-bazel-cache
         with:
-          unique-cache-name: ${{ github.workflow }}-${{ github.job }}
-          main-branch: no-cache-save-branch
-          skip-cache-restore: ${{ matrix.skip-cache-restore }}
+          disk-cache-key: ${{ github.workflow }}-${{ github.job }}
+          cache-save-branch-patterns: no-cache-save-branch
+          disk-cache-restore: ${{ matrix.disk-cache-restore }}
+          repository-cache-restore: ${{ matrix.repository-cache-restore }}
 
       - name: Verify history and lockfile checks were skipped
         shell: bash
@@ -167,18 +168,47 @@ jobs:
             echo "ERROR: setup-bazel-cache failed"
             exit 1
           fi
-          if [[ "${{ steps.setup-bazel-cache.outputs.checkout-history }}" != "skipped" ]]; then
-            echo "ERROR: expected skipped history check, got '${{ steps.setup-bazel-cache.outputs.checkout-history }}'"
+          if [[ "${{ steps.setup-bazel-cache.outputs._checkout-history }}" != "skipped" ]]; then
+            echo "ERROR: expected skipped history check, got '${{ steps.setup-bazel-cache.outputs._checkout-history }}'"
             exit 1
           fi
-          if [[ "${{ steps.setup-bazel-cache.outputs.lock-file-changed }}" != "unknown" ]]; then
-            echo "ERROR: expected unknown lockfile result, got '${{ steps.setup-bazel-cache.outputs.lock-file-changed }}'"
+          if [[ "${{ steps.setup-bazel-cache.outputs._lock-file-changed }}" != "unknown" ]]; then
+            echo "ERROR: expected unknown lockfile result, got '${{ steps.setup-bazel-cache.outputs._lock-file-changed }}'"
             exit 1
           fi
-          if [[ "${{ steps.setup-bazel-cache.outputs.skip-cache-restore }}" != "${{ matrix.expected-skip-cache-restore }}" ]]; then
-            echo "ERROR: expected skip-cache-restore=${{ matrix.expected-skip-cache-restore }}, got '${{ steps.setup-bazel-cache.outputs.skip-cache-restore }}'"
-            exit 1
-          fi
+  preserves-existing-bazelrc:
+    name: Existing user bazelrc is preserved
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out action source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+
+      - name: Create existing user bazelrc
+        shell: bash
+        run: |
+          echo 'existing-home-marker' > "${HOME}/.bazelrc"
+          echo 'existing-environment-marker' > "${RUNNER_TEMP}/existing.bazelrc"
+          echo "BAZELRC=${RUNNER_TEMP}/existing.bazelrc" >> "$GITHUB_ENV"
+
+      - name: Run with an existing user bazelrc
+        id: setup-bazel-cache
+        uses: ./setup-bazel-cache
+        with:
+          disk-cache-key: ${{ github.workflow }}-${{ github.job }}
+
+      - name: Verify the user and generated bazelrc files
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${{ steps.setup-bazel-cache.outcome }}" == "success" ]]
+          grep -Fxq 'existing-home-marker' "${HOME}/.bazelrc"
+          [[ "$(grep -Fc '# setup-bazel-cache: begin managed import' "${HOME}/.bazelrc")" == "1" ]]
+          grep -Fq -- "try-import ${RUNNER_TEMP}/setup-bazel-cache.bazelrc" "${HOME}/.bazelrc"
+          [[ "$(cat "${RUNNER_TEMP}/existing.bazelrc")" == "existing-environment-marker" ]]
+          generated_bazelrc="${RUNNER_TEMP}/setup-bazel-cache.bazelrc"
+          [[ "$BAZELRC" == "${RUNNER_TEMP}/existing.bazelrc,${generated_bazelrc}" ]]
+          grep -Fq -- "--disk_cache=" "$generated_bazelrc"
+          grep -Fq -- "--repository_cache=" "$generated_bazelrc"
 
   setup-bazel-cache:
     name: Action runs without error
@@ -200,44 +230,105 @@ jobs:
           set -euo pipefail
           echo 'module(name = "cache_test")' > "${GITHUB_WORKSPACE}/MODULE.bazel"
           echo '8.6.0' > "${GITHUB_WORKSPACE}/.bazelversion"
-
-      - name: Verify ~/.bazelrc does not exist before action
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ -f "${HOME}/.bazelrc" ]]; then
-            echo "ERROR: ~/.bazelrc already exists before setup-bazel-cache ran"
-            exit 1
-          fi
+          cat > "${GITHUB_WORKSPACE}/BUILD.bazel" <<'EOF'
+          genrule(
+              name = "example",
+              outs = ["example.txt"],
+              cmd = "echo built > $@",
+          )
+          EOF
 
       - name: Run setup-bazel-cache action
+        id: setup-bazel-cache
         uses: ./setup-bazel-cache
         with:
-          unique-cache-name: ${{ github.workflow }}-${{ github.job }}
+          disk-cache-key: ${{ github.workflow }}-${{ github.job }}
 
-      - name: Verify ~/.bazelrc was written by action with cache configuration
+      - name: Verify cache decision and restore outputs
+        shell: bash
+        env:
+          CACHE_SAVE_ALLOWED: ${{ steps.setup-bazel-cache.outputs.cache-save-branch-evaluated }}
+          EXPECTED_CACHE_SAVE: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+          FAILED_JOB_CACHE_SAVE_ALLOWED: ${{ steps.setup-bazel-cache.outputs._failed-job-cache-save-allowed }}
+          BAZELISK_RESTORE: ${{ steps.setup-bazel-cache.outputs.bazelisk-cache-restored }}
+          DISK_RESTORE: ${{ steps.setup-bazel-cache.outputs.disk-cache-restored }}
+          EXTERNAL_RESTORE: ${{ steps.setup-bazel-cache.outputs.external-cache-restored }}
+          REPOSITORY_RESTORE: ${{ steps.setup-bazel-cache.outputs.repository-cache-restored }}
+        run: |
+          set -euo pipefail
+          [[ "$CACHE_SAVE_ALLOWED" == "$EXPECTED_CACHE_SAVE" ]]
+          [[ "$SETUP_BAZEL_CACHE_ADDITIVE_SAVE" == "$FAILED_JOB_CACHE_SAVE_ALLOWED" ]]
+          for result in "$BAZELISK_RESTORE" "$DISK_RESTORE" "$EXTERNAL_RESTORE" "$REPOSITORY_RESTORE"; do
+            case "$result" in
+              true|false) ;;
+              *)
+                echo "ERROR: unexpected cache restore result: $result"
+                exit 1
+                ;;
+            esac
+          done
+
+      - name: Verify temporary bazelrc contains cache configuration
         shell: bash
         run: |
           set -euo pipefail
 
-          if [[ ! -f "${HOME}/.bazelrc" ]]; then
-            echo "ERROR: ~/.bazelrc was not created by setup-bazel-cache"
+          if [[ ! -f "$BAZELRC" ]]; then
+            echo "ERROR: temporary bazelrc was not created by setup-bazel-cache"
             exit 1
           fi
 
-          if ! grep -Fq -- "--disk_cache=" "${HOME}/.bazelrc"; then
-            echo "ERROR: ~/.bazelrc does not contain disk_cache configuration"
+          if ! grep -Fq -- "--disk_cache=" "$BAZELRC"; then
+            echo "ERROR: temporary bazelrc does not contain disk_cache configuration"
             exit 1
           fi
 
-          if ! grep -Fq -- "--repository_cache=" "${HOME}/.bazelrc"; then
-            echo "ERROR: ~/.bazelrc does not contain repository_cache configuration"
+          if ! grep -Fq -- "--repository_cache=" "$BAZELRC"; then
+            echo "ERROR: temporary bazelrc does not contain repository_cache configuration"
             exit 1
           fi
 
-          echo "~/.bazelrc contents:"
-          cat "${HOME}/.bazelrc"
+          echo "Temporary bazelrc contents:"
+          cat "$BAZELRC"
 
       - name: Run bazel info to verify workspace and cache configuration are valid
         shell: bash
         run: bazel info --announce_rc
+
+      - name: Build a real target twice to produce a genuine disk-cache hit
+        # `bazel clean` drops the in-memory/local action cache but not the
+        # configured --disk_cache, so the second build must actually consult
+        # the disk cache instead of Bazel short-circuiting via Skyframe.
+        shell: bash
+        run: |
+          set -euo pipefail
+          bazel build //:example
+          bazel clean
+          bazel build //:example
+
+      - name: Verify the real execution log records a genuine cache hit
+        # This exercises the launcher's real flag injection and the execution-log
+        # parser against Bazel's actual compact-log format, which synthetic unit
+        # test fixtures cannot verify.
+        shell: bash
+        run: |
+          set -euo pipefail
+          second_build="$(find "$SETUP_BAZEL_CACHE_INVOCATION_ROOT" -maxdepth 1 -name '*-build' | sort | tail -n1)"
+          if [[ -z "$second_build" ]]; then
+            echo "ERROR: no build invocation was recorded"
+            exit 1
+          fi
+          cat > "${RUNNER_TEMP}/verify-execution-log.mjs" <<'EOF'
+          const [logPath] = process.argv.slice(2);
+          const workspace = process.env.GITHUB_WORKSPACE;
+          const { summarizeExecutionLog } = await import(`${workspace}/setup-bazel-cache/src/execution-log.js`);
+          const report = await summarizeExecutionLog(logPath);
+          if (report.observed === 0) {
+            throw new Error('No cacheable spawns were observed in the real execution log');
+          }
+          if (report.hits === 0) {
+            throw new Error(`Expected the second identical build to hit the cache, got ${JSON.stringify(report)}`);
+          }
+          console.log(`Real execution log parsed successfully: ${report.hits}/${report.observed} cached`);
+          EOF
+          node "${RUNNER_TEMP}/verify-execution-log.mjs" "${second_build}/execution.log.zst"
