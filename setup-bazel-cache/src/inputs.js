@@ -14,9 +14,23 @@
 import { minimatch } from 'minimatch';
 
 const BOOLEAN_MODES = new Set(['true', 'false']);
-const DISK_RESTORE_MODES = new Set(['true', 'false', 'auto']);
+const AUTO_RESTORE_MODES = new Set(['true', 'false', 'auto']);
 const REPOSITORY_SAVE_MODES = new Set(['true', 'false', 'auto']);
 const INVALID_BRANCH_PATTERN_CHARACTERS = /[\s~^:\\]/;
+const DEFAULT_REPOSITORY_CACHE_GROWTH_THRESHOLD = 10;
+
+/** Parse the repository cache growth threshold as a whole percentage. */
+function parseRepositoryCacheGrowthThreshold(value) {
+  const threshold = value.trim();
+  if (!threshold) return DEFAULT_REPOSITORY_CACHE_GROWTH_THRESHOLD;
+
+  if (!/^(0|[1-9]\d*)$/.test(threshold) || Number(threshold) > 100) {
+    throw new Error(
+      `Invalid repository-cache-growth-threshold value '${value}'. Expected an integer from 0 to 100.`,
+    );
+  }
+  return Number(threshold);
+}
 
 /** Reject unknown modes early because GitHub Action inputs are untyped strings. */
 function validateMode(name, value, allowed) {
@@ -31,7 +45,7 @@ function parseCacheConfiguration(raw) {
     bazelisk: raw.bazeliskCacheRestore.trim() || 'true',
     disk: raw.diskCacheRestore.trim() || 'auto',
     external: raw.externalCacheRestore.trim() || 'true',
-    repository: raw.repositoryCacheRestore.trim() || 'true',
+    repository: raw.repositoryCacheRestore.trim() || 'auto',
   };
   const save = {
     bazelisk: raw.bazeliskCacheSave.trim() || 'true',
@@ -42,15 +56,18 @@ function parseCacheConfiguration(raw) {
 
   validateMode('bazelisk-cache-restore', restore.bazelisk, BOOLEAN_MODES);
   validateMode('bazelisk-cache-save', save.bazelisk, BOOLEAN_MODES);
-  validateMode('disk-cache-restore', restore.disk, DISK_RESTORE_MODES);
+  validateMode('disk-cache-restore', restore.disk, AUTO_RESTORE_MODES);
   validateMode('external-cache-restore', restore.external, BOOLEAN_MODES);
-  validateMode('repository-cache-restore', restore.repository, BOOLEAN_MODES);
+  validateMode('repository-cache-restore', restore.repository, AUTO_RESTORE_MODES);
   validateMode('disk-cache-save', save.disk, BOOLEAN_MODES);
   validateMode('external-cache-save', save.external, BOOLEAN_MODES);
   validateMode('repository-cache-save', save.repository, REPOSITORY_SAVE_MODES);
   return {
     restore,
     save,
+    repositoryCacheGrowthThreshold: parseRepositoryCacheGrowthThreshold(
+      raw.repositoryCacheGrowthThreshold || '',
+    ),
   };
 }
 
@@ -94,17 +111,17 @@ function parseCacheSaveBranchPatterns(value, defaultBranch) {
 }
 
 /** Resolve one positive restore mode into the decision used by the cache layer. */
-function resolveRestoreMode(mode, diskCacheWillSave, lockFileChanged) {
-  return mode !== 'false' && !(mode === 'auto' && diskCacheWillSave && lockFileChanged);
+function resolveRestoreMode(mode, cacheWillSave, lockFileChanged) {
+  return mode !== 'false' && !(mode === 'auto' && cacheWillSave && lockFileChanged);
 }
 
 /** Resolve every cache independently so the cache layer contains no input policy. */
-function resolveRestoreModes(configuration, diskCacheWillSave, lockFileChanged) {
+function resolveRestoreModes(configuration, saves, lockFileChanged) {
   return {
     bazelisk: configuration.bazelisk === 'true',
-    disk: resolveRestoreMode(configuration.disk, diskCacheWillSave, lockFileChanged),
+    disk: resolveRestoreMode(configuration.disk, saves.disk, lockFileChanged),
     external: configuration.external === 'true',
-    repository: configuration.repository === 'true',
+    repository: resolveRestoreMode(configuration.repository, saves.repository, lockFileChanged),
   };
 }
 
@@ -143,11 +160,12 @@ function cacheSaveDisallowReason(ref, branchPatterns) {
 }
 
 /**
- * Avoid Git inspection unless the automatic disk-restore decision can affect this run.
- * A disk cache that will not be saved later always restores and therefore does not need a parent commit.
+ * Avoid Git inspection unless an automatic restore decision can affect this run.
+ * A cache that will not be saved later always restores and needs no parent commit.
  */
-function needsLockFileCheck(configuration, diskCacheWillSave) {
-  return diskCacheWillSave && configuration.disk === 'auto';
+function needsLockFileCheck(configuration, saves) {
+  return (saves.disk && configuration.disk === 'auto') ||
+    (saves.repository && configuration.repository === 'auto');
 }
 
 export {

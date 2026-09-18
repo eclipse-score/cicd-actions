@@ -25,6 +25,7 @@ function describeRestoreResult(result) {
     case RESTORE_RESULT.TRUE: return 'true (exact hit)';
     case RESTORE_RESULT.PARTIAL: return 'partial (older generation)';
     case RESTORE_RESULT.FALSE: return 'false (miss)';
+    case RESTORE_RESULT.RESET: return 'skipped (lockfile changed)';
     case RESTORE_RESULT.SKIPPED: return 'skipped (disabled)';
     case RESTORE_RESULT.UNKNOWN: return 'unknown (restore error)';
     default: return result;

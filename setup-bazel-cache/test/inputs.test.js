@@ -35,6 +35,7 @@ function raw(overrides = {}) {
     diskCacheSave: '',
     externalCacheSave: '',
     repositoryCacheSave: '',
+    repositoryCacheGrowthThreshold: '',
     ...overrides,
   };
 }
@@ -90,7 +91,7 @@ test('new cache API uses the requested defaults', () => {
       bazelisk: 'true',
       disk: 'auto',
       external: 'true',
-      repository: 'true',
+      repository: 'auto',
     },
     save: {
       bazelisk: 'true',
@@ -98,17 +99,18 @@ test('new cache API uses the requested defaults', () => {
       external: 'true',
       repository: 'auto',
     },
+    repositoryCacheGrowthThreshold: 10,
   });
-  const diskCacheWillSave = resolveSaveModes(configuration.save, true).disk;
-  assert.equal(diskCacheWillSave, false);
-  assert.equal(needsLockFileCheck(configuration.restore, diskCacheWillSave), false);
-  assert.deepEqual(resolveRestoreModes(configuration.restore, diskCacheWillSave, true), {
+  const saves = resolveSaveModes(configuration.save, true);
+  assert.equal(saves.disk, false);
+  assert.equal(needsLockFileCheck(configuration.restore, saves), true);
+  assert.deepEqual(resolveRestoreModes(configuration.restore, saves, true), {
     bazelisk: true,
     disk: true,
-    repository: true,
+    repository: false,
     external: true,
   });
-  assert.deepEqual(resolveSaveModes(configuration.save, true), {
+  assert.deepEqual(saves, {
     bazelisk: true,
     disk: false,
     repository: true,
@@ -118,10 +120,10 @@ test('new cache API uses the requested defaults', () => {
 
 test('automatic disk restore mode restores outside the cache-writing branch', () => {
   const configuration = parseCacheConfiguration(raw({ diskCacheSave: 'true' }));
-  const diskCacheWillSave = resolveSaveModes(configuration.save, false).disk;
-  assert.equal(diskCacheWillSave, false);
-  assert.equal(needsLockFileCheck(configuration.restore, diskCacheWillSave), false);
-  assert.deepEqual(resolveRestoreModes(configuration.restore, diskCacheWillSave, true), {
+  const saves = resolveSaveModes(configuration.save, false);
+  assert.equal(saves.disk, false);
+  assert.equal(needsLockFileCheck(configuration.restore, saves), false);
+  assert.deepEqual(resolveRestoreModes(configuration.restore, saves, true), {
     bazelisk: true,
     disk: true,
     external: true,
@@ -129,16 +131,17 @@ test('automatic disk restore mode restores outside the cache-writing branch', ()
   });
 });
 
-test('automatic disk restore suppresses restore after a changed lock file when disk cache will be saved', () => {
+test('automatic restores suppress cache restore after a changed lock file when those caches will be saved', () => {
   const configuration = parseCacheConfiguration(raw({ diskCacheSave: 'true' }));
-  const diskCacheWillSave = resolveSaveModes(configuration.save, true).disk;
-  assert.equal(diskCacheWillSave, true);
-  assert.equal(needsLockFileCheck(configuration.restore, diskCacheWillSave), true);
-  assert.deepEqual(resolveRestoreModes(configuration.restore, diskCacheWillSave, true), {
+  const saves = resolveSaveModes(configuration.save, true);
+  assert.equal(saves.disk, true);
+  assert.equal(saves.repository, true);
+  assert.equal(needsLockFileCheck(configuration.restore, saves), true);
+  assert.deepEqual(resolveRestoreModes(configuration.restore, saves, true), {
     bazelisk: true,
     disk: false,
     external: true,
-    repository: true,
+    repository: false,
   });
 });
 
@@ -148,10 +151,10 @@ test('explicit modes do not need the lock-file comparison', () => {
     diskCacheSave: 'true',
     repositoryCacheRestore: 'false',
   }));
-  const diskCacheWillSave = resolveSaveModes(configuration.save, true).disk;
-  assert.equal(diskCacheWillSave, true);
-  assert.equal(needsLockFileCheck(configuration.restore, diskCacheWillSave), false);
-  assert.deepEqual(resolveRestoreModes(configuration.restore, diskCacheWillSave, true), {
+  const saves = resolveSaveModes(configuration.save, true);
+  assert.equal(saves.disk, true);
+  assert.equal(needsLockFileCheck(configuration.restore, saves), false);
+  assert.deepEqual(resolveRestoreModes(configuration.restore, saves, true), {
     bazelisk: true,
     disk: false,
     repository: false,
@@ -164,10 +167,12 @@ test('explicit disk restore mode remains enabled despite a changed lock file', (
     diskCacheRestore: 'true',
     diskCacheSave: 'true',
   }));
-  const diskCacheWillSave = resolveSaveModes(configuration.save, true).disk;
-  assert.equal(diskCacheWillSave, true);
-  assert.equal(needsLockFileCheck(configuration.restore, diskCacheWillSave), false);
-  assert.equal(resolveRestoreModes(configuration.restore, diskCacheWillSave, true).disk, true);
+  const saves = resolveSaveModes(configuration.save, true);
+  assert.equal(saves.disk, true);
+  assert.equal(needsLockFileCheck(configuration.restore, saves), true);
+  const restores = resolveRestoreModes(configuration.restore, saves, true);
+  assert.equal(restores.disk, true);
+  assert.equal(restores.repository, false);
 });
 
 test('invalid modes are rejected', () => {
@@ -180,7 +185,7 @@ test('invalid modes are rejected', () => {
     /Invalid repository-cache-save/
   );
   assert.throws(
-    () => parseCacheConfiguration(raw({ repositoryCacheRestore: 'auto' })),
+    () => parseCacheConfiguration(raw({ repositoryCacheRestore: 'sometimes' })),
     /Invalid repository-cache-restore/
   );
   assert.throws(
@@ -203,15 +208,41 @@ test('invalid modes are rejected', () => {
     () => parseCacheConfiguration(raw({ externalCacheSave: 'yes' })),
     /Invalid external-cache-save/
   );
+  assert.throws(
+    () => parseCacheConfiguration(raw({ repositoryCacheGrowthThreshold: '-1' })),
+    /Invalid repository-cache-growth-threshold/,
+  );
+  assert.throws(
+    () => parseCacheConfiguration(raw({ repositoryCacheGrowthThreshold: '101' })),
+    /Invalid repository-cache-growth-threshold/,
+  );
+  assert.throws(
+    () => parseCacheConfiguration(raw({ repositoryCacheGrowthThreshold: '2.5' })),
+    /Invalid repository-cache-growth-threshold/,
+  );
+});
+
+test('repository cache growth threshold accepts a configured whole percentage', () => {
+  assert.equal(
+    parseCacheConfiguration(raw({ repositoryCacheGrowthThreshold: '0' }))
+      .repositoryCacheGrowthThreshold,
+    0,
+  );
+  assert.equal(
+    parseCacheConfiguration(raw({ repositoryCacheGrowthThreshold: '25' }))
+      .repositoryCacheGrowthThreshold,
+    25,
+  );
 });
 
 test('Bazelisk uses boolean modes independently of lock-file policy', () => {
   const configuration = parseCacheConfiguration(raw({
     bazeliskCacheRestore: 'true',
     bazeliskCacheSave: 'false',
+    repositoryCacheRestore: 'true',
   }));
-  const diskCacheWillSave = resolveSaveModes(configuration.save, true).disk;
-  assert.deepEqual(resolveRestoreModes(configuration.restore, diskCacheWillSave, true), {
+  const saves = resolveSaveModes(configuration.save, true);
+  assert.deepEqual(resolveRestoreModes(configuration.restore, saves, true), {
     bazelisk: true,
     disk: true,
     repository: true,
@@ -223,7 +254,7 @@ test('Bazelisk uses boolean modes independently of lock-file policy', () => {
     external: true,
     repository: true,
   });
-  assert.deepEqual(resolveRestoreModes({ ...configuration.restore, bazelisk: 'false' }, diskCacheWillSave, false), {
+  assert.deepEqual(resolveRestoreModes({ ...configuration.restore, bazelisk: 'false' }, saves, false), {
     bazelisk: false,
     disk: true,
     external: true,

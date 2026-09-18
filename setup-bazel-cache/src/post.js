@@ -16,6 +16,7 @@ import { DefaultArtifactClient } from '@actions/artifact';
 import fs from 'node:fs';
 import {
   deleteCacheByKey,
+  pendingCleanupKeysState,
   save,
   shouldSaveRepositoryCache,
   restoredKeyState,
@@ -82,6 +83,7 @@ async function run() {
     const {
       cacheSaveAllowed,
       repositoryCacheSaveMode = 'true',
+      repositoryCacheGrowthThreshold = 10,
       saves,
       diskCacheKey,
       workspace,
@@ -139,6 +141,7 @@ async function run() {
         restoreResults?.repository,
         repositoryCacheStartSize,
         repositoryCacheSizeBeforeSave,
+        repositoryCacheGrowthThreshold,
       )
     ) {
       const repositoryResult = await save(
@@ -157,7 +160,8 @@ async function run() {
         );
       } else {
         core.info(
-          'Repository cache automatic save skipped because the local cache grew by less than 10% ' +
+          'Repository cache automatic save skipped because the local cache did not reach the configured ' +
+          `${repositoryCacheGrowthThreshold}% growth threshold ` +
           `(${formatBytes(repositoryCacheStartSize)} -> ${formatBytes(repositoryCacheSizeBeforeSave)})`,
         );
       }
@@ -216,18 +220,33 @@ async function uploadProfiles(diskCacheKey, root = invocationRootPath()) {
 /** Remove only the prior generation restored by this action, after upload. */
 async function cleanupPreviousGeneration(configuration, cacheConfiguration) {
   const previousKey = core.getState(restoredKeyState(cacheConfiguration));
-  if (!previousKey) {
+  const pendingKeysState = core.getState(pendingCleanupKeysState(cacheConfiguration));
+  let pendingKeys = [];
+  if (pendingKeysState) {
+    try {
+      const parsedKeys = JSON.parse(pendingKeysState);
+      if (Array.isArray(parsedKeys)) {
+        pendingKeys = parsedKeys.filter((key) => typeof key === 'string');
+      }
+    } catch (error) {
+      core.warning(
+        `${cacheLabel(configuration, cacheConfiguration)} cache cleanup skipped malformed ` +
+        `pending generation keys: ${error.message || error}`,
+      );
+    }
+  }
+  const previousKeys = [...new Set([previousKey, ...pendingKeys].filter(Boolean))];
+  if (previousKeys.length === 0) {
     core.info(
       `${cacheLabel(configuration, cacheConfiguration)} cache cleanup skipped because no previous ` +
-      'cache generation was restored',
+      'cache generation keys are available',
     );
     return;
   }
 
-  await deleteCacheByKey(previousKey, {
-    configuration,
-    cacheConfiguration,
-  });
+  for (const cacheKey of previousKeys) {
+    await deleteCacheByKey(cacheKey, { configuration, cacheConfiguration });
+  }
 }
 
 run();

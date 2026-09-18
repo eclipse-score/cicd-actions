@@ -83,3 +83,24 @@ test('restore summary keeps a single external row when no component was restored
     [`${configuration.baseKey}/${configuration.platform}/external`, 'skipped (disabled)', '0 B'],
   ]);
 });
+
+test('restore summary distinguishes automatic lockfile resets from disabled restores', () => {
+  const configuration = createConfiguration('/workspace', 'linux-debug');
+  const details = {
+    disk: { result: RESTORE_RESULT.RESET, sizeAfter: 0 },
+    repository: { result: RESTORE_RESULT.RESET, sizeAfter: 0 },
+  };
+
+  assert.deepEqual(restoreSummaryRows(configuration, details), [
+    [
+      cacheLabel(configuration, configuration.caches.disk),
+      'skipped (lockfile changed)',
+      '0 B',
+    ],
+    [
+      cacheLabel(configuration, configuration.caches.repository),
+      'skipped (lockfile changed)',
+      '0 B',
+    ],
+  ]);
+});

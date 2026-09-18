@@ -17,6 +17,8 @@ import path from 'node:path';
 import {
   canSaveAfterFailure,
   RESTORE_RESULT,
+  listCacheGenerationKeys,
+  pendingCleanupKeysState,
   restore,
   restoreOutput,
 } from './cache.js';
@@ -101,6 +103,7 @@ async function run() {
       externalCacheSave: core.getInput('external-cache-save'),
       repositoryCacheRestore: core.getInput('repository-cache-restore'),
       repositoryCacheSave: core.getInput('repository-cache-save'),
+      repositoryCacheGrowthThreshold: core.getInput('repository-cache-growth-threshold'),
     });
 
     const configuration = createConfiguration(workspace, diskCacheKey, {
@@ -135,16 +138,40 @@ async function run() {
     const saves = resolveSaveModes(cacheModes.save, cacheSaveAllowed);
     let checkoutHistory = 'skipped';
     let changed = null;
-    if (needsLockFileCheck(cacheModes.restore, saves.disk)) {
+    if (needsLockFileCheck(cacheModes.restore, saves)) {
       const comparisonBase = resolveComparisonBase();
       checkoutHistory = ensureComparisonHistory(workspace, comparisonBase);
       changed = lockFileChanged(workspace, comparisonBase);
     }
     const restores = resolveRestoreModes(
       cacheModes.restore,
-      saves.disk,
+      saves,
       changed === true,
     );
+    const diskCacheReset = cacheModes.restore.disk === 'auto' &&
+      saves.disk && changed === true;
+    const repositoryCacheReset = cacheModes.restore.repository === 'auto' &&
+      saves.repository && changed === true;
+    if (repositoryCacheReset) {
+      const obsoleteGenerationKeys = await listCacheGenerationKeys(
+        configuration,
+        configuration.caches.repository,
+      );
+      if (obsoleteGenerationKeys.length > 0) {
+        core.saveState(
+          pendingCleanupKeysState(configuration.caches.repository),
+          JSON.stringify(obsoleteGenerationKeys),
+        );
+        core.info(
+          `Recorded ${obsoleteGenerationKeys.length} previous repository cache generation(s) ` +
+          'for cleanup after a replacement uploads',
+        );
+      }
+      // Self-hosted runners can retain this directory between jobs. Clear it
+      // so the next archive contains downloads for the current lockfile only.
+      fs.rmSync(configuration.caches.repository.path, { recursive: true, force: true });
+      core.info('Cleared the local repository cache because MODULE.bazel.lock changed');
+    }
 
     fs.writeFileSync(configuration.bazelrc, configuration.bazelrcContents, { flag: 'wx' });
     core.info(`Created ${configuration.bazelrc}`);
@@ -190,11 +217,17 @@ async function run() {
 
     const restoreDetails = {
       bazelisk: await restoreCache(configuration, configuration.caches.bazelisk, restores.bazelisk),
-      disk: await restoreCache(configuration, configuration.caches.disk, restores.disk),
+      disk: await restoreCache(
+        configuration,
+        configuration.caches.disk,
+        restores.disk,
+        diskCacheReset,
+      ),
       repository: await restoreCache(
         configuration,
         configuration.caches.repository,
         restores.repository,
+        repositoryCacheReset,
       ),
     };
     restoreDetails.external = restores.external && configuration.external
@@ -256,6 +289,7 @@ async function run() {
       JSON.stringify({
         cacheSaveAllowed,
         repositoryCacheSaveMode: cacheModes.save.repository,
+        repositoryCacheGrowthThreshold: cacheModes.repositoryCacheGrowthThreshold,
         saves,
         diskCacheKey,
         workspace,
@@ -276,11 +310,23 @@ async function run() {
   }
 }
 
-async function restoreCache(configuration, cacheConfiguration, shouldRestore) {
+async function restoreCache(
+  configuration,
+  cacheConfiguration,
+  shouldRestore,
+  resetForChangedLockFile = false,
+) {
   if (!shouldRestore) {
-    core.info(`Skipping ${cacheLabel(configuration, cacheConfiguration)} cache restore`);
+    const reason = resetForChangedLockFile
+      ? ' because MODULE.bazel.lock changed; automatic mode skips this restore'
+      : '';
+    core.info(`Skipping ${cacheLabel(configuration, cacheConfiguration)} cache restore${reason}`);
     const size = logLocalCacheSize(configuration, cacheConfiguration, 'Local size without restore');
-    return { result: RESTORE_RESULT.SKIPPED, sizeBefore: size, sizeAfter: size };
+    return {
+      result: resetForChangedLockFile ? RESTORE_RESULT.RESET : RESTORE_RESULT.SKIPPED,
+      sizeBefore: size,
+      sizeAfter: size,
+    };
   }
   return restore(configuration, cacheConfiguration);
 }

@@ -13,22 +13,34 @@
 
 import * as cache from '@actions/cache';
 import * as core from '@actions/core';
-import { cacheLabel, exactKey, isOwnedGenerationKey, keyPlan } from './cache-keys.js';
+import {
+  cacheLabel,
+  cachePrefix,
+  exactKey,
+  isOwnedGenerationKey,
+  keyPlan,
+} from './cache-keys.js';
 import { cachePaths, formatBytes, logLocalCacheSize } from './cache-size.js';
 
 const RESTORE_RESULT = Object.freeze({
   FALSE: 'false',
   PARTIAL: 'partial',
+  RESET: 'reset',
   SKIPPED: 'skipped',
   TRUE: 'true',
   UNKNOWN: 'unknown',
 });
 
-const REPOSITORY_CACHE_GROWTH_PERCENT = 10;
+const DEFAULT_REPOSITORY_CACHE_GROWTH_PERCENT = 10;
 
 /** Keep the restored generation key available to the post action. */
 function restoredKeyState(cacheConfiguration) {
   return `setup-bazel-cache-restored-key-${cacheStateName(cacheConfiguration)}`;
+}
+
+/** Keep pre-reset generations available for cleanup after their replacement uploads. */
+function pendingCleanupKeysState(cacheConfiguration) {
+  return `setup-bazel-cache-pending-cleanup-keys-${cacheStateName(cacheConfiguration)}`;
 }
 
 /** Keep per-cache state names distinct when a family has a dynamic component. */
@@ -44,21 +56,32 @@ function restoreOutput(result) {
 }
 
 /** Decide whether repository auto mode should publish a cache generation. */
-function shouldSaveRepositoryCache(mode, restoreResult, startSize, endSize) {
+function shouldSaveRepositoryCache(
+  mode,
+  restoreResult,
+  startSize,
+  endSize,
+  growthThresholdPercent = DEFAULT_REPOSITORY_CACHE_GROWTH_PERCENT,
+) {
   if (mode === 'true') return true;
   if (mode !== 'auto') return false;
-  if (restoreResult === RESTORE_RESULT.FALSE) return true;
+  if (restoreResult === RESTORE_RESULT.FALSE || restoreResult === RESTORE_RESULT.RESET) return true;
   return (
     restoreResult === RESTORE_RESULT.TRUE ||
     restoreResult === RESTORE_RESULT.PARTIAL
-  ) && repositoryCacheGrewByTenPercent(startSize, endSize);
+  ) && repositoryCacheGrewByPercent(startSize, endSize, growthThresholdPercent);
 }
 
-/** Return whether the local repository cache grew by at least ten percent. */
-function repositoryCacheGrewByTenPercent(startSize, endSize) {
+/** Return whether the local repository cache grew by the configured percentage. */
+function repositoryCacheGrewByPercent(
+  startSize,
+  endSize,
+  growthThresholdPercent = DEFAULT_REPOSITORY_CACHE_GROWTH_PERCENT,
+) {
   if (!Number.isFinite(startSize) || !Number.isFinite(endSize)) return false;
-  if (startSize === 0) return endSize > 0;
-  return (endSize - startSize) * 100 >= startSize * REPOSITORY_CACHE_GROWTH_PERCENT;
+  if (endSize <= startSize) return false;
+  if (startSize === 0) return true;
+  return (endSize - startSize) * 100 >= startSize * growthThresholdPercent;
 }
 
 /** A failed job may publish only the standard caches that extend restored snapshots. */
@@ -287,15 +310,105 @@ async function deleteCacheByKey(cacheKey, {
   return false;
 }
 
+/** Find existing action-owned generations without downloading their archives. */
+async function listCacheGenerationKeys(configuration, cacheConfiguration, {
+  token = core.getInput('token'),
+  apiUrl = process.env.GITHUB_API_URL || 'https://api.github.com',
+  repository = process.env.GITHUB_REPOSITORY,
+  ref = process.env.GITHUB_REF,
+} = {}) {
+  const permissionHint =
+    'Grant the action actions: read and actions: write (for example, via permissions) to enable automatic cleanup.';
+  const cacheName = configuration && cacheConfiguration
+    ? cacheLabel(configuration, cacheConfiguration)
+    : (cacheConfiguration?.name || 'cache');
+
+  if (!configuration || !cacheConfiguration?.generational) {
+    core.info(`${cacheName} cache cleanup discovery skipped because this is not a generational cache.`);
+    return [];
+  }
+  if (!token || !repository || !ref) {
+    core.info(`${cacheName} cache cleanup discovery skipped because GitHub context is incomplete. ${permissionHint}`);
+    return [];
+  }
+
+  const [owner, repo, ...unexpectedParts] = repository.split('/');
+  if (!owner || !repo || unexpectedParts.length > 0) {
+    core.info(`${cacheName} cache cleanup discovery skipped because GITHUB_REPOSITORY is invalid. ${permissionHint}`);
+    return [];
+  }
+
+  try {
+    const baseUrl = apiUrl.endsWith('/') ? apiUrl : `${apiUrl}/`;
+    const cacheUrl = new URL(
+      `repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/caches`,
+      baseUrl,
+    );
+    const generationPrefix = `${cachePrefix(configuration, cacheConfiguration)}generation-`;
+    const pageSize = 100;
+    const keys = new Set();
+
+    for (let page = 1; ; page += 1) {
+      const url = new URL(cacheUrl);
+      url.searchParams.set('key', generationPrefix);
+      url.searchParams.set('ref', ref);
+      url.searchParams.set('per_page', pageSize.toString());
+      url.searchParams.set('page', page.toString());
+      const response = await fetch(url, {
+        headers: {
+          Accept: 'application/vnd.github+json',
+          Authorization: `Bearer ${token}`,
+          'X-GitHub-Api-Version': '2022-11-28',
+          'User-Agent': 'setup-bazel-cache',
+        },
+      });
+
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403 || response.status === 404) {
+          core.info(
+            `${cacheName} cache cleanup discovery skipped because the GitHub token lacks ` +
+            `permission to list cache generations. ${permissionHint}`,
+          );
+        } else {
+          core.warning(
+            `${cacheName} cache cleanup discovery failed: GitHub API returned ` +
+            `HTTP ${response.status} ${response.statusText}`,
+          );
+        }
+        return [];
+      }
+
+      const payload = await response.json();
+      if (!Array.isArray(payload.actions_caches)) {
+        core.warning(`${cacheName} cache cleanup discovery failed because GitHub returned an invalid cache list.`);
+        return [];
+      }
+      for (const entry of payload.actions_caches) {
+        if (isOwnedGenerationKey(configuration, cacheConfiguration, entry.key)) {
+          keys.add(entry.key);
+        }
+      }
+      if (payload.actions_caches.length < pageSize) break;
+    }
+
+    return [...keys];
+  } catch (error) {
+    core.warning(`${cacheName} cache cleanup discovery failed: ${error.message || error}`);
+    return [];
+  }
+}
+
 export {
   canSaveAfterFailure,
   deleteCacheByKey,
   hitState,
+  listCacheGenerationKeys,
+  pendingCleanupKeysState,
   restore,
   restoredKeyState,
   restoreOutput,
   RESTORE_RESULT,
-  repositoryCacheGrewByTenPercent,
+  repositoryCacheGrewByPercent,
   save,
   shouldSave,
   shouldSaveRepositoryCache,

@@ -84,19 +84,27 @@ inputs:
   repository-cache-restore:
     description: >
       Restore the shared repository cache.
-      Accepts true or false.
+      Accepts auto, true, or false.
+      With auto, skip the existing cache when the module lockfile changed and this run may save the repository cache.
     required: false
-    default: "true"
+    default: "auto"
 
   repository-cache-save:
     description: >
       Save the shared repository cache.
       Accepts true, false, or auto.
-      With auto, save when the cache is empty at the start of the job or grows by at least 10%.
-      After a successful upload, the previous generation owned by this action is removed when the token permits it.
+      With auto, save when the cache is empty at the start of the job, grows by at least 10%, or follows a lockfile-triggered reset.
+      After a successful upload, obsolete generations are removed when the token permits it.
       Saving is still limited to configured cache-saving branches (see cache-save-branch-patterns).
     required: false
     default: "auto"
+
+  repository-cache-growth-threshold:
+    description: >
+      Minimum percentage growth required for repository-cache-save: auto.
+      Accepts an integer from 0 to 100. Zero saves after any positive growth.
+    required: false
+    default: "10"
 
   disk-cache-restore:
     description: >

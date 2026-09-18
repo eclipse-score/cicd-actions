@@ -69559,6 +69559,11 @@ async function keyPlan(configuration, cacheConfiguration) {
     restoreKeys
   };
 }
+function isOwnedGenerationKey(configuration, cacheConfiguration, cacheKey) {
+  if (!cacheConfiguration.generational || typeof cacheKey !== "string") return false;
+  const prefix2 = `${cachePrefix(configuration, cacheConfiguration)}generation-`;
+  return cacheKey.startsWith(prefix2) && /^\d+$/.test(cacheKey.slice(prefix2.length));
+}
 
 // src/cache-size.js
 var import_node_fs2 = __toESM(require("node:fs"), 1);
@@ -69635,12 +69640,16 @@ function logLocalCacheSize(configuration, cacheConfiguration, label) {
 var RESTORE_RESULT = Object.freeze({
   FALSE: "false",
   PARTIAL: "partial",
+  RESET: "reset",
   SKIPPED: "skipped",
   TRUE: "true",
   UNKNOWN: "unknown"
 });
 function restoredKeyState(cacheConfiguration) {
   return `setup-bazel-cache-restored-key-${cacheStateName(cacheConfiguration)}`;
+}
+function pendingCleanupKeysState(cacheConfiguration) {
+  return `setup-bazel-cache-pending-cleanup-keys-${cacheStateName(cacheConfiguration)}`;
 }
 function cacheStateName(cacheConfiguration) {
   return [cacheConfiguration.name, ...cacheConfiguration.keyComponents || []].join("-");
@@ -69692,6 +69701,80 @@ async function restore(configuration, cacheConfiguration) {
     endGroup();
   }
   return { result, sizeBefore, sizeAfter };
+}
+async function listCacheGenerationKeys(configuration, cacheConfiguration, {
+  token = getInput("token"),
+  apiUrl = process.env.GITHUB_API_URL || "https://api.github.com",
+  repository = process.env.GITHUB_REPOSITORY,
+  ref = process.env.GITHUB_REF
+} = {}) {
+  const permissionHint = "Grant the action actions: read and actions: write (for example, via permissions) to enable automatic cleanup.";
+  const cacheName = configuration && cacheConfiguration ? cacheLabel(configuration, cacheConfiguration) : cacheConfiguration?.name || "cache";
+  if (!configuration || !cacheConfiguration?.generational) {
+    info(`${cacheName} cache cleanup discovery skipped because this is not a generational cache.`);
+    return [];
+  }
+  if (!token || !repository || !ref) {
+    info(`${cacheName} cache cleanup discovery skipped because GitHub context is incomplete. ${permissionHint}`);
+    return [];
+  }
+  const [owner, repo, ...unexpectedParts] = repository.split("/");
+  if (!owner || !repo || unexpectedParts.length > 0) {
+    info(`${cacheName} cache cleanup discovery skipped because GITHUB_REPOSITORY is invalid. ${permissionHint}`);
+    return [];
+  }
+  try {
+    const baseUrl = apiUrl.endsWith("/") ? apiUrl : `${apiUrl}/`;
+    const cacheUrl = new URL(
+      `repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/caches`,
+      baseUrl
+    );
+    const generationPrefix = `${cachePrefix(configuration, cacheConfiguration)}generation-`;
+    const pageSize = 100;
+    const keys = /* @__PURE__ */ new Set();
+    for (let page = 1; ; page += 1) {
+      const url2 = new URL(cacheUrl);
+      url2.searchParams.set("key", generationPrefix);
+      url2.searchParams.set("ref", ref);
+      url2.searchParams.set("per_page", pageSize.toString());
+      url2.searchParams.set("page", page.toString());
+      const response = await fetch(url2, {
+        headers: {
+          Accept: "application/vnd.github+json",
+          Authorization: `Bearer ${token}`,
+          "X-GitHub-Api-Version": "2022-11-28",
+          "User-Agent": "setup-bazel-cache"
+        }
+      });
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403 || response.status === 404) {
+          info(
+            `${cacheName} cache cleanup discovery skipped because the GitHub token lacks permission to list cache generations. ${permissionHint}`
+          );
+        } else {
+          warning(
+            `${cacheName} cache cleanup discovery failed: GitHub API returned HTTP ${response.status} ${response.statusText}`
+          );
+        }
+        return [];
+      }
+      const payload = await response.json();
+      if (!Array.isArray(payload.actions_caches)) {
+        warning(`${cacheName} cache cleanup discovery failed because GitHub returned an invalid cache list.`);
+        return [];
+      }
+      for (const entry of payload.actions_caches) {
+        if (isOwnedGenerationKey(configuration, cacheConfiguration, entry.key)) {
+          keys.add(entry.key);
+        }
+      }
+      if (payload.actions_caches.length < pageSize) break;
+    }
+    return [...keys];
+  } catch (error2) {
+    warning(`${cacheName} cache cleanup discovery failed: ${error2.message || error2}`);
+    return [];
+  }
 }
 
 // src/config.js
@@ -70132,9 +70215,20 @@ function lockFileChanged(workspace, comparisonBase, git = runGit) {
 
 // src/inputs.js
 var BOOLEAN_MODES = /* @__PURE__ */ new Set(["true", "false"]);
-var DISK_RESTORE_MODES = /* @__PURE__ */ new Set(["true", "false", "auto"]);
+var AUTO_RESTORE_MODES = /* @__PURE__ */ new Set(["true", "false", "auto"]);
 var REPOSITORY_SAVE_MODES = /* @__PURE__ */ new Set(["true", "false", "auto"]);
 var INVALID_BRANCH_PATTERN_CHARACTERS = /[\s~^:\\]/;
+var DEFAULT_REPOSITORY_CACHE_GROWTH_THRESHOLD = 10;
+function parseRepositoryCacheGrowthThreshold(value) {
+  const threshold = value.trim();
+  if (!threshold) return DEFAULT_REPOSITORY_CACHE_GROWTH_THRESHOLD;
+  if (!/^(0|[1-9]\d*)$/.test(threshold) || Number(threshold) > 100) {
+    throw new Error(
+      `Invalid repository-cache-growth-threshold value '${value}'. Expected an integer from 0 to 100.`
+    );
+  }
+  return Number(threshold);
+}
 function validateMode(name, value, allowed) {
   if (!allowed.has(value)) {
     throw new Error(`Invalid ${name} value '${value}'. Expected ${[...allowed].join(", ")}.`);
@@ -70145,7 +70239,7 @@ function parseCacheConfiguration(raw) {
     bazelisk: raw.bazeliskCacheRestore.trim() || "true",
     disk: raw.diskCacheRestore.trim() || "auto",
     external: raw.externalCacheRestore.trim() || "true",
-    repository: raw.repositoryCacheRestore.trim() || "true"
+    repository: raw.repositoryCacheRestore.trim() || "auto"
   };
   const save2 = {
     bazelisk: raw.bazeliskCacheSave.trim() || "true",
@@ -70155,15 +70249,18 @@ function parseCacheConfiguration(raw) {
   };
   validateMode("bazelisk-cache-restore", restore2.bazelisk, BOOLEAN_MODES);
   validateMode("bazelisk-cache-save", save2.bazelisk, BOOLEAN_MODES);
-  validateMode("disk-cache-restore", restore2.disk, DISK_RESTORE_MODES);
+  validateMode("disk-cache-restore", restore2.disk, AUTO_RESTORE_MODES);
   validateMode("external-cache-restore", restore2.external, BOOLEAN_MODES);
-  validateMode("repository-cache-restore", restore2.repository, BOOLEAN_MODES);
+  validateMode("repository-cache-restore", restore2.repository, AUTO_RESTORE_MODES);
   validateMode("disk-cache-save", save2.disk, BOOLEAN_MODES);
   validateMode("external-cache-save", save2.external, BOOLEAN_MODES);
   validateMode("repository-cache-save", save2.repository, REPOSITORY_SAVE_MODES);
   return {
     restore: restore2,
-    save: save2
+    save: save2,
+    repositoryCacheGrowthThreshold: parseRepositoryCacheGrowthThreshold(
+      raw.repositoryCacheGrowthThreshold || ""
+    )
   };
 }
 function parseBranchPattern(value, name = "cache-save-branch-patterns") {
@@ -70187,15 +70284,15 @@ function parseCacheSaveBranchPatterns(value, defaultBranch) {
   }
   return patterns.map((pattern) => parseBranchPattern(pattern));
 }
-function resolveRestoreMode(mode, diskCacheWillSave, lockFileChanged2) {
-  return mode !== "false" && !(mode === "auto" && diskCacheWillSave && lockFileChanged2);
+function resolveRestoreMode(mode, cacheWillSave, lockFileChanged2) {
+  return mode !== "false" && !(mode === "auto" && cacheWillSave && lockFileChanged2);
 }
-function resolveRestoreModes(configuration, diskCacheWillSave, lockFileChanged2) {
+function resolveRestoreModes(configuration, saves, lockFileChanged2) {
   return {
     bazelisk: configuration.bazelisk === "true",
-    disk: resolveRestoreMode(configuration.disk, diskCacheWillSave, lockFileChanged2),
+    disk: resolveRestoreMode(configuration.disk, saves.disk, lockFileChanged2),
     external: configuration.external === "true",
-    repository: configuration.repository === "true"
+    repository: resolveRestoreMode(configuration.repository, saves.repository, lockFileChanged2)
   };
 }
 function resolveSaveModes(configuration, cacheSaveAllowed) {
@@ -70226,8 +70323,8 @@ function cacheSaveDisallowReason(ref, branchPatterns) {
   }
   return "branch does not match cache-save-branch-patterns";
 }
-function needsLockFileCheck(configuration, diskCacheWillSave) {
-  return diskCacheWillSave && configuration.disk === "auto";
+function needsLockFileCheck(configuration, saves) {
+  return saves.disk && configuration.disk === "auto" || saves.repository && configuration.repository === "auto";
 }
 
 // src/summary.js
@@ -70239,6 +70336,8 @@ function describeRestoreResult(result) {
       return "partial (older generation)";
     case RESTORE_RESULT.FALSE:
       return "false (miss)";
+    case RESTORE_RESULT.RESET:
+      return "skipped (lockfile changed)";
     case RESTORE_RESULT.SKIPPED:
       return "skipped (disabled)";
     case RESTORE_RESULT.UNKNOWN:
@@ -70329,7 +70428,8 @@ async function run() {
       externalCacheRestore: getInput("external-cache-restore"),
       externalCacheSave: getInput("external-cache-save"),
       repositoryCacheRestore: getInput("repository-cache-restore"),
-      repositoryCacheSave: getInput("repository-cache-save")
+      repositoryCacheSave: getInput("repository-cache-save"),
+      repositoryCacheGrowthThreshold: getInput("repository-cache-growth-threshold")
     });
     const configuration = createConfiguration(workspace, diskCacheKey, {
       enableProfiling,
@@ -70362,16 +70462,35 @@ async function run() {
     const saves = resolveSaveModes(cacheModes.save, cacheSaveAllowed);
     let checkoutHistory = "skipped";
     let changed = null;
-    if (needsLockFileCheck(cacheModes.restore, saves.disk)) {
+    if (needsLockFileCheck(cacheModes.restore, saves)) {
       const comparisonBase = resolveComparisonBase();
       checkoutHistory = ensureComparisonHistory(workspace, comparisonBase);
       changed = lockFileChanged(workspace, comparisonBase);
     }
     const restores = resolveRestoreModes(
       cacheModes.restore,
-      saves.disk,
+      saves,
       changed === true
     );
+    const diskCacheReset = cacheModes.restore.disk === "auto" && saves.disk && changed === true;
+    const repositoryCacheReset = cacheModes.restore.repository === "auto" && saves.repository && changed === true;
+    if (repositoryCacheReset) {
+      const obsoleteGenerationKeys = await listCacheGenerationKeys(
+        configuration,
+        configuration.caches.repository
+      );
+      if (obsoleteGenerationKeys.length > 0) {
+        saveState(
+          pendingCleanupKeysState(configuration.caches.repository),
+          JSON.stringify(obsoleteGenerationKeys)
+        );
+        info(
+          `Recorded ${obsoleteGenerationKeys.length} previous repository cache generation(s) for cleanup after a replacement uploads`
+        );
+      }
+      import_node_fs8.default.rmSync(configuration.caches.repository.path, { recursive: true, force: true });
+      info("Cleared the local repository cache because MODULE.bazel.lock changed");
+    }
     import_node_fs8.default.writeFileSync(configuration.bazelrc, configuration.bazelrcContents, { flag: "wx" });
     info(`Created ${configuration.bazelrc}`);
     const bazelrcFiles = [process.env.BAZELRC, configuration.bazelrc].filter(Boolean);
@@ -70409,11 +70528,17 @@ async function run() {
     }
     const restoreDetails = {
       bazelisk: await restoreCache2(configuration, configuration.caches.bazelisk, restores.bazelisk),
-      disk: await restoreCache2(configuration, configuration.caches.disk, restores.disk),
+      disk: await restoreCache2(
+        configuration,
+        configuration.caches.disk,
+        restores.disk,
+        diskCacheReset
+      ),
       repository: await restoreCache2(
         configuration,
         configuration.caches.repository,
-        restores.repository
+        restores.repository,
+        repositoryCacheReset
       )
     };
     restoreDetails.external = restores.external && configuration.external ? await restoreExternalCaches(configuration) : {
@@ -70463,6 +70588,7 @@ async function run() {
       JSON.stringify({
         cacheSaveAllowed,
         repositoryCacheSaveMode: cacheModes.save.repository,
+        repositoryCacheGrowthThreshold: cacheModes.repositoryCacheGrowthThreshold,
         saves,
         diskCacheKey,
         workspace,
@@ -70482,11 +70608,16 @@ async function run() {
     warning(`Bazel cache setup stopped: ${error2.stack || error2.message || error2}`);
   }
 }
-async function restoreCache2(configuration, cacheConfiguration, shouldRestore) {
+async function restoreCache2(configuration, cacheConfiguration, shouldRestore, resetForChangedLockFile = false) {
   if (!shouldRestore) {
-    info(`Skipping ${cacheLabel(configuration, cacheConfiguration)} cache restore`);
+    const reason = resetForChangedLockFile ? " because MODULE.bazel.lock changed; automatic mode skips this restore" : "";
+    info(`Skipping ${cacheLabel(configuration, cacheConfiguration)} cache restore${reason}`);
     const size = logLocalCacheSize(configuration, cacheConfiguration, "Local size without restore");
-    return { result: RESTORE_RESULT.SKIPPED, sizeBefore: size, sizeAfter: size };
+    return {
+      result: resetForChangedLockFile ? RESTORE_RESULT.RESET : RESTORE_RESULT.SKIPPED,
+      sizeBefore: size,
+      sizeAfter: size
+    };
   }
   return restore(configuration, cacheConfiguration);
 }

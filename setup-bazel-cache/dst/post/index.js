@@ -107576,27 +107576,32 @@ function logLocalCacheSize(configuration, cacheConfiguration, label) {
 var RESTORE_RESULT = Object.freeze({
   FALSE: "false",
   PARTIAL: "partial",
+  RESET: "reset",
   SKIPPED: "skipped",
   TRUE: "true",
   UNKNOWN: "unknown"
 });
-var REPOSITORY_CACHE_GROWTH_PERCENT = 10;
+var DEFAULT_REPOSITORY_CACHE_GROWTH_PERCENT = 10;
 function restoredKeyState(cacheConfiguration) {
   return `setup-bazel-cache-restored-key-${cacheStateName(cacheConfiguration)}`;
+}
+function pendingCleanupKeysState(cacheConfiguration) {
+  return `setup-bazel-cache-pending-cleanup-keys-${cacheStateName(cacheConfiguration)}`;
 }
 function cacheStateName(cacheConfiguration) {
   return [cacheConfiguration.name, ...cacheConfiguration.keyComponents || []].join("-");
 }
-function shouldSaveRepositoryCache(mode, restoreResult, startSize, endSize) {
+function shouldSaveRepositoryCache(mode, restoreResult, startSize, endSize, growthThresholdPercent = DEFAULT_REPOSITORY_CACHE_GROWTH_PERCENT) {
   if (mode === "true") return true;
   if (mode !== "auto") return false;
-  if (restoreResult === RESTORE_RESULT.FALSE) return true;
-  return (restoreResult === RESTORE_RESULT.TRUE || restoreResult === RESTORE_RESULT.PARTIAL) && repositoryCacheGrewByTenPercent(startSize, endSize);
+  if (restoreResult === RESTORE_RESULT.FALSE || restoreResult === RESTORE_RESULT.RESET) return true;
+  return (restoreResult === RESTORE_RESULT.TRUE || restoreResult === RESTORE_RESULT.PARTIAL) && repositoryCacheGrewByPercent(startSize, endSize, growthThresholdPercent);
 }
-function repositoryCacheGrewByTenPercent(startSize, endSize) {
+function repositoryCacheGrewByPercent(startSize, endSize, growthThresholdPercent = DEFAULT_REPOSITORY_CACHE_GROWTH_PERCENT) {
   if (!Number.isFinite(startSize) || !Number.isFinite(endSize)) return false;
-  if (startSize === 0) return endSize > 0;
-  return (endSize - startSize) * 100 >= startSize * REPOSITORY_CACHE_GROWTH_PERCENT;
+  if (endSize <= startSize) return false;
+  if (startSize === 0) return true;
+  return (endSize - startSize) * 100 >= startSize * growthThresholdPercent;
 }
 function shouldSave(cacheConfiguration, restoreResult) {
   return !(cacheConfiguration.generational && restoreResult === RESTORE_RESULT.UNKNOWN);
@@ -109027,6 +109032,7 @@ async function run() {
     const {
       cacheSaveAllowed,
       repositoryCacheSaveMode = "true",
+      repositoryCacheGrowthThreshold = 10,
       saves,
       diskCacheKey,
       workspace,
@@ -109078,7 +109084,8 @@ async function run() {
       repositoryCacheSaveMode,
       restoreResults?.repository,
       repositoryCacheStartSize,
-      repositoryCacheSizeBeforeSave
+      repositoryCacheSizeBeforeSave,
+      repositoryCacheGrowthThreshold
     )) {
       const repositoryResult = await save(
         configuration,
@@ -109096,7 +109103,7 @@ async function run() {
         );
       } else {
         info(
-          `Repository cache automatic save skipped because the local cache grew by less than 10% (${formatBytes(repositoryCacheStartSize)} -> ${formatBytes(repositoryCacheSizeBeforeSave)})`
+          `Repository cache automatic save skipped because the local cache did not reach the configured ${repositoryCacheGrowthThreshold}% growth threshold (${formatBytes(repositoryCacheStartSize)} -> ${formatBytes(repositoryCacheSizeBeforeSave)})`
         );
       }
       results.push(skippedSaveSummary(configuration, configuration.caches.repository, "existing cache preserved"));
@@ -109144,16 +109151,30 @@ async function uploadProfiles(diskCacheKey, root = invocationRootPath()) {
 }
 async function cleanupPreviousGeneration(configuration, cacheConfiguration) {
   const previousKey = getState(restoredKeyState(cacheConfiguration));
-  if (!previousKey) {
+  const pendingKeysState = getState(pendingCleanupKeysState(cacheConfiguration));
+  let pendingKeys = [];
+  if (pendingKeysState) {
+    try {
+      const parsedKeys = JSON.parse(pendingKeysState);
+      if (Array.isArray(parsedKeys)) {
+        pendingKeys = parsedKeys.filter((key) => typeof key === "string");
+      }
+    } catch (error2) {
+      warning(
+        `${cacheLabel(configuration, cacheConfiguration)} cache cleanup skipped malformed pending generation keys: ${error2.message || error2}`
+      );
+    }
+  }
+  const previousKeys = [...new Set([previousKey, ...pendingKeys].filter(Boolean))];
+  if (previousKeys.length === 0) {
     info(
-      `${cacheLabel(configuration, cacheConfiguration)} cache cleanup skipped because no previous cache generation was restored`
+      `${cacheLabel(configuration, cacheConfiguration)} cache cleanup skipped because no previous cache generation keys are available`
     );
     return;
   }
-  await deleteCacheByKey(previousKey, {
-    configuration,
-    cacheConfiguration
-  });
+  for (const cacheKey of previousKeys) {
+    await deleteCacheByKey(cacheKey, { configuration, cacheConfiguration });
+  }
 }
 run();
 /*! Bundled license information:
