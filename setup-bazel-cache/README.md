@@ -1,84 +1,168 @@
 # Setup Bazel Cache
 
-Bazel builds can be slow. Caching helps — but only if the cache is set up correctly and stays small enough to be worth restoring. This action handles the setup so you don't have to.
+A GitHub Action for Linux workflows. It restores and saves Bazelisk, Bazel disk,
+and downloaded repository caches. It can also cache large extracted external
+repositories and report cache reuse. It does not configure a remote cache.
 
-## Usage
+Use it when CI needs to reuse dependency downloads, preserve cache generations,
+or show whether Bazel reused build and test results.
 
-### Syntax
+## Quick start
+
+Run checkout first, then add the action before your Bazel commands:
 
 ```yaml
 steps:
+  - uses: actions/checkout@<sha>
+
   - uses: eclipse-score/cicd-actions/setup-bazel-cache@<sha>
     with:
-      unique-cache-name: [${{ github.workflow }}-]${{ github.job }}[-<matrix-uid>]
-      # Optional parameters with default values:
-      main-branch: main
-      skip-cache-restore: auto
+      disk-cache-key: ${{ github.job }}
+
+  - run: bazel test //...
 ```
 
-Parameters explained:
+Keep `disk-cache-key` stable between runs. Add matrix values when jobs need
+separate disk caches. `github.job` can be used to share a cache across callers
+of the same reusable workflow.
 
-- `unique-cache-name`: A unique name for the cache. This is required to avoid conflicts between different jobs and workflows.
-  Using `github.workflow` and `github.job` together gives each job its own cache automatically.
-  Append a matrix identifier if the same job runs with different configurations that produce different build outputs.
-  Omit `github.workflow` if you use `workflow_call` triggers and want to avoid nesting caches under the caller's workflow name.
-- `main-branch`: The branch that is allowed to save the cache. Override if your default branch has a different name.
-- `skip-cache-restore`: Whether to skip restoring the cache. Use `true` to always rebuild a clean cache, `false` to always restore it, or `auto` to rebuild it only on a cache-writing run when `MODULE.bazel.lock` changed (the default). PR and branch builds still restore the existing cache because they do not save a replacement.
+## Inputs
 
-Outputs:
+### Cache identity and publishing
 
-- `skip-cache-restore`: The resolved cache-restore decision (`true` or `false`).
-- `checkout-history`: How the Git history for automatic cache-restore detection was obtained: `skipped`, `existing`, or `deepened`. `skipped` means history was not needed.
-- `lock-file-changed`: Whether `MODULE.bazel.lock` changed: `true`, `false`, or `unknown` when the check was skipped.
+- **`disk-cache-key`**
+  - Options: Required string of 1–400 printable characters, without commas.
 
-### Triggers
+  Use a stable value to identify the disk cache for this job. Add matrix values
+  when jobs need separate caches. For a matrix example, see
+  [Use the action in a build matrix](./HOW-TO.md#use-the-action-in-a-build-matrix).
 
-Use this action in every job where it should speed up a Bazel build, including
-pull-request and branch jobs. Also run at least one such job on every push to
-the default branch: only that run can refresh the shared cache after a merge.
-The other jobs restore the latest cache but never replace it.
+- **`cache-save-branch-patterns`**
+  - Options: Empty (default), or newline-separated branch names and glob patterns.
 
-```yaml
-on:
-  pull_request:
-  push:
-    branches: [main]
-```
+  Empty allows only the repository's default branch to save. Set patterns to
+  allow other branches, and include the default branch if it should remain
+  allowed; pull-request refs and tags cannot save caches.
 
-If your default branch is not named `main`, pass `main-branch: <name>` to override.
+- **`token`**
+  - Options: `${{ github.token }}` (default) or another GitHub token.
 
-### Required permissions
+  Supply a token with `actions: write` if the action should remove obsolete
+  disk or repository cache generations after an upload. Uploads work without
+  that permission.
 
-The job using this action needs:
+### Cache families
 
-```yaml
-permissions:
-  # When running with `skip-cache-restore: auto` (default), the action needs to read the repository contents to check for changes to `MODULE.bazel.lock`. If you set `skip-cache-restore` to `true` or `false`, this permission is not needed.
-  contents: read
-```
+#### Disk cache
 
-## How it works
+- **`disk-cache-restore`**
+  - Options: `auto` (default), `true`, `false`.
 
-The action configures a Bazel disk cache together with Bazelisk and repository
-caches. The disk cache name comes from `unique-cache-name`.
+  `auto` skips the existing cache when the module lockfile changed and this run
+  may save. `true` always attempts restore; `false` skips it.
 
-Only a build running on `main` saves a cache. Pull-request and other branch
-builds can restore that cache, but cannot replace it. This keeps untrusted or
-short-lived branches from overwriting the shared cache.
+- **`disk-cache-save`**
+  - Options: `true` (default), `false`.
 
-### Automatic restore decision
+  Set `false` to prevent disk-cache uploads from this job. Saving is still
+  limited by the branch policy.
 
-`skip-cache-restore: auto` is the default. Branch builds always restore the
-cache. On `main`, the action compares `MODULE.bazel.lock` with the previous
-commit: it skips restore and rebuilds the cache when the lock file changed;
-otherwise it restores the existing cache. Set `skip-cache-restore` to `true` or
-`false` to always rebuild or always restore instead.
+#### Downloaded repository cache
 
-### Git history for automatic mode
+- **`repository-cache-restore`**
+  - Options: `auto` (default), `true`, `false`.
 
-The comparison on `main` needs the previous commit. The action uses an existing
-checkout when it already has depth 2, or deepens a shallow checkout by one
-commit when possible. It never checks out or clones a repository itself. When
-the required history is unavailable, run `actions/checkout` with
-`fetch-depth: 2` (or greater) before this action, or set `skip-cache-restore`
-to `true` or `false`.
+  `auto` skips the old cache when `MODULE.bazel.lock` changed and this run may
+  save, so the next generation starts with downloads for the new dependencies.
+  `true` always attempts restore; `false` skips it. This setting does not
+  control the separate extracted-repository cache. See
+  [automatic restore behavior](./EXPLANATION.md#automatic-restore-and-save-decisions).
+
+- **`repository-cache-save`**
+  - Options: `auto` (default), `true`, `false`.
+
+  `auto` seeds an empty or lockfile-reset cache and saves after the configured
+  growth threshold. `true` saves every eligible non-empty run; `false` disables
+  uploads.
+
+- **`repository-cache-growth-threshold`**
+  - Options: Integer from `0` to `100` (default: `10`).
+
+  Used when `repository-cache-save` is `auto`. Set it to `0` to save after any
+  positive growth, including small additions from flaky downloads.
+
+#### Bazel version cache
+
+- **`bazelisk-cache-restore`**
+  - Options: `true` (default), `false`.
+
+  Set `false` to download the selected Bazel version again instead of restoring
+  it from cache.
+
+- **`bazelisk-cache-save`**
+  - Options: `true` (default), `false`.
+
+  Set `false` to stop saving downloaded Bazel versions for later runs.
+
+#### Extracted external repositories
+
+- **`external-cache-restore`**
+  - Options: `true` (default), `false`.
+
+  Set `false` to skip restoring large extracted repositories under Bazel's
+  output base.
+
+- **`external-cache-save`**
+  - Options: `true` (default), `false`.
+
+  Set `false` to stop saving extracted repositories. These caches are saved
+  only after a successful job.
+
+### Reports and profiling
+
+- **`report-cache-hits`**
+  - Options: `true` (default), `false`.
+
+  Set `false` to disable build/action cache reporting for `build`, `run`,
+  `test`, and `coverage` invocations.
+
+- **`report-test-cache-hits`**
+  - Options: `true` (default), `false`.
+
+  Set `false` to disable test-result reporting for `test` and `coverage`.
+  Reporting does not enable Bazel's test-result cache.
+
+- **`report-cache-step-summary`**
+  - Options: `true` (default), `false`.
+
+  Set `false` to keep enabled reports in the job log without writing them to
+  the GitHub Actions step summary.
+
+- **`enable-profiling`**
+  - Options: `auto` (default), `true`, `false`.
+
+  `auto` captures profiles when Actions debug logging is enabled; `true`
+  captures profiles on every run and `false` disables profiling. Captured
+  profiles are uploaded as a job artifact.
+
+The [reference](./REFERENCE.md#inputs) covers detailed behavior and input
+interactions.
+
+## Outputs
+
+| Output | Meaning |
+| --- | --- |
+| `cache-save-branch-evaluated` | `true` when this ref is allowed to save caches, otherwise `false`. |
+| `bazelisk-cache-restored` | `true` when a Bazelisk cache was restored, otherwise `false`. |
+| `disk-cache-restored` | `true` when a disk cache was restored, otherwise `false`. |
+| `repository-cache-restored` | `true` when a downloaded repository cache was restored, otherwise `false`. |
+| `external-cache-restored` | `true` when the manifest and every repository it lists were restored, otherwise `false`. |
+
+## Choose a guide
+
+- [How-to](./HOW-TO.md): use caches in a build matrix, warm a shared
+  repository cache, and allow selected branches to publish.
+- [Reference](./REFERENCE.md): input defaults, accepted values, outputs, and
+  permissions.
+- [Explanation](./EXPLANATION.md): how cache restore and save decisions work,
+  what reports measure, and how cache storage is managed.

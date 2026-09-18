@@ -1,0 +1,264 @@
+# *******************************************************************************
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+# This workflow deliberately tests the real GitHub cache service:
+#
+# - A push runs in the pushed branch's cache scope. This gives same-repository
+#   feature branches automatic coverage before their pull request is merged.
+# - The pull-request workflow calls this workflow for merge-group runs, using
+#   the temporary merge-queue ref's cache scope. This gives fork pull requests
+#   write-capable coverage after approval, without allowing their code to write
+#   to the default branch's caches.
+# - A manual run is available only for diagnostics; normal coverage does not
+#   depend on somebody remembering to dispatch it.
+#
+# Do not replace these triggers with pull_request_target. That event has the
+# default branch's privileged context, so executing the candidate action there
+# would let untrusted fork code access a sensitive token and cache scope.
+#
+# Saving and restoring require separate jobs because JavaScript action post
+# steps run only when their job ends. A successful seed job creates a baseline.
+# A second job restores that baseline and adds markers. Automatic runs keep the
+# job green and publish the additions; manual diagnostics can opt into a real
+# failure. With external caching enabled, that failed job does not run the post
+# action, so the third job proves that the baseline remains intact.
+
+name: Test Setup Bazel Cache Persistence
+
+on:
+  workflow_call:
+    inputs:
+      exercise-failed-job:
+        description: Intentionally fail the cache-writing job.
+        type: boolean
+        default: false
+  push:
+    branches:
+      - main
+      - cache
+    paths:
+      - .github/workflows/test-setup-bazel-cache-persistence.yml
+      - setup-bazel-cache/**
+  workflow_dispatch:
+    inputs:
+      exercise-failed-job:
+        description: Intentionally fail the cache-writing job and publish an expected red check.
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: setup-bazel-cache-persistence-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  seed-cache:
+    name: Seed successful cache baseline
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+
+      - name: Create cache identity files
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'module(name = "cache_persistence_test")' > MODULE.bazel
+          echo '{"persistence":"${{ github.run_id }}-${{ github.run_attempt }}"}' > MODULE.bazel.lock
+          echo '8.6.0' > .bazelversion
+
+      - name: Configure writable branch caches
+        id: setup
+        uses: ./setup-bazel-cache
+        with:
+          disk-cache-key: persistence-${{ github.run_id }}-${{ github.run_attempt }}
+          cache-save-branch-patterns: ${{ github.ref_name }}
+          disk-cache-restore: "true"
+          disk-cache-save: "true"
+          repository-cache-restore: "true"
+          repository-cache-save: "true"
+          external-cache-restore: "true"
+          external-cache-save: "true"
+
+      - name: Add baseline cache markers
+        shell: bash
+        env:
+          CACHE_SAVE_ALLOWED: ${{ steps.setup.outputs.cache-save-branch-evaluated }}
+          FAILED_JOB_CACHE_SAVE_ALLOWED: ${{ steps.setup.outputs._failed-job-cache-save-allowed }}
+        run: |
+          set -euo pipefail
+          [[ "$CACHE_SAVE_ALLOWED" == "true" ]]
+          [[ "$FAILED_JOB_CACHE_SAVE_ALLOWED" == "false" ]]
+
+          marker="baseline-${{ github.run_id }}-${{ github.run_attempt }}"
+          # bazelisk is content-addressed by Bazel version, not generational:
+          # once that version is cached once, later saves are skipped as an
+          # exact hit (see cache.js save()), so a run-specific marker written
+          # here would never actually persist. Only the generational caches
+          # (disk, repository) get a fresh save every run.
+          for cache in bazel-disk bazel-repo; do
+            mkdir -p "${HOME}/.cache/${cache}"
+            echo "$marker" > "${HOME}/.cache/${cache}/${marker}"
+          done
+
+          external_root="$(bazel info output_base)/external"
+          bazel shutdown
+          mkdir -p "$external_root/external-baseline"
+          truncate -s 500M "$external_root/external-baseline/payload"
+          echo "$marker" > "$external_root/@external-baseline.marker"
+
+  save-additions-after-failure:
+    name: Save additive cache entries
+    needs: seed-cache
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+
+      - name: Create cache identity files
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'module(name = "cache_persistence_test")' > MODULE.bazel
+          echo '{"persistence":"${{ github.run_id }}-${{ github.run_attempt }}"}' > MODULE.bazel.lock
+          echo '8.6.0' > .bazelversion
+
+      - name: Restore seeded caches
+        id: restore
+        uses: ./setup-bazel-cache
+        with:
+          disk-cache-key: persistence-${{ github.run_id }}-${{ github.run_attempt }}
+          cache-save-branch-patterns: ${{ github.ref_name }}
+          disk-cache-restore: "true"
+          disk-cache-save: "true"
+          repository-cache-restore: "true"
+          repository-cache-save: "true"
+          external-cache-restore: "true"
+          external-cache-save: "true"
+
+      - name: Verify restore and add markers
+        shell: bash
+        env:
+          BAZELISK_RESTORE: ${{ steps.restore.outputs.bazelisk-cache-restored }}
+          DISK_RESTORE: ${{ steps.restore.outputs.disk-cache-restored }}
+          EXTERNAL_RESTORE: ${{ steps.restore.outputs.external-cache-restored }}
+          FAILED_JOB_CACHE_SAVE_ALLOWED: ${{ steps.restore.outputs._failed-job-cache-save-allowed }}
+          REPOSITORY_RESTORE: ${{ steps.restore.outputs.repository-cache-restored }}
+        run: |
+          set -euo pipefail
+          [[ "$BAZELISK_RESTORE" == "true" ]]
+          [[ "$DISK_RESTORE" == "true" ]]
+          [[ "$EXTERNAL_RESTORE" == "true" ]]
+          [[ "$REPOSITORY_RESTORE" == "true" ]]
+          [[ "$FAILED_JOB_CACHE_SAVE_ALLOWED" == "false" ]]
+
+          marker="baseline-${{ github.run_id }}-${{ github.run_attempt }}"
+          # See the matching comment in the seed job: bazelisk's cache is
+          # exempt from the marker check for the same reason.
+          for cache in bazel-disk bazel-repo; do
+            test "$(cat "${HOME}/.cache/${cache}/${marker}")" = "$marker"
+          done
+
+          external_root="$(bazel info output_base)/external"
+          bazel shutdown
+          test "$(stat --format=%s "$external_root/external-baseline/payload")" -eq $((500 * 1024 * 1024))
+          test "$(cat "$external_root/@external-baseline.marker")" = "$marker"
+
+          marker="addition-${{ github.run_id }}-${{ github.run_attempt }}"
+          for cache in bazel-disk bazel-repo; do
+            echo "$marker" > "${HOME}/.cache/${cache}/${marker}"
+          done
+
+          mkdir -p "$external_root/external-addition"
+          truncate -s 500M "$external_root/external-addition/payload"
+          echo "$marker" > "$external_root/@external-addition.marker"
+
+      - name: Fail after adding to restored caches
+        if: inputs.exercise-failed-job
+        shell: bash
+        run: exit 1
+
+  verify-cache-generations:
+    name: Verify cache generations
+    if: always()
+    needs: save-additions-after-failure
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+
+      - name: Create cache identity files
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'module(name = "cache_persistence_test")' > MODULE.bazel
+          echo '{"persistence":"${{ github.run_id }}-${{ github.run_attempt }}"}' > MODULE.bazel.lock
+          echo '8.6.0' > .bazelversion
+
+      - name: Restore caches written by the previous job
+        id: restore
+        uses: ./setup-bazel-cache
+        with:
+          disk-cache-key: persistence-${{ github.run_id }}-${{ github.run_attempt }}
+          cache-save-branch-patterns: ${{ github.ref_name }}
+          disk-cache-restore: "true"
+          disk-cache-save: "true"
+          repository-cache-restore: "true"
+          repository-cache-save: "true"
+          external-cache-restore: "true"
+          external-cache-save: "true"
+
+      - name: Verify successful-job additions
+        if: ${{ !inputs.exercise-failed-job }}
+        shell: bash
+        env:
+          BAZELISK_RESTORE: ${{ steps.restore.outputs.bazelisk-cache-restored }}
+          DISK_RESTORE: ${{ steps.restore.outputs.disk-cache-restored }}
+          EXTERNAL_RESTORE: ${{ steps.restore.outputs.external-cache-restored }}
+          REPOSITORY_RESTORE: ${{ steps.restore.outputs.repository-cache-restored }}
+        run: |
+          set -euo pipefail
+          [[ "$BAZELISK_RESTORE" == "true" ]]
+          [[ "$DISK_RESTORE" == "true" ]]
+          [[ "$EXTERNAL_RESTORE" == "true" ]]
+          [[ "$REPOSITORY_RESTORE" == "true" ]]
+
+          marker="addition-${{ github.run_id }}-${{ github.run_attempt }}"
+          for cache in bazel-disk bazel-repo; do
+            test "$(cat "${HOME}/.cache/${cache}/${marker}")" = "$marker"
+          done
+
+          external_root="$(bazel info output_base)/external"
+          bazel shutdown
+          test "$(stat --format=%s "$external_root/external-addition/payload")" -eq $((500 * 1024 * 1024))
+          test "$(cat "$external_root/@external-addition.marker")" = "$marker"
+
+      - name: Verify failed job did not publish additions
+        if: inputs.exercise-failed-job
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          marker="baseline-${{ github.run_id }}-${{ github.run_attempt }}"
+          for cache in bazel-disk bazel-repo; do
+            test "$(cat "${HOME}/.cache/${cache}/${marker}")" = "$marker"
+          done
+
+          external_root="$(bazel info output_base)/external"
+          bazel shutdown
+          test "$(stat --format=%s "$external_root/external-baseline/payload")" -eq $((500 * 1024 * 1024))
+          test "$(cat "$external_root/@external-baseline.marker")" = "$marker"
+          test ! -e "$external_root/external-addition"
+          test ! -e "$external_root/@external-addition.marker"

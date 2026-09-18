@@ -42,3 +42,18 @@ updates:
         update-types:
           - "minor"
           - "patch"
+
+  - package-ecosystem: npm
+    directory: /setup-bazel-cache
+    schedule:
+      interval: daily
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      setup-bazel-cache:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
