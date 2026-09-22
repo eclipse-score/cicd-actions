@@ -36,6 +36,7 @@ function resolveOutputBase(workspace) {
   } catch (error) {
     throw new Error(
       `Could not resolve Bazel output_base: ${error.stderr?.trim() || error.message || error}`,
+      { cause: error },
     );
   }
 
