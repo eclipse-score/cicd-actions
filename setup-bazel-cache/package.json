@@ -13,8 +13,8 @@
     "test": "node --test"
   },
   "dependencies": {
-    "@actions/artifact": "^6.2.1",
-    "@actions/cache": "^6.0.1",
+    "@actions/artifact": "^6.3.1",
+    "@actions/cache": "^6.3.0",
     "@actions/core": "^3.0.0",
     "@actions/glob": "^0.7.0",
     "minimatch": "^10.2.5"
@@ -22,7 +22,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "esbuild": "^0.28.2",
-    "eslint": "^10.11.0",
-    "globals": "^17.12.0"
+    "eslint": "^10.12.0",
+    "globals": "^17.13.0"
   }
 }
