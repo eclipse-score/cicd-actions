@@ -165,7 +165,7 @@ async function logTestCacheSummary(root = invocationRootPath()) {
   return { reports, aggregates, notes: summaryNotes };
 }
 
-/** Resolve the opt-out step-summary input; the job log is reported regardless. */
+/** Resolve the optional step-summary input; the job log is reported regardless. */
 function writeCacheStepSummaryEnabled(value) {
   const normalized = value.trim().toLowerCase();
   if (normalized === 'true') return true;

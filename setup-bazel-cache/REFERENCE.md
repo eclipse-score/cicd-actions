@@ -109,9 +109,9 @@ test-result cache behavior; it does not enable it.
 
 #### `report-cache-step-summary`
 
-Defaults to `true`; accepts `true` or `false`. When enabled, the cache overview
-is written to both the job log and the GitHub Actions step summary. When false,
-the log report remains enabled according to the two report inputs above.
+Defaults to `false`; accepts `true` or `false`. When enabled, the cache overview
+is written to both the job log and the GitHub Actions step summary. The log
+report remains enabled according to the two report inputs above either way.
 
 #### `enable-profiling`
 

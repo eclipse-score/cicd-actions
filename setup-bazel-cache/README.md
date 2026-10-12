@@ -133,10 +133,9 @@ of the same reusable workflow.
   Reporting does not enable Bazel's test-result cache.
 
 - **`report-cache-step-summary`**
-  - Options: `true` (default), `false`.
+  - Options: `true`, `false` (default).
 
-  Set `false` to keep enabled reports in the job log without writing them to
-  the GitHub Actions step summary.
+  Set `true` to also write enabled reports to the GitHub Actions step summary.
 
 - **`enable-profiling`**
   - Options: `auto` (default), `true`, `false`.

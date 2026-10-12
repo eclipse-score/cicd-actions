@@ -34,6 +34,7 @@ function fixture(context) {
 function runPost(
   root,
   enabled,
+  stepSummaryInput = 'false',
   summaryPath = path.join(root, 'summary.md'),
   state = { cacheSaveAllowed: false, invocationRoot: invocationRootPath(root) },
   extraEnv = {},
@@ -51,7 +52,7 @@ function runPost(
       'STATE_setup-bazel-cache-configuration': JSON.stringify(state),
       'INPUT_REPORT-CACHE-HITS': 'true',
       'INPUT_REPORT-TEST-CACHE-HITS': String(enabled),
-      'INPUT_REPORT-CACHE-STEP-SUMMARY': 'true',
+      'INPUT_REPORT-CACHE-STEP-SUMMARY': stepSummaryInput,
       'INPUT_ENABLE-PROFILING': 'false',
       ...extraEnv,
     },
@@ -107,12 +108,35 @@ test('disabling the step summary keeps the job log but leaves the step summary e
   const { output, summary } = runPost(
     root,
     true,
-    undefined,
-    undefined,
-    { 'INPUT_REPORT-CACHE-STEP-SUMMARY': 'false' },
+    'false',
   );
   assert.match(output, /Cache saving is disabled on this ref/);
   assert.doesNotMatch(output, /::warning::|::error::/);
+  assert.equal(summary, '');
+});
+
+test('the default keeps cache reports in the job log without writing a step summary', (context) => {
+  const root = fixture(context);
+  const invocationRoot = invocationRootPath(root);
+  initializeInvocationStore(invocationRoot);
+  const invocation = claimInvocation(invocationRoot, 'test', {
+    executionLog: false,
+    testCache: true,
+    profile: false,
+  }, ['//:default-summary-test']);
+  fs.writeFileSync(invocation.files.testCache, [
+    JSON.stringify({ id: { testResult: { label: '//:default-summary-test' } }, testResult: { cachedLocally: true } }),
+    JSON.stringify({ lastMessage: true }),
+  ].join('\n'));
+  finishInvocation(invocation, 0);
+
+  const manifest = fs.readFileSync(new URL('../action.yml', import.meta.url), 'utf8');
+  const stepSummaryInput = manifest
+    .split('  report-cache-step-summary:\n')[1]
+    .split('\n\n  # cache flags:')[0];
+  assert.match(stepSummaryInput, /default: "false"/);
+  const { output, summary } = runPost(root, true);
+  assert.match(output, /000-test: \/\/:default-summary-test/);
   assert.equal(summary, '');
 });
 
@@ -156,9 +180,9 @@ test('test report preserves cache output and renders disabled, partial, and no-a
     startedAt: '2026-01-01T00:01:00.000Z',
     finishedAt: '2026-01-01T00:02:48.000Z',
   });
-  const baseline = runPost(root, false);
+  const baseline = runPost(root, false, 'true');
   fs.writeFileSync(path.join(root, 'summary.md'), '');
-  const actual = runPost(root, true, path.join(root, 'summary.md'), {
+  const actual = runPost(root, true, 'true', path.join(root, 'summary.md'), {
     cacheSaveAllowed: false,
     restoreResults: {
       bazelisk: 'true',
@@ -180,7 +204,7 @@ test('test report preserves cache output and renders disabled, partial, and no-a
   assert.doesNotMatch(actual.summary, /Disk cache/);
   assert.doesNotMatch(actual.summary, /\| External cache \|/);
   fs.writeFileSync(path.join(root, 'summary.md'), '');
-  const withExternal = runPost(root, true, path.join(root, 'summary.md'), {
+  const withExternal = runPost(root, true, 'true', path.join(root, 'summary.md'), {
     cacheSaveAllowed: false,
     restoreResults: { external: 'false' },
     externalManifestRestoreResult: 'true',
@@ -238,7 +262,7 @@ test('summary groups repeated invocations with their target patterns', (context)
     });
   }
 
-  const { output, summary } = runPost(root, true);
+  const { output, summary } = runPost(root, true, 'true');
   assert.match(summary, /\| Cache \| Reused \/ total \| Hit rate \| Status \|/);
   for (let sequence = 0; sequence < 3; sequence += 1) {
     const elapsed = ['12\\.4 s', '1\\.8 min', '0\\.4 s'][sequence];
@@ -283,7 +307,7 @@ test('summary uses n/a for incomplete or invalid invocation timestamps', (contex
   finishInvocation(invalidStart, 0);
   updateInvocationMetadata(invalidStart, { startedAt: 'not-a-timestamp' });
 
-  const { summary } = runPost(root, false);
+  const { summary } = runPost(root, false, 'true');
   assert.match(summary, /<h3>build · 000 · n\/a<\/h3>[\s\S]*?\| Build cache \| — \| n\/a \| Unavailable \|/);
   assert.match(summary, /<h3>build · 001 · n\/a<\/h3>[\s\S]*?\| Build cache \| — \| n\/a \| Unavailable \|/);
 });
@@ -291,7 +315,7 @@ test('summary uses n/a for incomplete or invalid invocation timestamps', (contex
 test('summary write failures do not stop post-step processing', (context) => {
   const root = fixture(context);
   // A directory is accessible but cannot receive summary text.
-  const { output } = runPost(root, true, root);
+  const { output } = runPost(root, true, 'true', root);
   assert.match(output, /Bazel cache summary unavailable/);
   assert.match(output, /Cache saving is disabled on this ref/);
   assert.doesNotMatch(output, /::error::/);
