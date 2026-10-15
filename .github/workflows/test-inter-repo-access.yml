@@ -30,8 +30,29 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
 
+      - name: Seed stale token rewrites
+        shell: bash
+        env:
+          SERVER_URL: ${{ github.server_url }}
+        run: |
+          set -euo pipefail
+
+          server_url="${SERVER_URL%/}"
+          host="${server_url#https://}"
+          for old_token in expired-one expired-two; do
+            old_key="url.https://x-access-token:${old_token}@${host}/.insteadOf"
+            git config --global --add "$old_key" "${server_url}/"
+            git config --global --add "$old_key" "git@${host}:"
+            git config --global --add "$old_key" "ssh://git@${host}/"
+            git config --global --add "$old_key" "${server_url}/rewrite-probe/"
+          done
+          git config --global "url.https://x-access-token:other-token@other.invalid/.insteadOf" "https://other.invalid/"
+
       - name: Configure inter-repo access
         id: access
+        uses: ./inter-repo-access
+
+      - name: Configure inter-repo access again
         uses: ./inter-repo-access
 
       - name: Checkout probe repository without explicit token
@@ -61,6 +82,26 @@ jobs:
             echo "Expected a non-empty selected token output."
             exit 1
           fi
+
+          server_url="${SERVER_URL%/}"
+          host="${server_url#https://}"
+          token_url="https://x-access-token:${SELECTED_TOKEN}@${host}/"
+          for prefix in "${server_url}/" "git@${host}:" "ssh://git@${host}/"; do
+            actual_url="$(git ls-remote --get-url "${prefix}rewrite-probe/repo.git")"
+            if [[ "$actual_url" != "${token_url}rewrite-probe/repo.git" ]]; then
+              echo "Git URL rewrite did not select the current token."
+              exit 1
+            fi
+          done
+          for old_token in expired-one expired-two; do
+            if git config --global --get-all "url.https://x-access-token:${old_token}@${host}/.insteadOf" >/dev/null; then
+              echo "Stale token rewrite is still configured."
+              exit 1
+            fi
+          done
+          rewrite_count="$(git config --global --get-all "url.${token_url}.insteadOf" | wc -l)"
+          [[ "$rewrite_count" -eq 3 ]]
+          [[ "$(git config --global --get-all "url.https://x-access-token:other-token@other.invalid/.insteadOf")" == "https://other.invalid/" ]]
 
           if git config --local --get-all "http.${SERVER_URL}/.extraheader" >/dev/null; then
             echo "actions/checkout extraheader is still configured in the workspace repo."
