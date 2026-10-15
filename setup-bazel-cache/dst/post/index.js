@@ -24500,6 +24500,8 @@ var require_brace_expansion = __commonJS({
     var escPeriod2 = "\0PERIOD" + Math.random() + "\0";
     var EXPANSION_MAX2 = 1e5;
     var EXPANSION_MAX_LENGTH2 = 4e6;
+    var EXPANSION_MAX_DEPTH2 = 1e3;
+    var EXPANSION_MAX_REWRITES2 = 1e3;
     function numeric2(str) {
       return parseInt(str, 10) == str ? parseInt(str, 10) : str.charCodeAt(0);
     }
@@ -24509,25 +24511,36 @@ var require_brace_expansion = __commonJS({
     function unescapeBraces2(str) {
       return str.split(escSlash2).join("\\").split(escOpen2).join("{").split(escClose2).join("}").split(escComma2).join(",").split(escPeriod2).join(".");
     }
-    function parseCommaParts2(str) {
-      if (!str)
-        return [""];
-      var parts = [];
-      var m = balanced2("{", "}", str);
-      if (!m)
-        return str.split(",");
-      var pre = m.pre;
-      var body3 = m.body;
-      var post = m.post;
-      var p = pre.split(",");
-      p[p.length - 1] += "{" + body3 + "}";
-      var postParts = parseCommaParts2(post);
-      if (post.length) {
-        p[p.length - 1] += postParts.shift();
-        p.push.apply(p, postParts);
+    function pushAll2(target, items) {
+      for (var i = 0; i < items.length; i++) {
+        target.push(items[i]);
       }
-      parts.push.apply(parts, p);
-      return parts;
+    }
+    function parseCommaParts2(str) {
+      var parts = [];
+      var carry = "";
+      for (; ; ) {
+        var m = balanced2("{", "}", str);
+        if (!m) {
+          var tail = str.split(",");
+          tail[0] = carry + tail[0];
+          pushAll2(parts, tail);
+          return parts;
+        }
+        var pre = m.pre;
+        var body3 = m.body;
+        var post = m.post;
+        var p = pre.split(",");
+        p[0] = carry + p[0];
+        p[p.length - 1] += "{" + body3 + "}";
+        if (!post.length) {
+          pushAll2(parts, p);
+          return parts;
+        }
+        carry = p.pop();
+        pushAll2(parts, p);
+        str = post;
+      }
     }
     function expandTop(str, options) {
       if (!str)
@@ -24535,10 +24548,12 @@ var require_brace_expansion = __commonJS({
       options = options || {};
       var max = options.max == null ? EXPANSION_MAX2 : options.max;
       var maxLength = options.maxLength == null ? EXPANSION_MAX_LENGTH2 : options.maxLength;
+      var maxDepth = options.maxDepth == null ? EXPANSION_MAX_DEPTH2 : options.maxDepth;
+      var maxRewrites = options.maxRewrites == null ? EXPANSION_MAX_REWRITES2 : options.maxRewrites;
       if (str.substr(0, 2) === "{}") {
         str = "\\{\\}" + str.substr(2);
       }
-      return expand3(escapeBraces2(str), max, maxLength, true).map(unescapeBraces2);
+      return expand3(escapeBraces2(str), max, maxLength, maxDepth, 0, maxRewrites, true).map(unescapeBraces2);
     }
     function embrace2(str) {
       return "{" + str + "}";
@@ -24612,8 +24627,12 @@ var require_brace_expansion = __commonJS({
       }
       return N;
     }
-    function expand3(str, max, maxLength, isTop) {
+    function expand3(str, max, maxLength, maxDepth, depth, maxRewrites, isTop) {
+      if (depth > maxDepth) {
+        return [str];
+      }
       var acc = [""];
+      var rewrites = 0;
       var dropEmpties = false;
       var firstGroup = true;
       for (; ; ) {
@@ -24641,7 +24660,8 @@ var require_brace_expansion = __commonJS({
         var isSequence = isNumericSequence || isAlphaSequence;
         var isOptions = m.body.indexOf(",") >= 0;
         if (!isSequence && !isOptions) {
-          if (m.post.match(/,(?!,).*\}/)) {
+          if (rewrites < maxRewrites && m.post.match(/,(?!,).*\}/)) {
+            rewrites++;
             str = m.pre + "{" + m.body + escClose2 + m.post;
             isTop = true;
             continue;
@@ -24665,7 +24685,7 @@ var require_brace_expansion = __commonJS({
         } else {
           var n = parseCommaParts2(m.body);
           if (n.length === 1 && n[0] !== void 0) {
-            n = expand3(n[0], max, maxLength, false).map(embrace2);
+            n = expand3(n[0], max, maxLength, maxDepth, depth + 1, maxRewrites, false).map(embrace2);
             if (n.length === 1) {
               acc = combine2(
                 acc,
@@ -24689,7 +24709,7 @@ var require_brace_expansion = __commonJS({
           values = [];
           var valuesLength = 0;
           outer: for (var j = 0; j < n.length; j++) {
-            var expanded = expand3(n[j], max, maxLength, false);
+            var expanded = expand3(n[j], max, maxLength, maxDepth, depth + 1, maxRewrites, false);
             for (var k = 0; k < expanded.length; k++) {
               var v = expanded[k];
               if (dropsEmpties && !v) continue;
@@ -38326,6 +38346,8 @@ var require_brace_expansion2 = __commonJS({
     var escPeriod2 = "\0PERIOD" + Math.random() + "\0";
     var EXPANSION_MAX2 = 1e5;
     var EXPANSION_MAX_LENGTH2 = 4e6;
+    var EXPANSION_MAX_DEPTH2 = 1e3;
+    var EXPANSION_MAX_REWRITES2 = 1e3;
     function numeric2(str) {
       return parseInt(str, 10) == str ? parseInt(str, 10) : str.charCodeAt(0);
     }
@@ -38335,25 +38357,36 @@ var require_brace_expansion2 = __commonJS({
     function unescapeBraces2(str) {
       return str.split(escSlash2).join("\\").split(escOpen2).join("{").split(escClose2).join("}").split(escComma2).join(",").split(escPeriod2).join(".");
     }
-    function parseCommaParts2(str) {
-      if (!str)
-        return [""];
-      var parts = [];
-      var m = balanced2("{", "}", str);
-      if (!m)
-        return str.split(",");
-      var pre = m.pre;
-      var body3 = m.body;
-      var post = m.post;
-      var p = pre.split(",");
-      p[p.length - 1] += "{" + body3 + "}";
-      var postParts = parseCommaParts2(post);
-      if (post.length) {
-        p[p.length - 1] += postParts.shift();
-        p.push.apply(p, postParts);
+    function pushAll2(target, items) {
+      for (var i = 0; i < items.length; i++) {
+        target.push(items[i]);
       }
-      parts.push.apply(parts, p);
-      return parts;
+    }
+    function parseCommaParts2(str) {
+      var parts = [];
+      var carry = "";
+      for (; ; ) {
+        var m = balanced2("{", "}", str);
+        if (!m) {
+          var tail = str.split(",");
+          tail[0] = carry + tail[0];
+          pushAll2(parts, tail);
+          return parts;
+        }
+        var pre = m.pre;
+        var body3 = m.body;
+        var post = m.post;
+        var p = pre.split(",");
+        p[0] = carry + p[0];
+        p[p.length - 1] += "{" + body3 + "}";
+        if (!post.length) {
+          pushAll2(parts, p);
+          return parts;
+        }
+        carry = p.pop();
+        pushAll2(parts, p);
+        str = post;
+      }
     }
     function expandTop(str, options) {
       if (!str)
@@ -38361,10 +38394,12 @@ var require_brace_expansion2 = __commonJS({
       options = options || {};
       var max = options.max == null ? EXPANSION_MAX2 : options.max;
       var maxLength = options.maxLength == null ? EXPANSION_MAX_LENGTH2 : options.maxLength;
+      var maxDepth = options.maxDepth == null ? EXPANSION_MAX_DEPTH2 : options.maxDepth;
+      var maxRewrites = options.maxRewrites == null ? EXPANSION_MAX_REWRITES2 : options.maxRewrites;
       if (str.substr(0, 2) === "{}") {
         str = "\\{\\}" + str.substr(2);
       }
-      return expand3(escapeBraces2(str), max, maxLength, true).map(unescapeBraces2);
+      return expand3(escapeBraces2(str), max, maxLength, maxDepth, 0, maxRewrites, true).map(unescapeBraces2);
     }
     function embrace2(str) {
       return "{" + str + "}";
@@ -38438,8 +38473,12 @@ var require_brace_expansion2 = __commonJS({
       }
       return N;
     }
-    function expand3(str, max, maxLength, isTop) {
+    function expand3(str, max, maxLength, maxDepth, depth, maxRewrites, isTop) {
+      if (depth > maxDepth) {
+        return [str];
+      }
       var acc = [""];
+      var rewrites = 0;
       var dropEmpties = false;
       var firstGroup = true;
       for (; ; ) {
@@ -38467,7 +38506,8 @@ var require_brace_expansion2 = __commonJS({
         var isSequence = isNumericSequence || isAlphaSequence;
         var isOptions = m.body.indexOf(",") >= 0;
         if (!isSequence && !isOptions) {
-          if (m.post.match(/,(?!,).*\}/)) {
+          if (rewrites < maxRewrites && m.post.match(/,(?!,).*\}/)) {
+            rewrites++;
             str = m.pre + "{" + m.body + escClose2 + m.post;
             isTop = true;
             continue;
@@ -38491,7 +38531,7 @@ var require_brace_expansion2 = __commonJS({
         } else {
           var n = parseCommaParts2(m.body);
           if (n.length === 1 && n[0] !== void 0) {
-            n = expand3(n[0], max, maxLength, false).map(embrace2);
+            n = expand3(n[0], max, maxLength, maxDepth, depth + 1, maxRewrites, false).map(embrace2);
             if (n.length === 1) {
               acc = combine2(
                 acc,
@@ -38515,7 +38555,7 @@ var require_brace_expansion2 = __commonJS({
           values = [];
           var valuesLength = 0;
           outer: for (var j = 0; j < n.length; j++) {
-            var expanded = expand3(n[j], max, maxLength, false);
+            var expanded = expand3(n[j], max, maxLength, maxDepth, depth + 1, maxRewrites, false);
             for (var k = 0; k < expanded.length; k++) {
               var v = expanded[k];
               if (dropsEmpties && !v) continue;
@@ -101249,6 +101289,8 @@ var commaPattern = /\\,/g;
 var periodPattern = /\\\./g;
 var EXPANSION_MAX = 1e5;
 var EXPANSION_MAX_LENGTH = 4e6;
+var EXPANSION_MAX_DEPTH = 1e3;
+var EXPANSION_MAX_REWRITES = 1e3;
 function numeric(str) {
   return !isNaN(str) ? parseInt(str, 10) : str.charCodeAt(0);
 }
@@ -101258,36 +101300,44 @@ function escapeBraces(str) {
 function unescapeBraces(str) {
   return str.replace(escSlashPattern, "\\").replace(escOpenPattern, "{").replace(escClosePattern, "}").replace(escCommaPattern, ",").replace(escPeriodPattern, ".");
 }
+function pushAll(target, items) {
+  for (let i = 0; i < items.length; i++) {
+    target.push(items[i]);
+  }
+}
 function parseCommaParts(str) {
-  if (!str) {
-    return [""];
-  }
   const parts = [];
-  const m = balanced("{", "}", str);
-  if (!m) {
-    return str.split(",");
+  let carry = "";
+  for (; ; ) {
+    const m = balanced("{", "}", str);
+    if (!m) {
+      const tail = str.split(",");
+      tail[0] = carry + tail[0];
+      pushAll(parts, tail);
+      return parts;
+    }
+    const { pre, body: body3, post } = m;
+    const p = pre.split(",");
+    p[0] = carry + p[0];
+    p[p.length - 1] += "{" + body3 + "}";
+    if (!post.length) {
+      pushAll(parts, p);
+      return parts;
+    }
+    carry = p.pop();
+    pushAll(parts, p);
+    str = post;
   }
-  const { pre, body: body3, post } = m;
-  const p = pre.split(",");
-  p[p.length - 1] += "{" + body3 + "}";
-  const postParts = parseCommaParts(post);
-  if (post.length) {
-    ;
-    p[p.length - 1] += postParts.shift();
-    p.push.apply(p, postParts);
-  }
-  parts.push.apply(parts, p);
-  return parts;
 }
 function expand2(str, options = {}) {
   if (!str) {
     return [];
   }
-  const { max = EXPANSION_MAX, maxLength = EXPANSION_MAX_LENGTH } = options;
+  const { max = EXPANSION_MAX, maxLength = EXPANSION_MAX_LENGTH, maxDepth = EXPANSION_MAX_DEPTH, maxRewrites = EXPANSION_MAX_REWRITES } = options;
   if (str.slice(0, 2) === "{}") {
     str = "\\{\\}" + str.slice(2);
   }
-  return expand_(escapeBraces(str), max, maxLength, true).map(unescapeBraces);
+  return expand_(escapeBraces(str), max, maxLength, maxDepth, 0, maxRewrites, true).map(unescapeBraces);
 }
 function embrace(str) {
   return "{" + str + "}";
@@ -101365,8 +101415,12 @@ function expandSequence(body3, isAlphaSequence, max, maxLength) {
   }
   return N;
 }
-function expand_(str, max, maxLength, isTop) {
+function expand_(str, max, maxLength, maxDepth, depth, maxRewrites, isTop) {
+  if (depth > maxDepth) {
+    return [str];
+  }
   let acc = [""];
+  let rewrites = 0;
   let dropEmpties = false;
   let firstGroup = true;
   for (; ; ) {
@@ -101388,7 +101442,8 @@ function expand_(str, max, maxLength, isTop) {
     const isSequence = isNumericSequence || isAlphaSequence;
     const isOptions = m.body.indexOf(",") >= 0;
     if (!isSequence && !isOptions) {
-      if (m.post.match(/,(?!,).*\}/)) {
+      if (rewrites < maxRewrites && m.post.match(/,(?!,).*\}/)) {
+        rewrites++;
         str = m.pre + "{" + m.body + escClose + m.post;
         isTop = true;
         continue;
@@ -101405,7 +101460,7 @@ function expand_(str, max, maxLength, isTop) {
     } else {
       let n = parseCommaParts(m.body);
       if (n.length === 1 && n[0] !== void 0) {
-        n = expand_(n[0], max, maxLength, false).map(embrace);
+        n = expand_(n[0], max, maxLength, maxDepth, depth + 1, maxRewrites, false).map(embrace);
         if (n.length === 1) {
           acc = combine(acc, pre + n[0], [""], max, maxLength, dropEmpties && !m.post.length);
           if (!m.post.length)
@@ -101423,7 +101478,7 @@ function expand_(str, max, maxLength, isTop) {
       values = [];
       let valuesLength = 0;
       outer: for (let j = 0; j < n.length; j++) {
-        const expanded = expand_(n[j], max, maxLength, false);
+        const expanded = expand_(n[j], max, maxLength, maxDepth, depth + 1, maxRewrites, false);
         for (let k = 0; k < expanded.length; k++) {
           const v = expanded[k];
           if (dropsEmpties && !v)

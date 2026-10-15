@@ -60,9 +60,9 @@ inputs:
     description: >
       Also write the cache overview enabled by report-cache-hits and
       report-test-cache-hits to the job's GitHub Actions step summary, not
-      just the job log. Accepts true or false and defaults to true.
+      just the job log. Accepts true or false and defaults to false.
     required: false
-    default: "true"
+    default: "false"
 
   # cache flags:
 
