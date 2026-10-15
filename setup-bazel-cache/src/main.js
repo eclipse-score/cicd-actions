@@ -306,7 +306,7 @@ async function run() {
       }),
     );
   } catch (error) {
-    core.warning(`Bazel cache setup stopped: ${error.stack || error.message || error}`);
+    core.setFailed(`Bazel cache setup stopped: ${error.stack || error.message || error}`);
   }
 }
 

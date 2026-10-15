@@ -28,15 +28,21 @@ for (const bundled of [false, true]) {
   });
   const label = bundled ? 'bundle' : 'source';
 
-  test(`${label}: invalid setup inputs warn, exit successfully, and do not enable cache saving`, () => {
+  test(`${label}: invalid setup inputs fail without enabling cache saving`, () => {
     // Validation fails before setup writes files or records successful state.
-    const output = run('main', {
-      GITHUB_WORKSPACE: process.cwd(),
-      'INPUT_DISK-CACHE-KEY': 'failure-regression',
-      'INPUT_ENABLE-PROFILING': 'invalid',
-    });
-    assert.match(output, /::warning::Bazel cache setup stopped: .*enable-profiling/);
-    assert.doesNotMatch(output, /::error::|::save-state/);
+    assert.throws(
+      () => run('main', {
+        GITHUB_WORKSPACE: process.cwd(),
+        'INPUT_DISK-CACHE-KEY': 'failure-regression',
+        'INPUT_ENABLE-PROFILING': 'invalid',
+      }),
+      (error) => {
+        assert.equal(error.status, 1);
+        assert.match(error.stdout, /::error::Bazel cache setup stopped: .*enable-profiling/);
+        assert.doesNotMatch(error.stdout, /::warning::Bazel cache setup stopped:|::save-state/);
+        return true;
+      },
+    );
 
     const postOutput = run('post', { 'STATE_setup-bazel-cache-configuration': '' });
     assert.match(postOutput, /Setup did not complete; caches will not be saved/);
