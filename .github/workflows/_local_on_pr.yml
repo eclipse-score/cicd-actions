@@ -47,6 +47,11 @@ jobs:
     permissions:
       contents: read
 
+  setup-qemu-latest-tests:
+    uses: ./.github/workflows/test-setup-qemu-latest.yml
+    permissions:
+      contents: read
+
   setup-bazel-cache-persistence-tests:
     if: github.event_name == 'merge_group'
     uses: ./.github/workflows/test-setup-bazel-cache-persistence.yml
@@ -97,6 +102,7 @@ jobs:
       - common
       - inter-repo-access-tests
       - setup-qnx-sdp-tests
+      - setup-qemu-latest-tests
       - unblock-user-namespace-for-linux-sandbox-tests
       - setup-bazel-cache-tests
       - setup-bazel-cache-persistence-tests
