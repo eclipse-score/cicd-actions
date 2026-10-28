@@ -29,7 +29,7 @@ jobs:
   auto-refuses-unavailable-history:
     name: Auto mode requires checkout history
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out action source with shallow history
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
@@ -57,7 +57,7 @@ jobs:
   auto-reuses-or-deepens-history:
     name: Auto mode resolves history
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -100,7 +100,7 @@ jobs:
   auto-requires-git-checkout:
     name: Auto mode requires a Git checkout
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out action source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
@@ -131,7 +131,7 @@ jobs:
 
   modes-without-history-check:
     name: Explicit cache modes skip history check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -178,7 +178,7 @@ jobs:
           fi
   preserves-existing-bazelrc:
     name: Existing user bazelrc is preserved
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out action source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
@@ -217,7 +217,7 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       github.event_name == 'merge_group' ||
       github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       # Plain checkout resolves the code under test for both same-repo
       # `pull_request` and `merge_group`. See the note in test-prune-cache.yml.

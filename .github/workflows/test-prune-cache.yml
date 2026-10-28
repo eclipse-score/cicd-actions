@@ -51,7 +51,7 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       github.event_name == 'merge_group' ||
       github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       # Default checkout resolves the PR merge ref (same-repo `pull_request`) or
       # the queued merge commit (`merge_group`), both of which contain the code

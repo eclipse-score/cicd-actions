@@ -28,7 +28,7 @@ jobs:
   # ---- Scenario 1: license dir in home folder, no credential helper, no license server ----
   basic-setup:
     name: Basic setup – home dir, no credential helper, no license server
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
@@ -105,7 +105,7 @@ jobs:
   # ---- Scenario 2: with license server, .bazelrc with try-import present ----
   with-license-server:
     name: Setup with license server and .bazelrc try-import
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
@@ -196,7 +196,7 @@ jobs:
   # ---- Scenario 3: missing try-import in .bazelrc produces a warning (no failure) ----
   license-server-no-try-import:
     name: Setup with license server – missing try-import (expect warning, no failure)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
@@ -232,7 +232,7 @@ jobs:
   # ---- Scenario 4: empty license dir is rejected with an error ----
   reject-empty-license-dir:
     name: Reject empty qnx-license-dir
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
@@ -263,7 +263,7 @@ jobs:
   # ---- Scenario 5: single-level absolute path is rejected with an error ----
   reject-shallow-license-dir:
     name: Reject too-shallow absolute qnx-license-dir
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
@@ -294,7 +294,7 @@ jobs:
   # ---- Scenario 6: credential helper points to an existing file ----
   credential-helper-existing-file:
     name: Credential helper – existing file
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
@@ -340,7 +340,7 @@ jobs:
   # ---- Scenario 7: credential helper points to a non-existent file ----
   credential-helper-missing-file:
     name: Credential helper – non-existent file (expect failure)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
@@ -378,7 +378,7 @@ jobs:
   # ---- Scenario 8: license dir as absolute path (non-tilde), exercises non-~ branch in prepareLicenseFile ----
   absolute-license-dir:
     name: Setup – non-tilde absolute license dir (/tmp)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1

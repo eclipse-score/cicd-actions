@@ -25,7 +25,7 @@ jobs:
   # because this repository/org does not have a configured test App installation.
   github-token-mode:
     name: Self-test github.token mode
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -122,7 +122,7 @@ jobs:
     name: Self-test token mode
     # Secrets are only available for this manual path; workflow_call covers github.token mode.
     if: ${{ github.event_name == 'workflow_dispatch' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
