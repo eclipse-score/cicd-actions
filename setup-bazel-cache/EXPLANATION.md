@@ -156,8 +156,9 @@ uses statuses such as `Used`, `Not used`, `Disabled`, `Partial data`, and
 ### Profiles and invocation limits
 
 The action installs temporary launchers on `PATH` for `bazel` and `bazelisk`
-when the respective executable is available during setup. Install the commands
-before this action to have their invocations measured. Only `build`, `run`, `test`, and `coverage` are
+when the respective executable is available during setup. The commands must be
+on `PATH` before this action runs to have their invocations measured. Only
+`build`, `run`, `test`, and `coverage` are
 measured. Calls through an absolute executable path, another container, or a
 wrapper that bypasses the action's `PATH` launcher are not measured.
 
