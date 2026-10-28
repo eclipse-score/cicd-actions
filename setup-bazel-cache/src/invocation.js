@@ -203,6 +203,20 @@ function installBazelLaunchers({ launcherPath, wrapperDirectory }) {
   fs.rmSync(wrapperDirectory, { recursive: true, force: true });
   fs.mkdirSync(wrapperDirectory, { recursive: true });
   for (const command of ['bazel', 'bazelisk']) {
+    // Do not make a missing command appear available to tools that probe PATH.
+    // Ignore our own directory, which may already be on PATH after another setup.
+    const available = (process.env.PATH || '').split(path.delimiter).some((entry) => {
+      const directory = entry || process.cwd();
+      if (path.resolve(directory) === path.resolve(wrapperDirectory)) return false;
+      const candidate = path.join(directory, command);
+      try {
+        fs.accessSync(candidate, fs.constants.X_OK);
+        return fs.statSync(candidate).isFile();
+      } catch {
+        return false;
+      }
+    });
+    if (!available) continue;
     const wrapperPath = path.join(wrapperDirectory, command);
     fs.writeFileSync(wrapperPath, [
       '#!/bin/sh',

@@ -68180,6 +68180,18 @@ function installBazelLaunchers({ launcherPath, wrapperDirectory }) {
   import_node_fs3.default.rmSync(wrapperDirectory, { recursive: true, force: true });
   import_node_fs3.default.mkdirSync(wrapperDirectory, { recursive: true });
   for (const command of ["bazel", "bazelisk"]) {
+    const available = (process.env.PATH || "").split(import_node_path2.default.delimiter).some((entry) => {
+      const directory = entry || process.cwd();
+      if (import_node_path2.default.resolve(directory) === import_node_path2.default.resolve(wrapperDirectory)) return false;
+      const candidate = import_node_path2.default.join(directory, command);
+      try {
+        import_node_fs3.default.accessSync(candidate, import_node_fs3.default.constants.X_OK);
+        return import_node_fs3.default.statSync(candidate).isFile();
+      } catch {
+        return false;
+      }
+    });
+    if (!available) continue;
     const wrapperPath = import_node_path2.default.join(wrapperDirectory, command);
     import_node_fs3.default.writeFileSync(wrapperPath, [
       "#!/bin/sh",
