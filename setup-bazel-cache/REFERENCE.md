@@ -7,6 +7,7 @@ and report behavior, see the [explanation](./EXPLANATION.md).
 ## Requirements
 
 - Linux runners
+- `tar` and `gzip` on `PATH` for cache archives created by `@actions/cache`
 - Bazel 8.6 or newer
 - Run `actions/checkout` before this action
 

@@ -1,4 +1,9 @@
 
+## Local development
+
+Use Node.js 24 or newer and install dependencies with `npm ci` in
+`setup-bazel-cache`. Run `npm run build`, `npm run lint`, and `npm test` there.
+
 ## Validation model in this repository
 
 GitHub scopes every cache to the workflow run's actual Git ref. The

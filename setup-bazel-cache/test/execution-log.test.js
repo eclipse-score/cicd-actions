@@ -12,7 +12,7 @@
 // *******************************************************************************
 
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { zstdCompressSync } from 'node:zlib';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -53,9 +53,7 @@ function spawnEntry({ runner, cacheHit, cacheable }) {
 
 function compressedLog(entries) {
   const uncompressed = Buffer.concat(entries.map(spawnEntry));
-  return execFileSync('zstd', ['--compress', '--stdout', '--quiet'], {
-    input: uncompressed,
-  });
+  return zstdCompressSync(uncompressed);
 }
 
 test('compact execution-log classification includes only cacheable spawns', () => {
@@ -112,6 +110,49 @@ test('truncated compact logs return partial results instead of failing', async (
 
   const summary = await summarizeExecutionLog(log);
   assert.equal(summary.partial, true);
+});
+
+test('the Node decoder reads an execution log compressed by the external zstd CLI', async (context) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'setup-bazel-cache-cli-log-'));
+  context.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const log = path.join(directory, 'execution.log.zst');
+  // Fixed output from `zstd -cq`, including its frame checksum, keeps this
+  // compatibility check independent of Node's fixture compressor.
+  fs.writeFileSync(log, Buffer.from('KLUv/QRYcQAADToLWgVsb2NhbGABcAETP9a+', 'base64'));
+
+  const summary = await summarizeExecutionLog(log);
+  assert.equal(summary.decoderError, null);
+  assert.equal(summary.partial, false);
+  assert.equal(summary.hits, 1);
+  assert.deepEqual(summary.hitRunners, [{ runner: 'local', count: 1 }]);
+});
+
+test('malformed protobuf after multiple stream chunks preserves complete spawn records', async (context) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'setup-bazel-cache-invalid-record-'));
+  context.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const log = path.join(directory, 'execution.log.zst');
+  const entries = Array.from({ length: 2000 }, () => spawnEntry({
+    runner: 'local', cacheHit: true, cacheable: true,
+  }));
+  // The final entry has unsupported protobuf wire type 7. Compression itself
+  // is valid; this exercises parser errors and pipeline cleanup after output.
+  fs.writeFileSync(log, zstdCompressSync(Buffer.concat([...entries, Buffer.from([1, 15])])));
+
+  const summary = await summarizeExecutionLog(log);
+  assert.equal(summary.partial, true);
+  assert.equal(summary.available, true);
+  assert.equal(summary.hits, 2000);
+  assert.match(summary.decoderError.message, /unsupported protobuf wire type 7/);
+});
+
+test('unreadable execution logs return an unavailable report with the read error', async (context) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'setup-bazel-cache-missing-log-'));
+  context.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const summary = await summarizeExecutionLog(path.join(directory, 'missing.zst'));
+  assert.equal(summary.available, false);
+  assert.equal(summary.partial, true);
+  assert.equal(summary.observed, 0);
+  assert.equal(summary.decoderError.code, 'ENOENT');
 });
 
 test('spawn entries use the Bazel compact-log field numbers', () => {

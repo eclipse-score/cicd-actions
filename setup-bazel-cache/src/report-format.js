@@ -287,10 +287,14 @@ function restoreStatusLabel(result, counts) {
  * (report-cache-step-summary), so this report must stand on its own.
  */
 function formatExecutionReport({
-  command, hits, observed, hitRunners, executedRunners, partial, targets, startedAt, finishedAt,
+  command, hits, observed, hitRunners, executedRunners, partial, targets, startedAt, finishedAt, available,
 }) {
   const percentage = formatPercentage(hits, observed);
   const elapsed = formatInvocationElapsed(startedAt, finishedAt);
+  if (available === false) {
+    return `Bazel ${command} cache: Unavailable · ${elapsed}\n` +
+      `  Targets: ${formatSummaryTargets(targets)}\n\n`;
+  }
   const lines = [
     `Bazel ${command} cache: ${hits} / ${observed} cached (${percentage}) · ${elapsed}`,
     `  Targets: ${formatSummaryTargets(targets)}`,

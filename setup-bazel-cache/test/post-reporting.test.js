@@ -18,6 +18,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { zstdCompressSync } from 'node:zlib';
 import {
   claimInvocation,
   finishInvocation,
@@ -85,13 +86,67 @@ function compressedExecutionLog() {
     field(14, 0, 1),
   ]);
   const entry = field(7, 2, spawn);
-  return execFileSync('zstd', ['-cq'], { input: Buffer.concat([varint(entry.length), entry]) });
+  return zstdCompressSync(Buffer.concat([varint(entry.length), entry]));
 }
 
 function updateInvocationMetadata(invocation, changes) {
   const metadata = JSON.parse(fs.readFileSync(invocation.metadataPath, 'utf8'));
   fs.writeFileSync(invocation.metadataPath, `${JSON.stringify({ ...metadata, ...changes })}\n`);
 }
+
+test('build and test reporting work without external zstd and continue post processing', (context) => {
+  const root = fixture(context);
+  const invocationRoot = invocationRootPath(root);
+  initializeInvocationStore(invocationRoot);
+  for (let sequence = 0; sequence < 2; sequence += 1) {
+    const invocation = claimInvocation(invocationRoot, 'test', {
+      executionLog: true,
+      testCache: true,
+      profile: false,
+    });
+    fs.writeFileSync(invocation.files.executionLog, compressedExecutionLog());
+    fs.writeFileSync(invocation.files.testCache, [
+      JSON.stringify({ id: { testResult: { label: '//:t' } }, testResult: { cachedLocally: true } }),
+      JSON.stringify({ lastMessage: true }),
+    ].join('\n'));
+    finishInvocation(invocation, 0);
+  }
+
+  // The child runs Node by absolute path; an empty PATH hides only external
+  // tools, simulating a runner/container without zstd installed.
+  const extraEnv = { PATH: root };
+  const { output, summary } = runPost(root, true, 'true', undefined, undefined, extraEnv);
+  assert.doesNotMatch(output, /::warning::|::error::/);
+  assert.match(output, /Bazel 000-test cache: 1 \/ 1 cached \(100%\)/);
+  assert.match(output, /Cache saving is disabled on this ref/);
+  assert.match(summary, /\| Build cache \| 1 \/ 1 \| 100% \| Used \|/);
+  assert.match(summary, /\| Test cache \| 1 \/ 1 \| 100% \| Used \|/);
+
+  const disabled = runPost(root, true, 'false', undefined, undefined, {
+    ...extraEnv,
+    'INPUT_REPORT-CACHE-HITS': 'false',
+  });
+  assert.doesNotMatch(disabled.output, /::warning::|zstd/);
+});
+
+test('invalid zstd logs warn with the decoder diagnostic and continue post processing', (context) => {
+  const root = fixture(context);
+  const invocationRoot = invocationRootPath(root);
+  initializeInvocationStore(invocationRoot);
+  const invocation = claimInvocation(invocationRoot, 'build', {
+    executionLog: true,
+    testCache: false,
+    profile: false,
+  });
+  fs.writeFileSync(invocation.files.executionLog, 'not a zstd stream');
+  finishInvocation(invocation, 0);
+
+  const { output, summary } = runPost(root, false, 'true');
+  assert.match(output, /::warning::Bazel 000-build execution-log analysis failed: .+/);
+  assert.match(output, /Cache saving is disabled on this ref/);
+  assert.match(summary, /\| Build cache \| — \| n\/a \| Unavailable \|/);
+  assert.doesNotMatch(output, /::error::/);
+});
 
 test('post omits unavailable data quietly and continues cache-save eligibility checks', (context) => {
   const root = fixture(context);
@@ -149,7 +204,7 @@ test('test report preserves cache output and renders disabled, partial, and no-a
     testCache: true,
     profile: false,
   });
-  fs.writeFileSync(testInvocation.files.executionLog, execFileSync('zstd', ['-cq'], { input: Buffer.alloc(0) }));
+  fs.writeFileSync(testInvocation.files.executionLog, zstdCompressSync(Buffer.alloc(0)));
   fs.writeFileSync(testInvocation.files.testCache, [
     JSON.stringify({ structuredCommandLine: {
       commandLineLabel: 'canonical',

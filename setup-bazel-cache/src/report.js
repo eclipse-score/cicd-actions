@@ -65,6 +65,12 @@ async function logExecutionCacheSummary(root = invocationRootPath()) {
       report = fs.existsSync(logPath)
         ? await summarizeExecutionLog(logPath)
         : unavailableExecutionReport();
+      if (report.decoderError) {
+        core.warning(
+          `Bazel ${invocationLabel(invocation)} execution-log analysis failed: ` +
+          `${report.decoderError.message}. Only readable records are reported; cache processing will continue.`,
+        );
+      }
     } catch (error) {
       core.warning(
         `Bazel ${invocationLabel(invocation)} execution-log analysis failed: ${error.stack || error}`,
