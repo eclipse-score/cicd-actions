@@ -41,7 +41,6 @@ jobs:
 
       - name: Run auto mode
         id: setup-bazel-cache
-        continue-on-error: true
         uses: ./setup-bazel-cache
         with:
           disk-cache-key: ${{ github.workflow }}-${{ github.job }}
@@ -49,8 +48,8 @@ jobs:
       - name: Verify auto mode refused unavailable history
         shell: bash
         run: |
-          if [[ "${{ steps.setup-bazel-cache.outcome }}" != "failure" ]]; then
-            echo "ERROR: setup-bazel-cache succeeded despite unavailable history"
+          if [[ -n "${{ steps.setup-bazel-cache.outputs._checkout-history }}" || -e "$RUNNER_TEMP/setup-bazel-cache.bazelrc" ]]; then
+            echo "ERROR: setup-bazel-cache continued despite unavailable history"
             exit 1
           fi
 
@@ -112,7 +111,6 @@ jobs:
 
       - name: Run auto mode
         id: setup-bazel-cache
-        continue-on-error: true
         uses: ./setup-bazel-cache
         with:
           disk-cache-key: ${{ github.workflow }}-${{ github.job }}
@@ -120,8 +118,8 @@ jobs:
       - name: Verify auto mode refused missing checkout history
         shell: bash
         run: |
-          if [[ "${{ steps.setup-bazel-cache.outcome }}" != "failure" ]]; then
-            echo "ERROR: setup-bazel-cache succeeded despite missing checkout history"
+          if [[ -n "${{ steps.setup-bazel-cache.outputs._checkout-history }}" || -e "$RUNNER_TEMP/setup-bazel-cache.bazelrc" ]]; then
+            echo "ERROR: setup-bazel-cache continued despite missing checkout history"
             exit 1
           fi
           if [[ -e "$GITHUB_WORKSPACE/.git" ]]; then

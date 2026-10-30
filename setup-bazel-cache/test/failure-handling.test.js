@@ -28,7 +28,7 @@ for (const bundled of [false, true]) {
   });
   const label = bundled ? 'bundle' : 'source';
 
-  test(`${label}: invalid setup inputs warn, exit successfully, and do not enable cache saving`, () => {
+  test(`${label}: invalid setup inputs warn and exit successfully without enabling cache saving`, () => {
     // Validation fails before setup writes files or records successful state.
     const output = run('main', {
       GITHUB_WORKSPACE: process.cwd(),

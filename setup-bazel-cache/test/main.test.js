@@ -21,6 +21,36 @@ import { fileURLToPath } from 'node:url';
 import { invocationRootPath, listInvocations } from '../src/invocation.js';
 
 for (const entry of ['src/main.js', 'dst/main/index.js']) {
+  test(`${entry} warns and exits successfully when automatic cache setup requires a missing checkout`, (context) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bazel action failure-'));
+    context.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const env = {
+      ...process.env,
+      HOME: root,
+      RUNNER_TEMP: root,
+      GITHUB_WORKSPACE: root,
+      GITHUB_REF: 'refs/heads/main',
+      'INPUT_DISK-CACHE-KEY': 'missing-checkout-regression',
+      'INPUT_CACHE-SAVE-BRANCH-PATTERNS': 'main',
+      'INPUT_ENABLE-PROFILING': 'auto',
+      'INPUT_REPORT-CACHE-HITS': 'true',
+      'INPUT_REPORT-TEST-CACHE-HITS': 'true',
+      'INPUT_REPORT-CACHE-STEP-SUMMARY': 'false',
+    };
+    for (const variable of ['GITHUB_ACTION_PATH', 'GITHUB_ENV', 'GITHUB_OUTPUT', 'GITHUB_STATE', 'GITHUB_STEP_SUMMARY']) {
+      delete env[variable];
+    }
+
+    const output = execFileSync(process.execPath, [fileURLToPath(new URL(`../${entry}`, import.meta.url))], {
+      cwd: root,
+      env,
+      encoding: 'utf8',
+      timeout: 15000,
+    });
+    assert.match(output, /::warning::Bazel cache setup stopped: .*Automatic disk-cache restore detection needs a repository checkout/);
+    assert.doesNotMatch(output, /::error::|::save-state/);
+  });
+
   test(`${entry} installs working launchers without GITHUB_ACTION_PATH from another directory`, (context) => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bazel action setup-'));
     context.after(() => fs.rmSync(root, { recursive: true, force: true }));
