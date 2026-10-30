@@ -42,7 +42,11 @@ for variant in "${variants[@]}"; do
 
   for attempt in $(seq 1 "$max_attempts"); do
     echo "Running bazel fetch ${variant} (attempt ${attempt}/${max_attempts})"
-    bazel_fetch_cmd=(bazel fetch)
+    # `bazel fetch` only covers the loading phase; e.g. the QNX SDP is a
+    # toolchain repo that is fetched during analysis, hence `bazel build --nobuild`.
+    # This can be observed when `--build_tests_only` is used. Then not all
+    # toolchains are fetched during the analysis phase.
+    bazel_fetch_cmd=(bazel build --nobuild)
 
     if "${bazel_fetch_cmd[@]}" "${fetch_args[@]}"; then
       echo "Successfully fetched dependencies for arguments '${variant}'"
