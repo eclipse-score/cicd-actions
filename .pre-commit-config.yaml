@@ -10,6 +10,11 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 # *******************************************************************************
+# Pin the build runtime independently of the runner or developer's system Node.
+# Pre-commit downloads and caches this version for all local Node hooks.
+default_language_version:
+  node: 24.15.0
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -55,19 +60,19 @@ repos:
     hooks:
       - id: build-setup-bazel-cache
         name: Test and build setup-bazel-cache distribution files
-        language: script
+        language: node
         entry: setup-bazel-cache/build.sh
         files: ^setup-bazel-cache/((src|test)/.*\.js|package(-lock)?\.json|action\.yml|build\.sh|eslint\.config\.js)$
         pass_filenames: false
       - id: build-setup-qnx-sdp
         name: Build setup-qnx-sdp distribution files
-        language: script
+        language: node
         entry: setup-qnx-sdp/build.sh
         files: ^(setup-qnx-sdp/src/.*\.js|setup-qnx-sdp/package\.json)$
         pass_filenames: false
       - id: build-verify-cleanup
         name: Build verify-cleanup distribution files
-        language: script
+        language: node
         entry: .github/_internal_actions/verify-cleanup/build.sh
         files: ^(\.github/_internal_actions/verify-cleanup/src/.*\.js|\.github/_internal_actions/verify-cleanup/package\.json)$
         pass_filenames: false

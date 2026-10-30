@@ -17,14 +17,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
 
-if [[ -z "${NVM_DIR:-}" ]] && [[ -d "${HOME}/.nvm" ]]; then
-  export NVM_DIR="${HOME}/.nvm"
-fi
-if [[ -s "${NVM_DIR:-}/nvm.sh" ]]; then
-  # shellcheck source=/dev/null
-  source "${NVM_DIR}/nvm.sh"
-fi
-
 npm install --package-lock-only
 npm ci
 npm run lint
