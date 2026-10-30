@@ -103,7 +103,7 @@ jobs:
       - warm-bazel-repository-cache-tests
       - prune-cache-tests
       - prune-cache-dry-run-tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Fail if any required job did not succeed
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')

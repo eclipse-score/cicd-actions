@@ -23,6 +23,7 @@ import {
   finishInvocation,
   formatInvocationSequence,
   initializeInvocationStore,
+  installBazelLaunchers,
   listInvocations,
   MAX_INVOCATIONS,
   invocationFilePaths,
@@ -35,6 +36,31 @@ function temporaryRoot(context, prefix = 'setup-bazel-cache-invocations-') {
   context.after(() => fs.rmSync(root, { recursive: true, force: true }));
   return root;
 }
+
+test('launchers expose only executable commands available outside their directory', (context) => {
+  const root = temporaryRoot(context);
+  const bin = path.join(root, 'bin');
+  const wrappers = path.join(root, 'wrappers');
+  fs.mkdirSync(bin);
+  fs.writeFileSync(path.join(bin, 'bazel'), '#!/bin/sh\n', { mode: 0o755 });
+  fs.writeFileSync(path.join(bin, 'bazelisk'), '#!/bin/sh\n', { mode: 0o644 });
+  const originalPath = process.env.PATH;
+  context.after(() => { process.env.PATH = originalPath; });
+  process.env.PATH = `${wrappers}${path.delimiter}${bin}`;
+
+  const install = () => installBazelLaunchers({ launcherPath: '/launcher.js', wrapperDirectory: wrappers });
+  install();
+  assert.deepEqual(fs.readdirSync(wrappers), ['bazel']);
+  fs.chmodSync(path.join(bin, 'bazelisk'), 0o755);
+  install();
+  assert.deepEqual(fs.readdirSync(wrappers).sort(), ['bazel', 'bazelisk']);
+  fs.unlinkSync(path.join(bin, 'bazel'));
+  install();
+  assert.deepEqual(fs.readdirSync(wrappers), ['bazelisk']);
+  fs.unlinkSync(path.join(bin, 'bazelisk'));
+  install();
+  assert.deepEqual(fs.readdirSync(wrappers), []);
+});
 
 test('launcher recognizes measured Bazel commands after startup options', () => {
   assert.deepEqual(findMeasuredCommand(['--batch', 'build', '//:all']), { command: 'build', index: 1 });

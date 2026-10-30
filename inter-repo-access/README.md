@@ -31,6 +31,8 @@ with:
 
 After the action runs, git is configured globally with URL rewrites that inject the selected token for HTTPS and SSH-style fetches on the active GitHub host.
 
+Before adding those rewrites, the action removes existing global `x-access-token` rewrites targeting the same host. This prevents expired tokens from earlier invocations or jobs from taking precedence. Rewrites for other hosts and unrelated Git settings are preserved.
+
 For subsequent `actions/checkout` steps, use `persist-credentials: false`. This prevents checkout from installing its own local credential, which would shadow the global rewrite.
 
 ```yaml
@@ -93,7 +95,7 @@ jobs:
 
 ## Notes
 
-- GitHub App installation tokens are scoped to the job and revoked at teardown.
+- GitHub App installation tokens expire after one hour and are revoked at job teardown by default. Their lifetime cannot be extended, and this action does not automatically refresh them. For jobs needing Git access later, run this action again with the App credentials before the next Git operation to generate and configure a fresh token.
 - Composite actions cannot declare secret-only parameters. Pass `github-app-private-key` and `token` from caller secrets.
 - On self-hosted runners, this action writes to global git config. Those global settings can remain on the runner after the job finishes unless your runner is ephemeral or you clean them up explicitly.
 - Avoid logging `git config --global --list` output after this action runs — the URL rewrite contains the selected token.

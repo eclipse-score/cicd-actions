@@ -9,7 +9,9 @@ or show whether Bazel reused build and test results.
 
 ## Quick start
 
-Run checkout first, then add the action before your Bazel commands:
+Run checkout first, then add the action before your Bazel commands. For reports
+and profiling, the corresponding `bazel` or `bazelisk` executable must already
+be available on `PATH` when the action runs.
 
 ```yaml
 steps:
