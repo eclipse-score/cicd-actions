@@ -129,24 +129,38 @@ test('build and test reporting work without external zstd and continue post proc
   assert.doesNotMatch(disabled.output, /::warning::|zstd/);
 });
 
-test('invalid zstd logs warn with the decoder diagnostic and continue post processing', (context) => {
-  const root = fixture(context);
-  const invocationRoot = invocationRootPath(root);
-  initializeInvocationStore(invocationRoot);
-  const invocation = claimInvocation(invocationRoot, 'build', {
-    executionLog: true,
-    testCache: false,
-    profile: false,
-  });
-  fs.writeFileSync(invocation.files.executionLog, 'not a zstd stream');
-  finishInvocation(invocation, 0);
+for (const { name, data, diagnostic } of [
+  {
+    name: 'invalid zstd logs',
+    data: Buffer.from('not a zstd stream'),
+    diagnostic: /execution-log analysis failed:/,
+  },
+  {
+    name: 'incomplete protobuf entries in valid zstd frames',
+    data: zstdCompressSync(Buffer.from([0x02, 0x3a])),
+    diagnostic: /truncated execution-log protobuf entry at EOF/,
+  },
+]) {
+  test(`${name} warn and continue post processing`, (context) => {
+    const root = fixture(context);
+    const invocationRoot = invocationRootPath(root);
+    initializeInvocationStore(invocationRoot);
+    const invocation = claimInvocation(invocationRoot, 'build', {
+      executionLog: true,
+      testCache: false,
+      profile: false,
+    });
+    fs.writeFileSync(invocation.files.executionLog, data);
+    finishInvocation(invocation, 0);
 
-  const { output, summary } = runPost(root, false, 'true');
-  assert.match(output, /::warning::Bazel 000-build execution-log analysis failed: .+/);
-  assert.match(output, /Cache saving is disabled on this ref/);
-  assert.match(summary, /\| Build cache \| — \| n\/a \| Unavailable \|/);
-  assert.doesNotMatch(output, /::error::/);
-});
+    const { output, summary } = runPost(root, false, 'true');
+    assert.match(output, /::warning::Bazel 000-build execution-log analysis failed: .+/);
+    assert.match(output, diagnostic);
+    assert.match(output, /Cache saving is disabled on this ref/);
+    assert.match(summary, /\| Build cache \| — \| n\/a \| Unavailable \|/);
+    assert.doesNotMatch(output, /::error::/);
+  });
+}
 
 test('post omits unavailable data quietly and continues cache-save eligibility checks', (context) => {
   const root = fixture(context);

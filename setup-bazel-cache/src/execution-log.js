@@ -47,13 +47,13 @@ async function summarizeExecutionLog(logPath) {
         },
       }),
     );
+    parser.finish();
   } catch (error) {
     // Reporting is optional: preserve complete records already parsed even
     // when reading, decompression, or a later protobuf record fails.
     decoderError = error;
   }
 
-  parser.finish();
   return {
     ...summarizeSpawns(parser.spawns),
     // A failed decoder with no readable records is unavailable, rather than
@@ -223,7 +223,10 @@ class CompactExecutionLogParser {
   }
 
   finish() {
-    if (this.buffer.length > 0) this.partial = true;
+    if (this.buffer.length > 0) {
+      this.partial = true;
+      throw new Error('truncated execution-log protobuf entry at EOF');
+    }
   }
 }
 

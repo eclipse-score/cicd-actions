@@ -155,6 +155,29 @@ test('unreadable execution logs return an unavailable report with the read error
   assert.equal(summary.decoderError.code, 'ENOENT');
 });
 
+test('incomplete protobuf entries at EOF report an error and preserve complete records', async (context) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'setup-bazel-cache-incomplete-entry-'));
+  context.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const log = path.join(directory, 'execution.log.zst');
+  for (const completeRecords of [0, 1]) {
+    // A complete Zstd frame can still contain an unfinished protobuf length
+    // prefix or payload. Neither is a valid empty execution log.
+    for (const suffix of [Buffer.from([0x80]), Buffer.from([0x02, 0x3a])]) {
+      const prefix = completeRecords
+        ? spawnEntry({ runner: 'local', cacheHit: true, cacheable: true })
+        : Buffer.alloc(0);
+      fs.writeFileSync(log, zstdCompressSync(Buffer.concat([prefix, suffix])));
+
+      const summary = await summarizeExecutionLog(log);
+      assert.equal(summary.available, completeRecords > 0);
+      assert.equal(summary.partial, true);
+      assert.equal(summary.hits, completeRecords);
+      assert.equal(summary.observed, completeRecords);
+      assert.match(summary.decoderError.message, /truncated execution-log protobuf entry at EOF/);
+    }
+  }
+});
+
 test('spawn entries use the Bazel compact-log field numbers', () => {
   assert.deepEqual(
     parseExecutionLogEntry(spawnEntry({

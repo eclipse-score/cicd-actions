@@ -127140,10 +127140,10 @@ async function summarizeExecutionLog(logPath) {
         }
       })
     );
+    parser.finish();
   } catch (error2) {
     decoderError = error2;
   }
-  parser.finish();
   return {
     ...summarizeSpawns(parser.spawns),
     // A failed decoder with no readable records is unavailable, rather than
@@ -127289,7 +127289,10 @@ var CompactExecutionLogParser = class {
     }
   }
   finish() {
-    if (this.buffer.length > 0) this.partial = true;
+    if (this.buffer.length > 0) {
+      this.partial = true;
+      throw new Error("truncated execution-log protobuf entry at EOF");
+    }
   }
 };
 
