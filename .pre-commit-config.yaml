@@ -56,23 +56,29 @@ repos:
     hooks:
       - id: copyright
 
+  # These hooks run repository scripts rather than installing a hook package.
+  # Declare npm explicitly as their build tool so pre-commit can provision the
+  # local Node environment, including with pre-commit 4.7 and newer.
   - repo: local
     hooks:
       - id: build-setup-bazel-cache
         name: Test and build setup-bazel-cache distribution files
         language: node
+        additional_dependencies: [npm@11.12.1]
         entry: setup-bazel-cache/build.sh
         files: ^setup-bazel-cache/((src|test)/.*\.js|package(-lock)?\.json|action\.yml|build\.sh|eslint\.config\.js)$
         pass_filenames: false
       - id: build-setup-qnx-sdp
         name: Build setup-qnx-sdp distribution files
         language: node
+        additional_dependencies: [npm@11.12.1]
         entry: setup-qnx-sdp/build.sh
         files: ^(setup-qnx-sdp/src/.*\.js|setup-qnx-sdp/package\.json)$
         pass_filenames: false
       - id: build-verify-cleanup
         name: Build verify-cleanup distribution files
         language: node
+        additional_dependencies: [npm@11.12.1]
         entry: .github/_internal_actions/verify-cleanup/build.sh
         files: ^(\.github/_internal_actions/verify-cleanup/src/.*\.js|\.github/_internal_actions/verify-cleanup/package\.json)$
         pass_filenames: false
