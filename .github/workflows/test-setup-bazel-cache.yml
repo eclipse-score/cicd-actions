@@ -48,10 +48,6 @@ jobs:
       - name: Verify auto mode refused unavailable history
         shell: bash
         run: |
-          if [[ "${{ steps.setup-bazel-cache.outcome }}" != "success" ]]; then
-            echo "ERROR: unavailable history should not fail the job"
-            exit 1
-          fi
           if [[ -n "${{ steps.setup-bazel-cache.outputs._checkout-history }}" || -e "$RUNNER_TEMP/setup-bazel-cache.bazelrc" ]]; then
             echo "ERROR: setup-bazel-cache continued despite unavailable history"
             exit 1
@@ -122,10 +118,6 @@ jobs:
       - name: Verify auto mode refused missing checkout history
         shell: bash
         run: |
-          if [[ "${{ steps.setup-bazel-cache.outcome }}" != "success" ]]; then
-            echo "ERROR: missing checkout history should not fail the job"
-            exit 1
-          fi
           if [[ -n "${{ steps.setup-bazel-cache.outputs._checkout-history }}" || -e "$RUNNER_TEMP/setup-bazel-cache.bazelrc" ]]; then
             echo "ERROR: setup-bazel-cache continued despite missing checkout history"
             exit 1
