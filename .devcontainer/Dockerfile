@@ -13,3 +13,5 @@
 
 # Use Dockerfile to get dependabot version bumps after new image is released
 FROM ghcr.io/eclipse-score/devcontainer:v1.11.3
+
+RUN apt-get update && apt-get install -y --no-install-recommends zstd
