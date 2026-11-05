@@ -54,7 +54,7 @@ import {
   resolveSaveModes,
 } from './inputs.js';
 import { restoreSummaryRows } from './summary.js';
-import { warnIfMissingCheckout } from './workspace.js';
+import { resolveWorkspace, warnIfMissingCheckout } from './workspace.js';
 
 /**
  * Configure Bazel and restore the selected caches before the caller's build.
@@ -69,9 +69,13 @@ async function run() {
       );
     }
 
-    const workspace = process.env.GITHUB_WORKSPACE;
-    if (!workspace) throw new Error('GITHUB_WORKSPACE is not set.');
-    warnIfMissingCheckout(workspace, core.warning);
+    const checkout = process.env.GITHUB_WORKSPACE;
+    if (!checkout) throw new Error('GITHUB_WORKSPACE is not set.');
+    warnIfMissingCheckout(checkout, core.warning);
+    const workspace = resolveWorkspace(checkout, core.getInput('working-directory'));
+    const workspaceDirectory = path.relative(fs.realpathSync(checkout), workspace)
+      .split(path.sep).join('/') || '.';
+    core.info(`Bazel workspace: ${workspaceDirectory}`);
 
     const diskCacheKey = core.getInput('disk-cache-key', { required: true });
     const enableProfiling = profilingEnabled(core.getInput('enable-profiling'));
@@ -107,6 +111,7 @@ async function run() {
     });
 
     const configuration = createConfiguration(workspace, diskCacheKey, {
+      workspaceDirectory,
       enableProfiling,
       reportCacheHits,
       reportTestCacheHits,
@@ -293,6 +298,7 @@ async function run() {
         saves,
         diskCacheKey,
         workspace,
+        workspaceDirectory,
         bazeliskVersion: configuration.caches.bazelisk.keySuffix,
         externalCacheEnabled: Boolean(configuration.external),
         externalManifestRestoreResult: restoreDetails.external.manifest?.result || RESTORE_RESULT.SKIPPED,

@@ -126484,6 +126484,9 @@ function saveCacheV2(paths_1, key_1, options_1) {
   });
 }
 
+// src/cache-keys.js
+var import_node_crypto4 = require("node:crypto");
+
 // src/keys.js
 var CACHE_KEY_NAMESPACE = "setup-bazel-cache";
 function formatCacheComponent(value, label = "cache component") {
@@ -126499,10 +126502,16 @@ function formatCacheKeyPrefix(baseKey, platform2, family, components = []) {
 // src/cache-keys.js
 var CACHE_HASH_LENGTH = 16;
 function cachePrefix(configuration, cacheConfiguration) {
+  let family = cacheConfiguration.name;
+  const directory = configuration.workspaceDirectory || ".";
+  if (directory !== "." && ["disk", "external-manifest"].includes(family)) {
+    const hash = (0, import_node_crypto4.createHash)("sha256").update(directory).digest("hex").slice(0, CACHE_HASH_LENGTH);
+    family = `workspace-${hash}/${family}`;
+  }
   return formatCacheKeyPrefix(
     configuration.baseKey,
     configuration.platform,
-    cacheConfiguration.name,
+    family,
     cacheConfiguration.keyComponents
   );
 }
@@ -126917,6 +126926,7 @@ function externalIdentityFiles(workspace) {
 }
 function createConfiguration(workspace, diskCacheKey, {
   bazeliskVersion,
+  workspaceDirectory = ".",
   enableProfiling = false,
   reportCacheHits = true,
   reportTestCacheHits = true,
@@ -126990,7 +127000,8 @@ function createConfiguration(workspace, diskCacheKey, {
     } : null,
     platform: platform2,
     instrumentation,
-    workspace
+    workspace,
+    workspaceDirectory
   };
 }
 
@@ -127088,7 +127099,7 @@ async function saveExternalCaches(configuration, manifestRestoreResult, reposito
 }
 
 // src/profiling.js
-var import_node_crypto4 = require("node:crypto");
+var import_node_crypto5 = require("node:crypto");
 var PROFILE_ARTIFACT_PREFIX = "bazel-profiles";
 var PROFILE_ARTIFACT_MAX_LENGTH = 200;
 var PROFILE_ARTIFACT_HASH_LENGTH = 10;
@@ -127100,7 +127111,7 @@ function profileArtifactName(diskCacheKey) {
   if (readable === raw && readable.length <= plainLimit) {
     return `${PROFILE_ARTIFACT_PREFIX}-${readable}`;
   }
-  const hash = (0, import_node_crypto4.createHash)("sha256").update(raw).digest("hex").slice(0, PROFILE_ARTIFACT_HASH_LENGTH);
+  const hash = (0, import_node_crypto5.createHash)("sha256").update(raw).digest("hex").slice(0, PROFILE_ARTIFACT_HASH_LENGTH);
   const readableLimit = PROFILE_ARTIFACT_MAX_LENGTH - PROFILE_ARTIFACT_PREFIX.length - 2 - hash.length;
   const prefix3 = (readable || "key").slice(0, readableLimit).replace(/-+$/g, "") || "key";
   return `${PROFILE_ARTIFACT_PREFIX}-${prefix3}-${hash}`;
@@ -128084,6 +128095,7 @@ async function run() {
       saves,
       diskCacheKey,
       workspace,
+      workspaceDirectory = ".",
       bazeliskVersion,
       restoreResults,
       repositoryCacheStartSize = null,
@@ -128097,6 +128109,7 @@ async function run() {
       return;
     }
     const configuration = createConfiguration(workspace, diskCacheKey, {
+      workspaceDirectory,
       bazeliskVersion,
       externalCacheEnabled,
       outputBase

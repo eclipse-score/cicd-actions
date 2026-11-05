@@ -12,6 +12,7 @@
 // *******************************************************************************
 
 import * as glob from '@actions/glob';
+import { createHash } from 'node:crypto';
 import { formatCacheKeyPrefix } from './keys.js';
 
 /** Keep content-addressed keys readable while retaining 64 bits of identity. */
@@ -19,10 +20,23 @@ const CACHE_HASH_LENGTH = 16;
 
 /** Return the stable cache-family prefix used for fallback restores. */
 function cachePrefix(configuration, cacheConfiguration) {
+  // Disk generations and the extracted-repository manifest belong to one
+  // workspace. Downloads and content-addressed repositories remain reusable.
+  // Scope BEFORE the family: a root restore prefix must never match a nested
+  // workspace, including the broad legacy-prefix fallback or cleanup scans.
+  let family = cacheConfiguration.name;
+  const directory = configuration.workspaceDirectory || '.';
+  if (directory !== '.' && ['disk', 'external-manifest'].includes(family)) {
+    // Hash the normalized relative directory, never a runner's absolute path.
+    // A bounded component prevents deep directory paths from consuming the
+    // cache-key length budget. Root keys stay byte-identical.
+    const hash = createHash('sha256').update(directory).digest('hex').slice(0, CACHE_HASH_LENGTH);
+    family = `workspace-${hash}/${family}`;
+  }
   return formatCacheKeyPrefix(
     configuration.baseKey,
     configuration.platform,
-    cacheConfiguration.name,
+    family,
     cacheConfiguration.keyComponents,
   );
 }

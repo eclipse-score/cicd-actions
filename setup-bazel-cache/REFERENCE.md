@@ -17,6 +17,23 @@ Cache-saving inputs are still subject to the branch policy. A `true` save
 setting does not allow pull-request refs or tags to publish caches. Restore and
 save settings are independent.
 
+### Workspace selection
+
+#### `working-directory`
+
+Optional checkout-relative Bazel workspace directory. Defaults to `.`. Selects
+its `.bazelversion`, module lockfile, Bazel output base and extracted repository
+identity. The same selection is saved for cache publishing in the post step.
+The directory must exist inside `GITHUB_WORKSPACE`; absolute paths and symlink
+escapes are rejected. Setup problems follow the action's existing warning and
+cache-skip behavior. This input does not change later run steps' directories.
+
+Disk-cache and external-manifest keys include a stable hash of the canonical
+relative directory for nested workspaces. Their restore fallbacks and cleanup
+stay in that namespace. `.` retains its existing keys. Bazelisk, downloaded
+archives and immutable extracted-repository entries are still shared where
+version/content identity matches. See [cache scopes](./EXPLANATION.md#cache-restore-and-save).
+
 ### Cache identity and save policy
 
 #### `disk-cache-key`

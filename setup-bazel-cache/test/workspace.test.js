@@ -17,6 +17,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import {
+  resolveWorkspace,
   hasCheckoutMetadata,
   PRECHECKOUT_WARNING,
   warnIfMissingCheckout,
@@ -54,4 +55,31 @@ test('missing checkout metadata produces the actionable warning text', (context)
   assert.deepEqual(warnings, [PRECHECKOUT_WARNING]);
   assert.match(warnings[0], /run after actions\/checkout/);
   assert.match(warnings[0], /workspace-dependent Bazel cache setup/);
+});
+
+
+test('nested workspace resolution preserves checkout metadata at the root', (context) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bazel nested workspace-'));
+  context.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const nested = path.join(root, 'examples', 'integration');
+  fs.mkdirSync(nested, { recursive: true });
+  fs.writeFileSync(path.join(root, '.git'), 'gitdir: /tmp/worktree\n');
+  assert.equal(resolveWorkspace(root), root);
+  assert.equal(resolveWorkspace(root, 'examples/integration'), nested);
+  assert.equal(resolveWorkspace(root, './examples/../examples/integration/'), nested);
+  assert.equal(hasCheckoutMetadata(root), true);
+});
+
+test('workspace selection rejects missing directories, files and symlink escapes', (context) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bazel workspace boundary-'));
+  context.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const checkout = path.join(root, 'checkout');
+  const outside = path.join(root, 'outside');
+  fs.mkdirSync(checkout);
+  fs.mkdirSync(outside);
+  fs.symlinkSync(outside, path.join(checkout, 'link'));
+  fs.writeFileSync(path.join(checkout, 'file'), 'not a directory');
+  for (const directory of [outside, '../outside', 'link', 'missing', 'file']) {
+    assert.throws(() => resolveWorkspace(checkout, directory));
+  }
 });

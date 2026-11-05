@@ -87,6 +87,7 @@ async function run() {
       saves,
       diskCacheKey,
       workspace,
+      workspaceDirectory = '.',
       bazeliskVersion,
       restoreResults,
       repositoryCacheStartSize = null,
@@ -101,6 +102,7 @@ async function run() {
     }
 
     const configuration = createConfiguration(workspace, diskCacheKey, {
+      workspaceDirectory,
       bazeliskVersion,
       externalCacheEnabled,
       outputBase,

@@ -116,6 +116,7 @@ function createConfiguration(
   diskCacheKey,
   {
     bazeliskVersion,
+    workspaceDirectory = '.',
     enableProfiling = false,
     reportCacheHits = true,
     reportTestCacheHits = true,
@@ -202,6 +203,7 @@ function createConfiguration(
     platform,
     instrumentation,
     workspace,
+    workspaceDirectory,
   };
 }
 

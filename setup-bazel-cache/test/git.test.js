@@ -12,6 +12,10 @@
 // *******************************************************************************
 
 import assert from 'node:assert/strict';
+import { execFileSync, spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
 import {
   ensureComparisonHistory,
@@ -116,4 +120,39 @@ test('malformed push bases are rejected', () => {
     () => resolveComparisonBase('push', '/event.json', readFile),
     /not a valid Git commit SHA/,
   );
+});
+
+
+test('nested lock-file comparison ignores a change to the root module lock', (context) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bazel nested git-'));
+  context.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const nested = path.join(root, 'nested');
+  fs.mkdirSync(nested);
+  // Git exports repository and index paths while running commit hooks. Strip
+  // those variables so every fixture operation stays inside the temporary repo.
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')),
+  );
+  const git = (...args) => execFileSync('git', [
+    '-C', root, '-c', 'user.name=Test', '-c', 'user.email=test@example.org',
+    '-c', 'commit.gpgsign=false', ...args,
+  ], { stdio: 'pipe', env });
+  const compareGit = (workspace, args) => spawnSync('git', ['-C', workspace, ...args], {
+    encoding: 'utf8', env,
+  });
+  git('init', '-q');
+  fs.writeFileSync(path.join(root, 'MODULE.bazel.lock'), 'root v1');
+  fs.writeFileSync(path.join(nested, 'MODULE.bazel.lock'), 'nested v1');
+  git('add', '.');
+  git('-c', 'commit.gpgsign=false', 'commit', '-qm', 'initial modules');
+  fs.writeFileSync(path.join(root, 'MODULE.bazel.lock'), 'root v2');
+  git('add', '.');
+  git('-c', 'commit.gpgsign=false', 'commit', '-qm', 'root module only');
+  assert.equal(lockFileChanged(root, 'HEAD^', compareGit), true);
+  assert.equal(lockFileChanged(nested, 'HEAD^', compareGit), false);
+  fs.writeFileSync(path.join(nested, 'MODULE.bazel.lock'), 'nested v2');
+  git('add', '.');
+  git('-c', 'commit.gpgsign=false', 'commit', '-qm', 'nested module only');
+  assert.equal(lockFileChanged(root, 'HEAD^', compareGit), false);
+  assert.equal(lockFileChanged(nested, 'HEAD^', compareGit), true);
 });

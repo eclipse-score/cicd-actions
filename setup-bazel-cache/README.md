@@ -30,6 +30,30 @@ of the same reusable workflow.
 
 ## Inputs
 
+### Workspace selection
+
+`working-directory` defaults to `.`. Set it for a nested Bazel workspace such as
+`examples/integration`. The action reads that workspace's `.bazelversion` and
+module lockfile, resolves its Bazel output base and saves the same selection for
+its post step. Absolute paths and symlink escapes are rejected. GitHub's
+`GITHUB_WORKSPACE` remains the checkout root; build/test steps must select the
+same `working-directory` themselves.
+
+Disk-cache and external-manifest generations are separated automatically by the
+normalized relative workspace path. The path is represented by a stable bounded
+hash in their keys; runner-specific absolute paths are never included. Existing
+root-workspace keys stay unchanged. Bazel downloads, downloaded dependency
+archives and content-addressed extracted repositories remain shared.
+
+```yaml
+- uses: eclipse-score/cicd-actions/setup-bazel-cache@main
+  with:
+    disk-cache-key: integration-linux
+    working-directory: examples/integration
+- run: bazel test --config=x86_64-linux //...
+  working-directory: examples/integration
+```
+
 ### Cache identity and publishing
 
 - **`disk-cache-key`**

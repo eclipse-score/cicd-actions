@@ -67875,6 +67875,9 @@ function restoreCacheV2(paths_1, primaryKey_1, restoreKeys_1, options_1) {
   });
 }
 
+// src/cache-keys.js
+var import_node_crypto4 = require("node:crypto");
+
 // src/keys.js
 var CACHE_KEY_NAMESPACE = "setup-bazel-cache";
 function formatCacheComponent(value, label = "cache component") {
@@ -67890,10 +67893,16 @@ function formatCacheKeyPrefix(baseKey, platform2, family, components = []) {
 // src/cache-keys.js
 var CACHE_HASH_LENGTH = 16;
 function cachePrefix(configuration, cacheConfiguration) {
+  let family = cacheConfiguration.name;
+  const directory = configuration.workspaceDirectory || ".";
+  if (directory !== "." && ["disk", "external-manifest"].includes(family)) {
+    const hash = (0, import_node_crypto4.createHash)("sha256").update(directory).digest("hex").slice(0, CACHE_HASH_LENGTH);
+    family = `workspace-${hash}/${family}`;
+  }
   return formatCacheKeyPrefix(
     configuration.baseKey,
     configuration.platform,
-    cacheConfiguration.name,
+    family,
     cacheConfiguration.keyComponents
   );
 }
@@ -68273,6 +68282,7 @@ function installManagedBazelrc(configuration) {
 }
 function createConfiguration(workspace, diskCacheKey, {
   bazeliskVersion,
+  workspaceDirectory = ".",
   enableProfiling = false,
   reportCacheHits = true,
   reportTestCacheHits = true,
@@ -68346,7 +68356,8 @@ function createConfiguration(workspace, diskCacheKey, {
     } : null,
     platform: platform2,
     instrumentation,
-    workspace
+    workspace,
+    workspaceDirectory
   };
 }
 
@@ -68764,6 +68775,22 @@ function restoreSummaryRows(configuration, restoreDetails) {
 // src/workspace.js
 var import_node_fs7 = __toESM(require("node:fs"), 1);
 var import_node_path5 = __toESM(require("node:path"), 1);
+function resolveWorkspace(checkout, directory = ".") {
+  const root = import_node_fs7.default.realpathSync(checkout);
+  const input = directory || ".";
+  if (import_node_path5.default.isAbsolute(input)) {
+    throw new Error("working-directory must be relative to GITHUB_WORKSPACE.");
+  }
+  const workspace = import_node_fs7.default.realpathSync(import_node_path5.default.resolve(root, input));
+  const relative3 = import_node_path5.default.relative(root, workspace);
+  if (relative3 === ".." || relative3.startsWith(`..${import_node_path5.default.sep}`) || import_node_path5.default.isAbsolute(relative3)) {
+    throw new Error("working-directory must stay inside GITHUB_WORKSPACE.");
+  }
+  if (!import_node_fs7.default.statSync(workspace).isDirectory()) {
+    throw new Error("working-directory must name an existing directory.");
+  }
+  return workspace;
+}
 function hasCheckoutMetadata(workspace) {
   return import_node_fs7.default.existsSync(import_node_path5.default.join(workspace, ".git"));
 }
@@ -68782,9 +68809,12 @@ async function run() {
         `setup-bazel-cache supports Linux runners only, not '${process.platform}'.`
       );
     }
-    const workspace = process.env.GITHUB_WORKSPACE;
-    if (!workspace) throw new Error("GITHUB_WORKSPACE is not set.");
-    warnIfMissingCheckout(workspace, warning);
+    const checkout = process.env.GITHUB_WORKSPACE;
+    if (!checkout) throw new Error("GITHUB_WORKSPACE is not set.");
+    warnIfMissingCheckout(checkout, warning);
+    const workspace = resolveWorkspace(checkout, getInput("working-directory"));
+    const workspaceDirectory = import_node_path6.default.relative(import_node_fs8.default.realpathSync(checkout), workspace).split(import_node_path6.default.sep).join("/") || ".";
+    info(`Bazel workspace: ${workspaceDirectory}`);
     const diskCacheKey = getInput("disk-cache-key", { required: true });
     const enableProfiling = profilingEnabled(getInput("enable-profiling"));
     const reportCacheHits = cacheHitReportingEnabled(getInput("report-cache-hits"));
@@ -68813,6 +68843,7 @@ async function run() {
       repositoryCacheGrowthThreshold: getInput("repository-cache-growth-threshold")
     });
     const configuration = createConfiguration(workspace, diskCacheKey, {
+      workspaceDirectory,
       enableProfiling,
       reportCacheHits,
       reportTestCacheHits,
@@ -68973,6 +69004,7 @@ async function run() {
         saves,
         diskCacheKey,
         workspace,
+        workspaceDirectory,
         bazeliskVersion: configuration.caches.bazelisk.keySuffix,
         externalCacheEnabled: Boolean(configuration.external),
         externalManifestRestoreResult: restoreDetails.external.manifest?.result || RESTORE_RESULT.SKIPPED,
