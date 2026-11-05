@@ -122,6 +122,11 @@ function hitState(cacheConfiguration) {
   return `cache-hit-${cacheStateName(cacheConfiguration)}`;
 }
 
+/** An immutable exact hit needs neither another upload nor payload staging. */
+function isExactCacheHit(cacheConfiguration) {
+  return !cacheConfiguration.generational && core.getState(hitState(cacheConfiguration)) === 'true';
+}
+
 /**
  * Restore the exact generation or the newest cache in the same family.
  * Cache outages are warnings because caching must never make a build unusable.
@@ -177,7 +182,7 @@ async function save(configuration, cacheConfiguration, restoreResult) {
     status: 'not attempted',
   };
   try {
-    if (!cacheConfiguration.generational && core.getState(hitState(cacheConfiguration)) === 'true') {
+    if (isExactCacheHit(cacheConfiguration)) {
       core.info(`Not saving exact ${label} cache hit`);
       result.status = 'exact cache hit';
       return result;
@@ -402,6 +407,7 @@ export {
   canSaveAfterFailure,
   deleteCacheByKey,
   hitState,
+  isExactCacheHit,
   listCacheGenerationKeys,
   pendingCleanupKeysState,
   restore,

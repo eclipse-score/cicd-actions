@@ -28,7 +28,7 @@ import {
   saveExternalCaches,
   validateExternalRepositoryName,
 } from '../src/external.js';
-import { RESTORE_RESULT } from '../src/cache.js';
+import { RESTORE_RESULT, hitState } from '../src/cache.js';
 // Exercise the same path versioning and tar implementation used by the cache
 // service, while replacing only the network transfer with a local archive map.
 import { getCacheVersion, resolvePaths } from '../node_modules/@actions/cache/lib/internal/cacheUtils.js';
@@ -205,7 +205,24 @@ test('real cache archives share repository payloads and restore them into the se
   fs.mkdirSync(repository, { recursive: true });
   fs.writeFileSync(path.join(repository, 'compiler'), 'compiler payload', { mode: 0o755 });
   fs.symlinkSync('compiler', path.join(repository, 'compiler-link'));
+  fs.mkdirSync(path.join(repository, 'tools'));
+  fs.symlinkSync('../compiler', path.join(repository, 'tools', 'compiler-link'));
   fs.writeFileSync(path.join(producer.external.root, '@rules_cc.marker'), 'Bazel marker');
+  // These repositories would retain producer paths after relocation. Keep them
+  // out of both the shared payload archives and the consumer manifests.
+  for (const name of ['absolute_link', 'escaping_link', 'indirect_link', 'dangling_link']) {
+    const unsafe = path.join(producer.external.root, name);
+    fs.mkdirSync(unsafe);
+    fs.writeFileSync(path.join(unsafe, 'payload'), 'must not be archived');
+    const targets = {
+      absolute_link: path.join(repository, 'compiler'),
+      escaping_link: '../rules_cc/compiler',
+      indirect_link: 'alias/../rules_cc/compiler',
+      dangling_link: 'missing-file',
+    };
+    if (name === 'indirect_link') fs.symlinkSync('.', path.join(unsafe, 'alias'));
+    fs.symlinkSync(targets[name], path.join(unsafe, 'compiler-link'));
+  }
   fs.mkdirSync(consumer.external.root, { recursive: true });
   fs.cpSync(producer.external.root, consumer.external.root, { recursive: true, verbatimSymlinks: true });
 
@@ -239,6 +256,7 @@ test('real cache archives share repository payloads and restore them into the se
   for (const configuration of [producer, consumer]) {
     await saveExternalCaches(configuration, RESTORE_RESULT.FALSE, {}, async () => {}, saveArchive);
     assert.deepEqual(fs.readdirSync(configuration.external.stagingRoot), []);
+    assert.deepEqual(readExternalManifest(configuration.external.manifest.path), ['rules_cc']);
   }
   assert.equal(repositoryUploads, 1);
   fs.rmSync(producer.external.root, { recursive: true });
@@ -256,6 +274,7 @@ test('real cache archives share repository payloads and restore them into the se
     assert.equal(restored.result, RESTORE_RESULT.TRUE);
     assert.equal(fs.readFileSync(path.join(consumer.external.root, 'rules_cc', 'compiler'), 'utf8'), 'compiler payload');
     assert.equal(fs.readlinkSync(path.join(consumer.external.root, 'rules_cc', 'compiler-link')), 'compiler');
+    assert.equal(fs.readlinkSync(path.join(consumer.external.root, 'rules_cc', 'tools', 'compiler-link')), '../compiler');
     assert.equal(fs.statSync(path.join(consumer.external.root, 'rules_cc', 'compiler')).mode & 0o777, 0o755);
     assert.equal(fs.readFileSync(path.join(consumer.external.root, '@rules_cc.marker'), 'utf8'), 'Bazel marker');
     assert.equal(fs.existsSync(producer.external.root), false);
@@ -271,7 +290,7 @@ test('failed or missing archive transfers preserve existing output and clean sta
   fs.mkdirSync(repository, { recursive: true });
   fs.writeFileSync(path.join(repository, 'existing'), 'keep this build output');
 
-  for (const outcome of ['miss', 'error', 'incomplete']) {
+  for (const outcome of ['miss', 'error', 'incomplete', 'nonportable']) {
     const detail = await restoreExternalCaches(configuration, async (_configuration, cache) => {
       if (cache.name === 'external-manifest') {
         fs.writeFileSync(cache.path, 'rules_cc\n');
@@ -280,6 +299,11 @@ test('failed or missing archive transfers preserve existing output and clean sta
       // A partial download must never be installed after a miss or exception.
       fs.writeFileSync(cache.paths[0], 'partial marker');
       if (outcome === 'error') throw new Error('simulated interrupted transfer');
+      if (outcome === 'nonportable') {
+        fs.mkdirSync(cache.paths[1]);
+        fs.symlinkSync(path.join(configuration.external.root, 'rules_cc', 'existing'),
+          path.join(cache.paths[1], 'producer-link'));
+      }
       return { result: outcome === 'miss' ? RESTORE_RESULT.FALSE : RESTORE_RESULT.TRUE, sizeBefore: 0, sizeAfter: 1 };
     });
     assert.equal(detail.result, outcome === 'miss' ? RESTORE_RESULT.FALSE : RESTORE_RESULT.UNKNOWN);
@@ -292,4 +316,73 @@ test('failed or missing archive transfers preserve existing output and clean sta
   }), /simulated upload failure/);
   assert.equal(fs.readFileSync(path.join(repository, 'existing'), 'utf8'), 'keep this build output');
   assert.deepEqual(fs.readdirSync(configuration.external.stagingRoot), []);
+});
+
+
+test('copy failure cannot leave a partial repository with the previous valid marker', async (context) => {
+  const { configurationFor } = archiveFixture(context);
+  const configuration = configurationFor('nested');
+  const repository = path.join(configuration.external.root, 'rules_cc');
+  const marker = path.join(configuration.external.root, '@rules_cc.marker');
+  fs.mkdirSync(repository, { recursive: true });
+  fs.writeFileSync(path.join(repository, 'old'), 'old payload');
+  fs.writeFileSync(marker, 'old valid marker');
+  context.mock.method(fs, 'renameSync', () => {
+    throw Object.assign(new Error('cross-device move'), { code: 'EXDEV' });
+  });
+  let markerPresentAtCopy;
+  context.mock.method(fs, 'cpSync', (_source, destination) => {
+    // Model a disk filling up after some of the replacement has been written.
+    // Marker invalidation must happen before even the first copied file.
+    markerPresentAtCopy = fs.existsSync(marker);
+    fs.mkdirSync(destination, { recursive: true });
+    fs.writeFileSync(path.join(destination, 'partial'), 'incomplete payload');
+    throw Object.assign(new Error('no space left on device'), { code: 'ENOSPC' });
+  });
+  const result = await restoreExternalCaches(configuration, async (_configuration, cache) => {
+    if (cache.name === 'external-manifest') fs.writeFileSync(cache.path, 'rules_cc\n');
+    else {
+      fs.mkdirSync(cache.paths[1]);
+      fs.writeFileSync(path.join(cache.paths[1], 'new'), 'new complete payload');
+      fs.writeFileSync(cache.paths[0], 'new valid marker');
+    }
+    return { result: RESTORE_RESULT.TRUE, sizeBefore: 0, sizeAfter: 1 };
+  });
+  assert.equal(result.result, RESTORE_RESULT.UNKNOWN);
+  assert.equal(markerPresentAtCopy, false);
+  assert.equal(fs.existsSync(marker), false);
+  assert.equal(fs.existsSync(path.join(repository, 'partial')), true);
+  assert.deepEqual(fs.readdirSync(configuration.external.stagingRoot), []);
+});
+
+test('exact repository hits skip staging but retain manifest membership and save summaries', async (context) => {
+  const { configurationFor } = archiveFixture(context);
+  const configuration = configurationFor('nested');
+  const repository = path.join(configuration.external.root, 'rules_cc');
+  fs.mkdirSync(repository, { recursive: true });
+  fs.writeFileSync(path.join(repository, 'payload'), 'already cached');
+  const stateVariable = `STATE_${hitState(externalRepositoryCache(configuration, 'rules_cc'))}`;
+  const previous = process.env[stateVariable];
+  process.env[stateVariable] = 'true';
+  context.after(() => {
+    if (previous === undefined) delete process.env[stateVariable];
+    else process.env[stateVariable] = previous;
+  });
+  context.mock.method(fs, 'cpSync', () => { throw new Error('exact hits must not copy'); });
+
+  let manifestSaves = 0;
+  const results = await saveExternalCaches(configuration, RESTORE_RESULT.FALSE,
+    { rules_cc: RESTORE_RESULT.TRUE }, async () => {}, async (_configuration, cache) => {
+      assert.equal(cache.name, 'external-manifest');
+      assert.deepEqual(readExternalManifest(cache.path), ['rules_cc']);
+      manifestSaves += 1;
+      return { uploaded: true };
+    });
+  assert.equal(manifestSaves, 1);
+  assert.equal(results.length, 2);
+  assert.equal(results[0].status, 'exact cache hit');
+  assert.equal(results[0].uploaded, false);
+  assert.equal(results[0].sizeBefore, Buffer.byteLength('already cached'));
+  assert.equal(results[0].sizeAfter, results[0].sizeBefore);
+  assert.equal(fs.existsSync(configuration.external.stagingRoot), false);
 });

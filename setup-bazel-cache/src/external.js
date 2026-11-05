@@ -15,7 +15,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import * as core from '@actions/core';
-import { RESTORE_RESULT, restore, save } from './cache.js';
+import { RESTORE_RESULT, restore, save, isExactCacheHit, skippedSaveSummary } from './cache.js';
 import { cacheLabel } from './cache-keys.js';
 import { localPathSize } from './cache-size.js';
 import { formatCacheComponent } from './keys.js';
@@ -118,6 +118,42 @@ function stageExternalRepository(root, directory, name) {
   }
 }
 
+/**
+ * Shared archives must not retain paths into the producer's output tree or
+ * workspace. Accept relative symlinks contained in this repository; exclude
+ * absolute links, dangling links and relative links escaping it. Walk directory
+ * entries without traversing symlinks; resolve each link target separately to
+ * catch escapes through intermediate directory symlinks as well.
+ */
+function findNonportableLink(repository) {
+  const canonicalRoot = fs.realpathSync(repository);
+  const pending = [repository];
+  while (pending.length > 0) {
+    const directory = pending.pop();
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const file = path.join(directory, entry.name);
+      if (entry.isDirectory()) pending.push(file);
+      if (!entry.isSymbolicLink()) continue;
+      const target = fs.readlinkSync(file);
+      if (path.isAbsolute(target)) return path.relative(repository, file);
+      let resolved;
+      try {
+        // Preserve '..' until native path resolution: normalizing it first can
+        // hide an escape through a preceding directory symlink.
+        resolved = fs.realpathSync.native(`${directory}${path.sep}${target}`);
+      } catch (error) {
+        if (!['ENOENT', 'ELOOP', 'ENOTDIR'].includes(error.code)) throw error;
+        return path.relative(repository, file);
+      }
+      const relative = path.relative(canonicalRoot, resolved);
+      if (relative === '..' || relative.startsWith(`..${path.sep}`)) {
+        return path.relative(repository, file);
+      }
+    }
+  }
+  return null;
+}
+
 /** Install a successfully restored payload into the selected Bazel output base. */
 function installExternalRepository(directory, root, name) {
   // Validate before replacing anything: a missing or partial archive must not
@@ -125,22 +161,36 @@ function installExternalRepository(directory, root, name) {
   if (!fs.lstatSync(path.join(directory, name)).isDirectory()) {
     throw new Error(`Restored external repository '${name}' is not a directory.`);
   }
+  const nonportable = findNonportableLink(path.join(directory, name));
+  if (nonportable !== null) {
+    throw new Error(`Restored external repository '${name}' has a nonportable symlink '${nonportable}'.`);
+  }
   fs.mkdirSync(root, { recursive: true });
-  for (const entry of [name, `@${name}.marker`]) {
-    const source = path.join(directory, entry);
-    const destination = path.join(root, entry);
-    fs.rmSync(destination, { recursive: true, force: true });
-    if (!fs.existsSync(source)) continue;
-    try {
-      fs.renameSync(source, destination);
-    } catch (error) {
-      // Runner temp and Bazel's output base can live on different filesystems.
-      // Retain symlink text and permissions when a rename is unavailable.
-      if (error.code !== 'EXDEV') throw error;
-      fs.cpSync(source, destination, {
-        recursive: true, preserveTimestamps: true, verbatimSymlinks: true,
-      });
+  // Invalidate BEFORE touching the repository. If a cross-filesystem copy runs
+  // out of space, Bazel must not trust partial files under an old valid marker.
+  // Publish the restored marker only after the whole directory is installed.
+  const marker = path.join(root, `@${name}.marker`);
+  fs.rmSync(marker, { force: true });
+  try {
+    for (const entry of [name, `@${name}.marker`]) {
+      const source = path.join(directory, entry);
+      const destination = path.join(root, entry);
+      fs.rmSync(destination, { recursive: true, force: true });
+      if (!fs.existsSync(source)) continue;
+      try {
+        fs.renameSync(source, destination);
+      } catch (error) {
+        // Runner temp and Bazel's output base can live on different filesystems.
+        // Retain symlink text and permissions when a rename is unavailable.
+        if (error.code !== 'EXDEV') throw error;
+        fs.cpSync(source, destination, {
+          recursive: true, preserveTimestamps: true, verbatimSymlinks: true,
+        });
+      }
     }
+  } catch (error) {
+    fs.rmSync(marker, { force: true });
+    throw error;
   }
 }
 
@@ -299,6 +349,24 @@ async function saveExternalCaches(
         `Skipping ${name} external cache because its extracted payload is ` +
         `${size} bytes, below the ${configuration.external.minSize}-byte threshold`,
       );
+      continue;
+    }
+
+    const cacheConfiguration = externalRepositoryCache(configuration, name);
+    if (isExactCacheHit(cacheConfiguration)) {
+      // The immutable payload already exists. Report its live size without
+      // copying hundreds of MiB just to discover that no upload is needed.
+      eligibleNames.push(name);
+      results.push(skippedSaveSummary(configuration, {
+        ...cacheConfiguration,
+        paths: [path.join(root, `@${name}.marker`), repositoryPath],
+      }, 'exact cache hit'));
+      continue;
+    }
+
+    const nonportable = findNonportableLink(repositoryPath);
+    if (nonportable !== null) {
+      core.info(`Skipping ${name} external cache because symlink '${nonportable}' is not portable between output directories`);
       continue;
     }
 

@@ -68345,7 +68345,9 @@ function createConfiguration(workspace, diskCacheKey, {
       identityFiles: externalIdentityFiles(workspace),
       // Cache versions include archive paths. Keep those paths independent
       // of Bazel's workspace-specific output base so payloads can be shared.
-      stagingRoot: import_node_path3.default.join(runnerTemp, "setup-bazel-cache-external"),
+      // Version the archive layout so older, potentially nonportable
+      // payloads cannot be mistaken for validated portable repositories.
+      stagingRoot: import_node_path3.default.join(runnerTemp, "setup-bazel-cache-external-portable-v1"),
       manifest: {
         files: [],
         generational: true,
@@ -68429,26 +68431,63 @@ async function withExternalStaging(configuration, name, operation) {
     import_node_fs5.default.rmSync(directory, { recursive: true, force: true });
   }
 }
+function findNonportableLink(repository) {
+  const canonicalRoot = import_node_fs5.default.realpathSync(repository);
+  const pending = [repository];
+  while (pending.length > 0) {
+    const directory = pending.pop();
+    for (const entry of import_node_fs5.default.readdirSync(directory, { withFileTypes: true })) {
+      const file = import_node_path4.default.join(directory, entry.name);
+      if (entry.isDirectory()) pending.push(file);
+      if (!entry.isSymbolicLink()) continue;
+      const target = import_node_fs5.default.readlinkSync(file);
+      if (import_node_path4.default.isAbsolute(target)) return import_node_path4.default.relative(repository, file);
+      let resolved;
+      try {
+        resolved = import_node_fs5.default.realpathSync.native(`${directory}${import_node_path4.default.sep}${target}`);
+      } catch (error2) {
+        if (!["ENOENT", "ELOOP", "ENOTDIR"].includes(error2.code)) throw error2;
+        return import_node_path4.default.relative(repository, file);
+      }
+      const relative3 = import_node_path4.default.relative(canonicalRoot, resolved);
+      if (relative3 === ".." || relative3.startsWith(`..${import_node_path4.default.sep}`)) {
+        return import_node_path4.default.relative(repository, file);
+      }
+    }
+  }
+  return null;
+}
 function installExternalRepository(directory, root, name) {
   if (!import_node_fs5.default.lstatSync(import_node_path4.default.join(directory, name)).isDirectory()) {
     throw new Error(`Restored external repository '${name}' is not a directory.`);
   }
+  const nonportable = findNonportableLink(import_node_path4.default.join(directory, name));
+  if (nonportable !== null) {
+    throw new Error(`Restored external repository '${name}' has a nonportable symlink '${nonportable}'.`);
+  }
   import_node_fs5.default.mkdirSync(root, { recursive: true });
-  for (const entry of [name, `@${name}.marker`]) {
-    const source = import_node_path4.default.join(directory, entry);
-    const destination = import_node_path4.default.join(root, entry);
-    import_node_fs5.default.rmSync(destination, { recursive: true, force: true });
-    if (!import_node_fs5.default.existsSync(source)) continue;
-    try {
-      import_node_fs5.default.renameSync(source, destination);
-    } catch (error2) {
-      if (error2.code !== "EXDEV") throw error2;
-      import_node_fs5.default.cpSync(source, destination, {
-        recursive: true,
-        preserveTimestamps: true,
-        verbatimSymlinks: true
-      });
+  const marker2 = import_node_path4.default.join(root, `@${name}.marker`);
+  import_node_fs5.default.rmSync(marker2, { force: true });
+  try {
+    for (const entry of [name, `@${name}.marker`]) {
+      const source = import_node_path4.default.join(directory, entry);
+      const destination = import_node_path4.default.join(root, entry);
+      import_node_fs5.default.rmSync(destination, { recursive: true, force: true });
+      if (!import_node_fs5.default.existsSync(source)) continue;
+      try {
+        import_node_fs5.default.renameSync(source, destination);
+      } catch (error2) {
+        if (error2.code !== "EXDEV") throw error2;
+        import_node_fs5.default.cpSync(source, destination, {
+          recursive: true,
+          preserveTimestamps: true,
+          verbatimSymlinks: true
+        });
+      }
     }
+  } catch (error2) {
+    import_node_fs5.default.rmSync(marker2, { force: true });
+    throw error2;
   }
 }
 function validateExternalRepositoryName(name) {

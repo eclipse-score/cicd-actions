@@ -121,7 +121,7 @@ restoring and saving downloaded Bazel versions used by Bazelisk.
 Both default to `true` and accept `true` or `false`. They independently
 control caching of large extracted repositories below Bazel's
 `output_base/external`. Saving occurs only after a successful job and only real
-directories of at least 500 MiB are eligible. See
+directories of at least 500 MiB with portable symlinks are eligible. See
 [extracted external repositories](./EXPLANATION.md#extracted-external-repositories).
 
 ### Reports and profiling

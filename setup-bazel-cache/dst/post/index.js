@@ -126673,6 +126673,9 @@ function skippedSaveSummary(configuration, cacheConfiguration, status) {
 function hitState(cacheConfiguration) {
   return `cache-hit-${cacheStateName(cacheConfiguration)}`;
 }
+function isExactCacheHit(cacheConfiguration) {
+  return !cacheConfiguration.generational && getState(hitState(cacheConfiguration)) === "true";
+}
 async function save(configuration, cacheConfiguration, restoreResult) {
   const label = cacheLabel(configuration, cacheConfiguration);
   startGroup(`Save ${label} cache`);
@@ -126684,7 +126687,7 @@ async function save(configuration, cacheConfiguration, restoreResult) {
     status: "not attempted"
   };
   try {
-    if (!cacheConfiguration.generational && getState(hitState(cacheConfiguration)) === "true") {
+    if (isExactCacheHit(cacheConfiguration)) {
       info(`Not saving exact ${label} cache hit`);
       result.status = "exact cache hit";
       return result;
@@ -126989,7 +126992,9 @@ function createConfiguration(workspace, diskCacheKey, {
       identityFiles: externalIdentityFiles(workspace),
       // Cache versions include archive paths. Keep those paths independent
       // of Bazel's workspace-specific output base so payloads can be shared.
-      stagingRoot: import_node_path3.default.join(runnerTemp, "setup-bazel-cache-external"),
+      // Version the archive layout so older, potentially nonportable
+      // payloads cannot be mistaken for validated portable repositories.
+      stagingRoot: import_node_path3.default.join(runnerTemp, "setup-bazel-cache-external-portable-v1"),
       manifest: {
         files: [],
         generational: true,
@@ -127056,6 +127061,32 @@ function stageExternalRepository(root, directory, name) {
     });
   }
 }
+function findNonportableLink(repository) {
+  const canonicalRoot = import_node_fs6.default.realpathSync(repository);
+  const pending = [repository];
+  while (pending.length > 0) {
+    const directory = pending.pop();
+    for (const entry of import_node_fs6.default.readdirSync(directory, { withFileTypes: true })) {
+      const file = import_node_path4.default.join(directory, entry.name);
+      if (entry.isDirectory()) pending.push(file);
+      if (!entry.isSymbolicLink()) continue;
+      const target = import_node_fs6.default.readlinkSync(file);
+      if (import_node_path4.default.isAbsolute(target)) return import_node_path4.default.relative(repository, file);
+      let resolved;
+      try {
+        resolved = import_node_fs6.default.realpathSync.native(`${directory}${import_node_path4.default.sep}${target}`);
+      } catch (error2) {
+        if (!["ENOENT", "ELOOP", "ENOTDIR"].includes(error2.code)) throw error2;
+        return import_node_path4.default.relative(repository, file);
+      }
+      const relative3 = import_node_path4.default.relative(canonicalRoot, resolved);
+      if (relative3 === ".." || relative3.startsWith(`..${import_node_path4.default.sep}`)) {
+        return import_node_path4.default.relative(repository, file);
+      }
+    }
+  }
+  return null;
+}
 function validateExternalRepositoryName(name) {
   if (typeof name !== "string" || !name || name.length > MAX_EXTERNAL_REPOSITORY_NAME_LENGTH || name === "." || name === ".." || !EXTERNAL_REPOSITORY_NAME.test(name) || [...name].some((character) => {
     const codePoint = character.codePointAt(0);
@@ -127097,12 +127128,26 @@ async function saveExternalCaches(configuration, manifestRestoreResult, reposito
       );
       continue;
     }
+    const cacheConfiguration = externalRepositoryCache(configuration, name);
+    if (isExactCacheHit(cacheConfiguration)) {
+      eligibleNames.push(name);
+      results.push(skippedSaveSummary(configuration, {
+        ...cacheConfiguration,
+        paths: [import_node_path4.default.join(root, `@${name}.marker`), repositoryPath]
+      }, "exact cache hit"));
+      continue;
+    }
+    const nonportable = findNonportableLink(repositoryPath);
+    if (nonportable !== null) {
+      info(`Skipping ${name} external cache because symlink '${nonportable}' is not portable between output directories`);
+      continue;
+    }
     eligibleNames.push(name);
-    const result = await withExternalStaging(configuration, name, async (cacheConfiguration, directory) => {
+    const result = await withExternalStaging(configuration, name, async (cacheConfiguration2, directory) => {
       stageExternalRepository(root, directory, name);
       return saveCache3(
         configuration,
-        cacheConfiguration,
+        cacheConfiguration2,
         repositoryRestoreResults[name] || RESTORE_RESULT.FALSE
       );
     });
