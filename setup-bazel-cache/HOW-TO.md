@@ -7,18 +7,12 @@ see the [reference](./REFERENCE.md); for cache behavior, see the
 
 ## Build a nested module in its own job
 
-Use this recipe if you want a separate job for a nested Bazel module, such as
-`examples/integration`. Splitting your builds is optional: you can also run setup
-once in the root job and build both modules there.
+If a job builds a nested Bazel module, set `working-directory` to that module's
+directory on both cache setup and the Bazel run step. Start with a disk-cache key
+that is unique to this job and stays the same between runs.
 
-In the nested job, set `working-directory` on both cache setup and the Bazel run
-step. Setup then uses the nested module's Bazel version and lockfile and caches
-its large extracted dependencies. See
-[what this improves](./EXPLANATION.md#caching-root-and-nested-modules) before
-changing your job layout just for caching.
-
-As with the basic setup, make Bazel or Bazelisk available on `PATH` before
-running the action. Then use these steps:
+For a module in `examples/integration`, use the following job. As with the basic
+setup, Bazel or Bazelisk must be available on `PATH` before the action runs.
 
 ```yaml
 jobs:
@@ -36,21 +30,21 @@ jobs:
         working-directory: examples/integration
 ```
 
-The action input selects which module to prepare caches for; the run step's
-setting selects where Bazel runs. Use one setup call per job; multiple calls in
-the same job are not currently supported.
+To adapt this example:
 
-Choose `disk-cache-key` to match how you want the jobs to share build results:
+1. Replace `examples/integration` in both places with your module's directory.
+2. Replace `integration-linux` with a stable name for this job's disk cache.
+3. Replace `bazel test //...` with your build or test command.
 
-- Keep a distinct key such as `integration-linux` for an independent disk cache.
-  This lets parallel jobs save and clean up their own caches independently.
-- Use the same key as the root job to share a disk cache. Matching build results
-  can be reused, but the larger archive may take longer to transfer.
+Run setup once per job. If your job builds several modules, select the main
+module for setup, then set each build step's directory as needed. Leave setup's
+`working-directory` at its default `.` when selecting the root module. You do
+not need a separate job for each module.
 
-A later job can reuse a cache saved by an earlier job. Parallel jobs do not
-automatically combine their new cache entries. Downloads can still be shared
-when disk keys differ. Cache saving remains subject to the branch policy and
-save settings; a separate job does not change those rules.
+To deliberately share build results with another job, use the same
+`disk-cache-key` in both jobs. Otherwise keep separate keys; dependency downloads
+can still be shared. For the benefits and tradeoffs, see
+[caching root and nested modules](./EXPLANATION.md#caching-root-and-nested-modules).
 
 ## Use the action in a build matrix
 
