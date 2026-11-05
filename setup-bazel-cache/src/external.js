@@ -69,7 +69,7 @@ function configureExternalCache(configuration, outputBase) {
 /** Build the cache payload for one extracted external repository. */
 function externalRepositoryCache(configuration, name) {
   validateExternalRepositoryName(name);
-  const root = configuration.external.root;
+  const root = path.join(configuration.external.stagingRoot, name);
   const repositoryPath = path.join(root, name);
   const markerPath = path.join(root, `@${name}.marker`);
   return {
@@ -79,6 +79,69 @@ function externalRepositoryCache(configuration, name) {
     name: 'external',
     paths: [markerPath, repositoryPath],
   };
+}
+
+/**
+ * Cache archives are staged at fixed runner-temp paths: GitHub hashes the paths
+ * passed to its cache API as well as the content key. Archiving output_base
+ * directly would make otherwise identical repositories workspace-specific.
+ * Process one repository at a time and always remove its temporary payload.
+ */
+async function withExternalStaging(configuration, name, operation) {
+  const cacheConfiguration = externalRepositoryCache(configuration, name);
+  const directory = path.dirname(cacheConfiguration.paths[0]);
+  fs.rmSync(directory, { recursive: true, force: true });
+  fs.mkdirSync(directory, { recursive: true });
+  try {
+    return await operation(cacheConfiguration, directory);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Copy the repository and its optional Bazel marker without changing the live
+ * output tree. Reflinks avoid copying large file contents where supported;
+ * other filesystems fall back to copying. Preserve relative symlinks verbatim
+ * so moving through the archive directory does not rewrite repository contents.
+ */
+function stageExternalRepository(root, directory, name) {
+  for (const entry of [name, `@${name}.marker`]) {
+    const source = path.join(root, entry);
+    if (!fs.existsSync(source)) continue;
+    fs.cpSync(source, path.join(directory, entry), {
+      recursive: true,
+      preserveTimestamps: true,
+      verbatimSymlinks: true,
+      mode: fs.constants.COPYFILE_FICLONE,
+    });
+  }
+}
+
+/** Install a successfully restored payload into the selected Bazel output base. */
+function installExternalRepository(directory, root, name) {
+  // Validate before replacing anything: a missing or partial archive must not
+  // discard an existing repository from a persistent runner's output tree.
+  if (!fs.lstatSync(path.join(directory, name)).isDirectory()) {
+    throw new Error(`Restored external repository '${name}' is not a directory.`);
+  }
+  fs.mkdirSync(root, { recursive: true });
+  for (const entry of [name, `@${name}.marker`]) {
+    const source = path.join(directory, entry);
+    const destination = path.join(root, entry);
+    fs.rmSync(destination, { recursive: true, force: true });
+    if (!fs.existsSync(source)) continue;
+    try {
+      fs.renameSync(source, destination);
+    } catch (error) {
+      // Runner temp and Bazel's output base can live on different filesystems.
+      // Retain symlink text and permissions when a rename is unavailable.
+      if (error.code !== 'EXDEV') throw error;
+      fs.cpSync(source, destination, {
+        recursive: true, preserveTimestamps: true, verbatimSymlinks: true,
+      });
+    }
+  }
 }
 
 /** Reject manifest names that could escape the Bazel external directory. */
@@ -167,9 +230,9 @@ function aggregateSize(manifestSize, repositoryDetails, field) {
 }
 
 /** Restore the manifest and then the extracted repositories named by it. */
-async function restoreExternalCaches(configuration) {
+async function restoreExternalCaches(configuration, restoreCache = restore) {
   const manifest = configuration.caches.externalManifest;
-  const manifestDetail = await restore(configuration, manifest);
+  const manifestDetail = await restoreCache(configuration, manifest);
   const repositoryDetails = {};
 
   if (manifestDetail.result === RESTORE_RESULT.TRUE || manifestDetail.result === RESTORE_RESULT.PARTIAL) {
@@ -188,8 +251,18 @@ async function restoreExternalCaches(configuration) {
     }
 
     for (const name of names) {
-      const cacheConfiguration = externalRepositoryCache(configuration, name);
-      repositoryDetails[name] = await restore(configuration, cacheConfiguration);
+      try {
+        repositoryDetails[name] = await withExternalStaging(configuration, name, async (cacheConfiguration, directory) => {
+          const detail = await restoreCache(configuration, cacheConfiguration);
+          if (detail.result === RESTORE_RESULT.TRUE || detail.result === RESTORE_RESULT.PARTIAL) {
+            installExternalRepository(directory, configuration.external.root, name);
+          }
+          return detail;
+        });
+      } catch (error) {
+        core.warning(`Could not install external cache '${name}': ${error.message}`);
+        repositoryDetails[name] = { result: RESTORE_RESULT.UNKNOWN, sizeBefore: null, sizeAfter: null };
+      }
     }
   }
 
@@ -211,6 +284,7 @@ async function saveExternalCaches(
   manifestRestoreResult,
   repositoryRestoreResults,
   cleanupPreviousGeneration,
+  saveCache = save,
 ) {
   const root = configuration.external.root;
   const names = discoverExternalRepositories(root);
@@ -229,12 +303,14 @@ async function saveExternalCaches(
     }
 
     eligibleNames.push(name);
-    const cacheConfiguration = externalRepositoryCache(configuration, name);
-    const result = await save(
-      configuration,
-      cacheConfiguration,
-      repositoryRestoreResults[name] || RESTORE_RESULT.FALSE,
-    );
+    const result = await withExternalStaging(configuration, name, async (cacheConfiguration, directory) => {
+      stageExternalRepository(root, directory, name);
+      return saveCache(
+        configuration,
+        cacheConfiguration,
+        repositoryRestoreResults[name] || RESTORE_RESULT.FALSE,
+      );
+    });
     results.push(result);
   }
 
@@ -244,7 +320,7 @@ async function saveExternalCaches(
     configuration.external.manifest.path,
     `${eligibleNames.join('\n')}\n`,
   );
-  const manifestResult = await save(
+  const manifestResult = await saveCache(
     configuration,
     configuration.caches.externalManifest,
     manifestRestoreResult,

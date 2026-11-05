@@ -152,6 +152,13 @@ while per-repository entries are immutable. Changed dependency definitions
 create new entries; the action does not delete old per-repository entries.
 External caches are saved only after a successful job.
 
+Payload archives use a temporary location independent of the selected Bazel
+output directory. This lets root and nested modules reuse the same archive when
+their dependency identities match. After restore, the payload is moved into the
+selected module's output directory. Saving stages one repository at a time;
+where file cloning is unavailable, this requires an extra temporary copy of
+that repository. The temporary payload is removed after each transfer.
+
 ### Cache cleanup
 
 After a successful upload, the action tries to delete the cache generation it

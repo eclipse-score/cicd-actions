@@ -68343,6 +68343,9 @@ function createConfiguration(workspace, diskCacheKey, {
     baseKey,
     external: externalCacheEnabled ? {
       identityFiles: externalIdentityFiles(workspace),
+      // Cache versions include archive paths. Keep those paths independent
+      // of Bazel's workspace-specific output base so payloads can be shared.
+      stagingRoot: import_node_path3.default.join(runnerTemp, "setup-bazel-cache-external"),
       manifest: {
         files: [],
         generational: true,
@@ -68404,7 +68407,7 @@ function configureExternalCache(configuration, outputBase) {
 }
 function externalRepositoryCache(configuration, name) {
   validateExternalRepositoryName(name);
-  const root = configuration.external.root;
+  const root = import_node_path4.default.join(configuration.external.stagingRoot, name);
   const repositoryPath = import_node_path4.default.join(root, name);
   const markerPath = import_node_path4.default.join(root, `@${name}.marker`);
   return {
@@ -68414,6 +68417,39 @@ function externalRepositoryCache(configuration, name) {
     name: "external",
     paths: [markerPath, repositoryPath]
   };
+}
+async function withExternalStaging(configuration, name, operation) {
+  const cacheConfiguration = externalRepositoryCache(configuration, name);
+  const directory = import_node_path4.default.dirname(cacheConfiguration.paths[0]);
+  import_node_fs5.default.rmSync(directory, { recursive: true, force: true });
+  import_node_fs5.default.mkdirSync(directory, { recursive: true });
+  try {
+    return await operation(cacheConfiguration, directory);
+  } finally {
+    import_node_fs5.default.rmSync(directory, { recursive: true, force: true });
+  }
+}
+function installExternalRepository(directory, root, name) {
+  if (!import_node_fs5.default.lstatSync(import_node_path4.default.join(directory, name)).isDirectory()) {
+    throw new Error(`Restored external repository '${name}' is not a directory.`);
+  }
+  import_node_fs5.default.mkdirSync(root, { recursive: true });
+  for (const entry of [name, `@${name}.marker`]) {
+    const source = import_node_path4.default.join(directory, entry);
+    const destination = import_node_path4.default.join(root, entry);
+    import_node_fs5.default.rmSync(destination, { recursive: true, force: true });
+    if (!import_node_fs5.default.existsSync(source)) continue;
+    try {
+      import_node_fs5.default.renameSync(source, destination);
+    } catch (error2) {
+      if (error2.code !== "EXDEV") throw error2;
+      import_node_fs5.default.cpSync(source, destination, {
+        recursive: true,
+        preserveTimestamps: true,
+        verbatimSymlinks: true
+      });
+    }
+  }
 }
 function validateExternalRepositoryName(name) {
   if (typeof name !== "string" || !name || name.length > MAX_EXTERNAL_REPOSITORY_NAME_LENGTH || name === "." || name === ".." || !EXTERNAL_REPOSITORY_NAME.test(name) || [...name].some((character) => {
@@ -68453,9 +68489,9 @@ function aggregateSize(manifestSize, repositoryDetails, field) {
   ];
   return sizes.some((size) => size === null) ? null : sizes.reduce((total, size) => total + size, 0);
 }
-async function restoreExternalCaches(configuration) {
+async function restoreExternalCaches(configuration, restoreCache3 = restore) {
   const manifest = configuration.caches.externalManifest;
-  const manifestDetail = await restore(configuration, manifest);
+  const manifestDetail = await restoreCache3(configuration, manifest);
   const repositoryDetails = {};
   if (manifestDetail.result === RESTORE_RESULT.TRUE || manifestDetail.result === RESTORE_RESULT.PARTIAL) {
     let names;
@@ -68472,8 +68508,18 @@ async function restoreExternalCaches(configuration) {
       };
     }
     for (const name of names) {
-      const cacheConfiguration = externalRepositoryCache(configuration, name);
-      repositoryDetails[name] = await restore(configuration, cacheConfiguration);
+      try {
+        repositoryDetails[name] = await withExternalStaging(configuration, name, async (cacheConfiguration, directory) => {
+          const detail = await restoreCache3(configuration, cacheConfiguration);
+          if (detail.result === RESTORE_RESULT.TRUE || detail.result === RESTORE_RESULT.PARTIAL) {
+            installExternalRepository(directory, configuration.external.root, name);
+          }
+          return detail;
+        });
+      } catch (error2) {
+        warning(`Could not install external cache '${name}': ${error2.message}`);
+        repositoryDetails[name] = { result: RESTORE_RESULT.UNKNOWN, sizeBefore: null, sizeAfter: null };
+      }
     }
   }
   const repositoryResults = Object.fromEntries(

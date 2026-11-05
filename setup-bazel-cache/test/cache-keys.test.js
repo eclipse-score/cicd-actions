@@ -22,6 +22,8 @@ import {
   keyPlan,
 } from '../src/cache-keys.js';
 import { createConfiguration } from '../src/config.js';
+// Check the installed toolkit's cache-version algorithm as well as our keys.
+import { getCacheVersion } from '../node_modules/@actions/cache/lib/internal/cacheUtils.js';
 import { externalRepositoryCache } from '../src/external.js';
 
 test('cache families have explicit names', () => {
@@ -195,9 +197,13 @@ test('nested workspaces still share Bazel downloads and identical extracted repo
       keyPlan(configuration, configuration.caches[family])));
     assert.deepEqual(plans[0], plans[1]);
   }
-  const repositories = await Promise.all(configurations.map((configuration) =>
-    keyPlan(configuration, externalRepositoryCache(configuration, 'rules_cc'))));
+  const payloads = configurations.map((configuration) => externalRepositoryCache(configuration, 'rules_cc'));
+  const repositories = await Promise.all(configurations.map((configuration, index) =>
+    keyPlan(configuration, payloads[index])));
   assert.deepEqual(repositories[0], repositories[1]);
+  for (const compression of ['gzip', 'zstd']) {
+    assert.equal(getCacheVersion(payloads[0].paths, compression), getCacheVersion(payloads[1].paths, compression));
+  }
 });
 
 

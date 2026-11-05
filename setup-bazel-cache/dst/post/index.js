@@ -126987,6 +126987,9 @@ function createConfiguration(workspace, diskCacheKey, {
     baseKey,
     external: externalCacheEnabled ? {
       identityFiles: externalIdentityFiles(workspace),
+      // Cache versions include archive paths. Keep those paths independent
+      // of Bazel's workspace-specific output base so payloads can be shared.
+      stagingRoot: import_node_path3.default.join(runnerTemp, "setup-bazel-cache-external"),
       manifest: {
         files: [],
         generational: true,
@@ -127019,7 +127022,7 @@ function configureExternalCache(configuration, outputBase) {
 }
 function externalRepositoryCache(configuration, name) {
   validateExternalRepositoryName(name);
-  const root = configuration.external.root;
+  const root = import_node_path4.default.join(configuration.external.stagingRoot, name);
   const repositoryPath = import_node_path4.default.join(root, name);
   const markerPath = import_node_path4.default.join(root, `@${name}.marker`);
   return {
@@ -127029,6 +127032,29 @@ function externalRepositoryCache(configuration, name) {
     name: "external",
     paths: [markerPath, repositoryPath]
   };
+}
+async function withExternalStaging(configuration, name, operation) {
+  const cacheConfiguration = externalRepositoryCache(configuration, name);
+  const directory = import_node_path4.default.dirname(cacheConfiguration.paths[0]);
+  import_node_fs6.default.rmSync(directory, { recursive: true, force: true });
+  import_node_fs6.default.mkdirSync(directory, { recursive: true });
+  try {
+    return await operation(cacheConfiguration, directory);
+  } finally {
+    import_node_fs6.default.rmSync(directory, { recursive: true, force: true });
+  }
+}
+function stageExternalRepository(root, directory, name) {
+  for (const entry of [name, `@${name}.marker`]) {
+    const source = import_node_path4.default.join(root, entry);
+    if (!import_node_fs6.default.existsSync(source)) continue;
+    import_node_fs6.default.cpSync(source, import_node_path4.default.join(directory, entry), {
+      recursive: true,
+      preserveTimestamps: true,
+      verbatimSymlinks: true,
+      mode: import_node_fs6.default.constants.COPYFILE_FICLONE
+    });
+  }
 }
 function validateExternalRepositoryName(name) {
   if (typeof name !== "string" || !name || name.length > MAX_EXTERNAL_REPOSITORY_NAME_LENGTH || name === "." || name === ".." || !EXTERNAL_REPOSITORY_NAME.test(name) || [...name].some((character) => {
@@ -127057,7 +127083,7 @@ function discoverExternalRepositories(root) {
     }
   });
 }
-async function saveExternalCaches(configuration, manifestRestoreResult, repositoryRestoreResults, cleanupPreviousGeneration2) {
+async function saveExternalCaches(configuration, manifestRestoreResult, repositoryRestoreResults, cleanupPreviousGeneration2, saveCache3 = save) {
   const root = configuration.external.root;
   const names = discoverExternalRepositories(root);
   const eligibleNames = [];
@@ -127072,12 +127098,14 @@ async function saveExternalCaches(configuration, manifestRestoreResult, reposito
       continue;
     }
     eligibleNames.push(name);
-    const cacheConfiguration = externalRepositoryCache(configuration, name);
-    const result = await save(
-      configuration,
-      cacheConfiguration,
-      repositoryRestoreResults[name] || RESTORE_RESULT.FALSE
-    );
+    const result = await withExternalStaging(configuration, name, async (cacheConfiguration, directory) => {
+      stageExternalRepository(root, directory, name);
+      return saveCache3(
+        configuration,
+        cacheConfiguration,
+        repositoryRestoreResults[name] || RESTORE_RESULT.FALSE
+      );
+    });
     results.push(result);
   }
   if (eligibleNames.length === 0) return results;
@@ -127086,7 +127114,7 @@ async function saveExternalCaches(configuration, manifestRestoreResult, reposito
     `${eligibleNames.join("\n")}
 `
   );
-  const manifestResult = await save(
+  const manifestResult = await saveCache3(
     configuration,
     configuration.caches.externalManifest,
     manifestRestoreResult
