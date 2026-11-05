@@ -20,13 +20,14 @@ const CACHE_HASH_LENGTH = 16;
 
 /** Return the stable cache-family prefix used for fallback restores. */
 function cachePrefix(configuration, cacheConfiguration) {
-  // Disk generations and the extracted-repository manifest belong to one
-  // workspace. Downloads and content-addressed repositories remain reusable.
-  // Scope BEFORE the family: a root restore prefix must never match a nested
-  // workspace, including the broad legacy-prefix fallback or cleanup scans.
+  // The extracted-repository manifest describes one workspace. Disk sharing
+  // is controlled by disk-cache-key, independently of the workspace directory.
+  // Downloads and content-addressed repositories remain reusable.
+  // Scope BEFORE the family: root-manifest restore prefixes must never match
+  // nested manifests, including broad legacy fallbacks and cleanup scans.
   let family = cacheConfiguration.name;
   const directory = configuration.workspaceDirectory || '.';
-  if (directory !== '.' && ['disk', 'external-manifest'].includes(family)) {
+  if (directory !== '.' && family === 'external-manifest') {
     // Hash the normalized relative directory, never a runner's absolute path.
     // A bounded component prevents deep directory paths from consuming the
     // cache-key length budget. Root keys stay byte-identical.

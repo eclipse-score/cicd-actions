@@ -67895,7 +67895,7 @@ var CACHE_HASH_LENGTH = 16;
 function cachePrefix(configuration, cacheConfiguration) {
   let family = cacheConfiguration.name;
   const directory = configuration.workspaceDirectory || ".";
-  if (directory !== "." && ["disk", "external-manifest"].includes(family)) {
+  if (directory !== "." && family === "external-manifest") {
     const hash = (0, import_node_crypto4.createHash)("sha256").update(directory).digest("hex").slice(0, CACHE_HASH_LENGTH);
     family = `workspace-${hash}/${family}`;
   }

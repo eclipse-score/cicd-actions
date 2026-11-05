@@ -397,7 +397,7 @@ test('failed-job post condition retains the cache-save gate', () => {
   assert.match(manifest, /post-if: success\(\) \|\| \(failure\(\) && env.SETUP_BAZEL_CACHE_ADDITIVE_SAVE == 'true'\)/);
 });
 
-test('post-step cache namespaces come from saved workspace selection', (context) => {
+test('post-step disk cache identity remains caller-controlled for a nested workspace', (context) => {
   const root = fixture(context);
   const state = {
     cacheSaveAllowed: true,
@@ -408,13 +408,14 @@ test('post-step cache namespaces come from saved workspace selection', (context)
     saves: { bazelisk: false, disk: false, repository: false, external: false },
   };
   // No cache services are contacted. Even disabled save rows identify their
-  // family, proving reconstruction uses setup's saved namespace, not inputs
-  // re-read after the caller has changed directory or environment variables.
+  // family. A saved nested workspace must not add a hidden namespace to the
+  // caller's disk key, even if the working-directory input changes later.
   const { output } = runPost(root, false, 'false', undefined, state, {
     HOME: root,
     'INPUT_WORKING-DIRECTORY': 'some-other-workspace',
   });
-  assert.match(output, /workspace-[a-f0-9]{16}\/disk\/key-nested-build/);
+  assert.match(output, /setup-bazel-cache\/linux-[^/]+\/disk\/key-nested-build/);
+  assert.doesNotMatch(output, /workspace-[a-f0-9]{16}\/disk/);
   assert.match(output, /setup-bazel-cache\/linux-[^/]+\/repository/);
   assert.doesNotMatch(output, /::warning::|::error::/);
 });

@@ -136,37 +136,38 @@ test('only setup-bazel-cache generation keys are eligible for cleanup', () => {
   );
 });
 
-test('root and nested disk/manifest generations never cross-restore or cross-clean', async (context) => {
+test('root and nested manifest generations never cross-restore or cross-clean', async (context) => {
   context.mock.method(Date, 'now', () => 1700000000000);
   const configurations = ['.', 'examples/integration', 'examples/other'].map((directory) =>
     createConfiguration(`/checkout/${directory}`, 'same-job', {
       workspaceDirectory: directory,
       externalCacheEnabled: true,
     }));
-  for (const family of ['disk', 'external-manifest']) {
-    const caches = configurations.map((configuration) => family === 'disk'
-      ? configuration.caches.disk : configuration.external.manifest);
-    const plans = await Promise.all(configurations.map((configuration, index) =>
-      keyPlan(configuration, caches[index])));
-    for (let index = 0; index < configurations.length; index += 1) {
-      for (let other = 0; other < configurations.length; other += 1) {
-        if (index === other) continue;
-        // Check every fallback, not just the exact key. A broad root-family
-        // fallback must not restore a nested module or claim it during cleanup.
-        assert.equal(plans[index].restoreKeys.some((prefix) => plans[other].key.startsWith(prefix)), false);
-        assert.equal(isOwnedGenerationKey(configurations[index], caches[index], plans[other].key), false);
-      }
+  const caches = configurations.map((configuration) => configuration.external.manifest);
+  const plans = await Promise.all(configurations.map((configuration, index) =>
+    keyPlan(configuration, caches[index])));
+  for (let index = 0; index < configurations.length; index += 1) {
+    for (let other = 0; other < configurations.length; other += 1) {
+      if (index === other) continue;
+      // Check every fallback, not just the exact key. A broad root-family
+      // fallback must not restore a nested module or claim it during cleanup.
+      assert.equal(plans[index].restoreKeys.some((prefix) => plans[other].key.startsWith(prefix)), false);
+      assert.equal(isOwnedGenerationKey(configurations[index], caches[index], plans[other].key), false);
     }
   }
 });
 
-test('workspace namespace is stable across runners and bounded for long disk keys', async (context) => {
+test('manifest namespace is stable across runners and bounded for long workspace paths', async (context) => {
   context.mock.method(Date, 'now', () => 1700000000000);
   const directory = `examples/${'long-module-name/'.repeat(20)}integration`;
-  const first = createConfiguration('/runner-one/checkout', 'a'.repeat(400), { workspaceDirectory: directory });
-  const relocated = createConfiguration('/another/runner/checkout', 'a'.repeat(400), { workspaceDirectory: directory });
-  const plan = await keyPlan(first, first.caches.disk);
-  const other = await keyPlan(relocated, relocated.caches.disk);
+  const first = createConfiguration('/runner-one/checkout', 'build', {
+    workspaceDirectory: directory, externalCacheEnabled: true,
+  });
+  const relocated = createConfiguration('/another/runner/checkout', 'build', {
+    workspaceDirectory: directory, externalCacheEnabled: true,
+  });
+  const plan = await keyPlan(first, first.external.manifest);
+  const other = await keyPlan(relocated, relocated.external.manifest);
   assert.equal(plan.key, other.key);
   assert.ok(plan.key.length <= 512);
   assert.ok(plan.restoreKeys.every((key) => key.length <= 512));
@@ -197,4 +198,30 @@ test('nested workspaces still share Bazel downloads and identical extracted repo
   const repositories = await Promise.all(configurations.map((configuration) =>
     keyPlan(configuration, externalRepositoryCache(configuration, 'rules_cc'))));
   assert.deepEqual(repositories[0], repositories[1]);
+});
+
+
+test('disk sharing, restore fallbacks and cleanup depend on the caller key across workspaces', async (context) => {
+  context.mock.method(Date, 'now', () => 1700000000000);
+
+  // Root and nested builds may deliberately share one archive. A caller can
+  // instead assign a different key to isolate independently scheduled jobs.
+  const configurations = ['.', 'examples/integration', 'examples/other'].map((directory) =>
+    createConfiguration(`/checkout/${directory}`, 'shared-build', { workspaceDirectory: directory }));
+  const plans = await Promise.all(configurations.map((configuration) =>
+    keyPlan(configuration, configuration.caches.disk)));
+  const isolated = createConfiguration('/checkout/examples/integration', 'separate-build', {
+    workspaceDirectory: 'examples/integration',
+  });
+  const isolatedPlan = await keyPlan(isolated, isolated.caches.disk);
+
+  for (let index = 0; index < configurations.length; index += 1) {
+    const configuration = configurations[index];
+    assert.deepEqual(plans[index], plans[0]);
+    assert.equal(isOwnedGenerationKey(configuration, configuration.caches.disk, plans[0].key), true);
+    assert.equal(plans[index].restoreKeys.some((prefix) => isolatedPlan.key.startsWith(prefix)), false);
+    assert.equal(isOwnedGenerationKey(configuration, configuration.caches.disk, isolatedPlan.key), false);
+    assert.equal(isolatedPlan.restoreKeys.some((prefix) => plans[index].key.startsWith(prefix)), false);
+    assert.equal(isOwnedGenerationKey(isolated, isolated.caches.disk, plans[index].key), false);
+  }
 });

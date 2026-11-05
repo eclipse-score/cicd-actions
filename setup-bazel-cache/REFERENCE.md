@@ -28,10 +28,11 @@ The directory must exist inside `GITHUB_WORKSPACE`; absolute paths and symlink
 escapes are rejected. Setup problems follow the action's existing warning and
 cache-skip behavior. This input does not change later run steps' directories.
 
-Disk-cache and external-manifest keys include a stable hash of the canonical
-relative directory for nested workspaces. Their restore fallbacks and cleanup
-stay in that namespace. `.` retains its existing keys. Bazelisk, downloaded
-archives and immutable extracted-repository entries are still shared where
+External-manifest keys include a stable hash of the canonical relative directory
+for nested workspaces. Their restore fallbacks and cleanup stay in that namespace.
+`.` retains its existing keys. Disk keys depend on `disk-cache-key`, regardless
+of the selected directory. Bazelisk, downloaded archives and immutable
+extracted-repository entries are still shared where
 version/content identity matches. See [cache scopes](./EXPLANATION.md#cache-restore-and-save).
 
 ### Cache identity and save policy
@@ -41,7 +42,11 @@ version/content identity matches. See [cache scopes](./EXPLANATION.md#cache-rest
 Required. Use a stable value for runs that should share a disk cache. The value
 must contain 1–400 printable characters and cannot contain commas. Add matrix
 dimensions when those jobs need separate disk caches; avoid per-run values
-such as `github.run_id`. For a matrix example, see
+such as `github.run_id`. The same key shares disk-cache generations across
+working directories on the same platform and architecture. Different keys
+isolate restore and cleanup. Sequential jobs can reuse a previously saved
+generation; parallel jobs do not automatically merge cache additions.
+For a matrix example, see
 [Use the action in a build matrix](./HOW-TO.md#use-the-action-in-a-build-matrix).
 
 #### `cache-save-branch-patterns`

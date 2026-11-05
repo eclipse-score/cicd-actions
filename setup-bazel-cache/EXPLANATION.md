@@ -48,10 +48,12 @@ not save caches. If setup did not complete, the post step skips cache saving.
 Cache keys have different scopes:
 
 - runner platform and architecture separate every cache family;
-- `disk-cache-key` separates disk caches for jobs or matrix configurations;
-- nested `working-directory` selections namespace disk and external-manifest
-  generations by a stable hash of their canonical relative path; `.` preserves
-  the existing key layout, and no fallback or cleanup crosses workspace scopes;
+- `disk-cache-key` controls disk sharing across jobs, matrix configurations and
+  working directories: the same key shares generations, different keys isolate
+  restores and cleanup;
+- nested `working-directory` selections namespace external-manifest generations
+  by a stable hash of their canonical relative path; `.` preserves the existing
+  key layout, and no manifest fallback or cleanup crosses workspace scopes;
 - the downloaded repository cache is shared across lockfiles and build
   configurations on the same platform and architecture, but automatic restore
   starts a fresh generation after a lockfile change when this run may save;
@@ -61,11 +63,17 @@ Cache keys have different scopes:
   WORKSPACE files when present.
 
 The workspace namespace precedes the family name, so a root workspace's broad
-legacy restore prefix cannot match a nested workspace's cache. The bounded hash
-limits the key space consumed by long directory paths without
+legacy manifest restore prefix cannot match a nested workspace's manifest.
+The bounded hash limits the key space consumed by long directory paths without
 including runner-specific absolute paths. Download caches and content-addressed
 external-repository entries stay shared to avoid storing identical payloads per
-module. This isolates mutable generations rather than duplicating all caches.
+module.
+
+Sharing disk-cache keys can improve reuse between workspaces with matching Bazel
+actions, at the cost of transferring larger archives. A later job can restore a
+previously saved generation and extend it. Parallel jobs restore snapshots and
+publish independent generations; their additions are not automatically merged.
+Use different disk keys when jobs should save and clean up independently.
 
 Including legacy WORKSPACE files prevents workspaces with different legacy
 repository definitions from sharing extracted repositories.

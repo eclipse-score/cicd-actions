@@ -39,11 +39,18 @@ its post step. Absolute paths and symlink escapes are rejected. GitHub's
 `GITHUB_WORKSPACE` remains the checkout root; build/test steps must select the
 same `working-directory` themselves.
 
-Disk-cache and external-manifest generations are separated automatically by the
-normalized relative workspace path. The path is represented by a stable bounded
-hash in their keys; runner-specific absolute paths are never included. Existing
-root-workspace keys stay unchanged. Bazel downloads, downloaded dependency
-archives and content-addressed extracted repositories remain shared.
+Disk-cache sharing is controlled by `disk-cache-key`, independently of this
+input. Use the same key to share across workspaces, or different keys to keep
+their restore and cleanup independent. Sequential jobs can reuse a previously
+saved generation; parallel jobs do not automatically merge their additions.
+Shared archives may improve reuse but also increase transfer size.
+
+Only external-manifest generations are separated automatically by the normalized
+relative workspace path, because each manifest describes that workspace's
+repository selection. A stable bounded hash represents the path; runner-specific
+absolute paths are never included. Existing root-workspace keys stay unchanged.
+Bazel downloads, downloaded dependency archives and content-addressed extracted
+repositories remain shared.
 
 ```yaml
 - uses: eclipse-score/cicd-actions/setup-bazel-cache@main
