@@ -32,34 +32,51 @@ of the same reusable workflow.
 
 ### Workspace selection
 
-`working-directory` defaults to `.`. Set it for a nested Bazel workspace such as
-`examples/integration`. The action reads that workspace's `.bazelversion` and
-module lockfile, resolves its Bazel output base and saves the same selection for
-its post step. Absolute paths and symlink escapes are rejected. GitHub's
-`GITHUB_WORKSPACE` remains the checkout root; build/test steps must select the
-same `working-directory` themselves.
+You do not need to split your builds into separate jobs. You can run this action
+once at the start of a job, then build both the root module and a nested module.
+Both builds use the configured disk and dependency-download caches. Setup uses
+the root module's settings; it does not separately restore and save the nested
+module's extracted dependencies.
 
-Disk-cache sharing is controlled by `disk-cache-key`, independently of this
-input. Use the same key to share across workspaces, or different keys to keep
-their restore and cleanup independent. Sequential jobs can reuse a previously
-saved generation; parallel jobs do not automatically merge their additions.
-Shared archives may improve reuse but also increase transfer size.
+If you choose to build a nested module in its own job, set `working-directory`
+to that module's directory. This lets setup prepare the Bazel version used by
+that module, check its own lockfile for dependency changes, and restore and save
+its extracted dependencies. It is an optional way to improve caching for that
+job, not a requirement for building nested modules.
 
-Only external-manifest generations are separated automatically by the normalized
-relative workspace path, because each manifest describes that workspace's
-repository selection. A stable bounded hash represents the path; runner-specific
-absolute paths are never included. Existing root-workspace keys stay unchanged.
-Bazel downloads, downloaded dependency archives and content-addressed extracted
-repositories remain shared.
+For example, in a job that builds `examples/integration`:
 
 ```yaml
-- uses: eclipse-score/cicd-actions/setup-bazel-cache@main
-  with:
-    disk-cache-key: integration-linux
+steps:
+  - uses: actions/checkout@<sha>
+
+  - uses: eclipse-score/cicd-actions/setup-bazel-cache@<sha>
+    with:
+      disk-cache-key: integration-linux
+      working-directory: examples/integration
+
+  - run: bazel test //...
     working-directory: examples/integration
-- run: bazel test --config=x86_64-linux //...
-  working-directory: examples/integration
 ```
+
+Set the directory on both steps: the action's input selects which module to
+prepare caches for; the run step's setting selects where Bazel runs. The action
+defaults to `.` (the checkout root). Use one setup call per job; multiple calls
+in the same job are not currently supported.
+
+You still decide whether jobs share their disk cache:
+
+- Use the same `disk-cache-key` in the root and nested jobs to share cached build
+  results. This may avoid repeated build work, but jobs may download a larger
+  cache archive.
+- Use different keys to keep their disk caches separate. This can be useful for
+  parallel jobs: each can save and clean up its own cache independently.
+
+A later job can reuse a cache saved by an earlier job. Parallel jobs do not
+automatically combine their new cache entries. Changing `working-directory`
+does not force separate disk caches. Dependency downloads can still be reused
+across jobs. See [cache behavior](./EXPLANATION.md#cache-restore-and-save) for
+the details.
 
 ### Cache identity and publishing
 

@@ -21,19 +21,26 @@ save settings are independent.
 
 #### `working-directory`
 
-Optional checkout-relative Bazel workspace directory. Defaults to `.`. Selects
-its `.bazelversion`, module lockfile, Bazel output base and extracted repository
-identity. The same selection is saved for cache publishing in the post step.
-The directory must exist inside `GITHUB_WORKSPACE`; absolute paths and symlink
-escapes are rejected. Setup problems follow the action's existing warning and
-cache-skip behavior. This input does not change later run steps' directories.
+Optional directory of the Bazel module this job builds, relative to the checkout.
+Defaults to `.` (the checkout root). For a nested module built in its own job,
+use a value such as `examples/integration`. Setup then uses that module's Bazel
+version and lockfile and caches its extracted dependencies.
 
-External-manifest keys include a stable hash of the canonical relative directory
-for nested workspaces. Their restore fallbacks and cleanup stay in that namespace.
-`.` retains its existing keys. Disk keys depend on `disk-cache-key`, regardless
-of the selected directory. Bazelisk, downloaded archives and immutable
-extracted-repository entries are still shared where
-version/content identity matches. See [cache scopes](./EXPLANATION.md#cache-restore-and-save).
+This is an optional caching optimization. Building root and nested modules in
+one job after a single setup call is also supported; setup then prepares caches
+for the selected module. Use one setup call per job.
+
+Set `working-directory` on the build/test run steps as well; this input does not
+change where those steps run. The directory must exist inside the checkout;
+absolute paths and symlinks leading outside it are rejected. Setup problems are
+reported as warnings and skip the remaining cache setup.
+
+`disk-cache-key` decides which jobs share their disk cache, even when they build
+different directories. The list of extracted dependencies to restore is kept
+separate for each module. Downloads and extracted dependencies with matching
+cache identities can still be shared. See the
+[usage example](./README.md#workspace-selection) and
+[cache behavior](./EXPLANATION.md#cache-restore-and-save).
 
 ### Cache identity and save policy
 
