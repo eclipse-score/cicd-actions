@@ -32,51 +32,9 @@ of the same reusable workflow.
 
 ### Workspace selection
 
-You do not need to split your builds into separate jobs. You can run this action
-once at the start of a job, then build both the root module and a nested module.
-Both builds use the configured disk and dependency-download caches. Setup uses
-the root module's settings; it does not separately restore and save the nested
-module's extracted dependencies.
-
-If you choose to build a nested module in its own job, set `working-directory`
-to that module's directory. This lets setup prepare the Bazel version used by
-that module, check its own lockfile for dependency changes, and restore and save
-its extracted dependencies. It is an optional way to improve caching for that
-job, not a requirement for building nested modules.
-
-For example, in a job that builds `examples/integration`:
-
-```yaml
-steps:
-  - uses: actions/checkout@<sha>
-
-  - uses: eclipse-score/cicd-actions/setup-bazel-cache@<sha>
-    with:
-      disk-cache-key: integration-linux
-      working-directory: examples/integration
-
-  - run: bazel test //...
-    working-directory: examples/integration
-```
-
-Set the directory on both steps: the action's input selects which module to
-prepare caches for; the run step's setting selects where Bazel runs. The action
-defaults to `.` (the checkout root). Use one setup call per job; multiple calls
-in the same job are not currently supported.
-
-You still decide whether jobs share their disk cache:
-
-- Use the same `disk-cache-key` in the root and nested jobs to share cached build
-  results. This may avoid repeated build work, but jobs may download a larger
-  cache archive.
-- Use different keys to keep their disk caches separate. This can be useful for
-  parallel jobs: each can save and clean up its own cache independently.
-
-A later job can reuse a cache saved by an earlier job. Parallel jobs do not
-automatically combine their new cache entries. Changing `working-directory`
-does not force separate disk caches. Dependency downloads can still be reused
-across jobs. See [cache behavior](./EXPLANATION.md#cache-restore-and-save) for
-the details.
+`working-directory` defaults to `.` (the checkout root). For a nested Bazel module
+built in its own job, set it to that module's directory. See
+[Build a nested module in its own job](./HOW-TO.md#build-a-nested-module-in-its-own-job).
 
 ### Cache identity and publishing
 
@@ -209,7 +167,8 @@ interactions.
 
 ## Choose a guide
 
-- [How-to](./HOW-TO.md): use caches in a build matrix, warm a shared
+- [How-to](./HOW-TO.md): build a nested module in its own job, use a build
+  matrix, warm a shared
   repository cache, and allow selected branches to publish.
 - [Reference](./REFERENCE.md): input defaults, accepted values, outputs, and
   permissions.

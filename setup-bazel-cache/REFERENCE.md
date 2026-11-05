@@ -21,26 +21,26 @@ save settings are independent.
 
 #### `working-directory`
 
-Optional directory of the Bazel module this job builds, relative to the checkout.
-Defaults to `.` (the checkout root). For a nested module built in its own job,
-use a value such as `examples/integration`. Setup then uses that module's Bazel
-version and lockfile and caches its extracted dependencies.
+Optional. Defaults to `.`. Path to the Bazel workspace directory, relative to
+`GITHUB_WORKSPACE` (the checkout root), for example `examples/integration`.
+The directory must exist inside the checkout, including after resolving symlinks;
+absolute paths and symlinks leading outside the checkout are rejected. Invalid
+selections produce a warning and stop the remaining cache setup.
 
-This is an optional caching optimization. Building root and nested modules in
-one job after a single setup call is also supported; setup then prepares caches
-for the selected module. Use one setup call per job.
+The selected directory is used for:
 
-Set `working-directory` on the build/test run steps as well; this input does not
-change where those steps run. The directory must exist inside the checkout;
-absolute paths and symlinks leading outside it are rejected. Setup problems are
-reported as warnings and skip the remaining cache setup.
+- reading `.bazelversion` for the Bazelisk download cache;
+- checking the module lockfile for automatic cache-restore decisions;
+- resolving Bazel's output base and the identity of extracted dependencies;
+- restoring and saving that workspace's extracted dependencies.
 
-`disk-cache-key` decides which jobs share their disk cache, even when they build
-different directories. The list of extracted dependencies to restore is kept
-separate for each module. Downloads and extracted dependencies with matching
-cache identities can still be shared. See the
-[usage example](./README.md#workspace-selection) and
-[cache behavior](./EXPLANATION.md#cache-restore-and-save).
+The selection is retained for post-job cache saving. It does not change
+`GITHUB_WORKSPACE`, the working directory of later run steps, or disk-cache
+sharing through `disk-cache-key`. Use one setup call per job.
+
+See the [nested-job recipe](./HOW-TO.md#build-a-nested-module-in-its-own-job) for
+configuration and [the comparison](./EXPLANATION.md#caching-root-and-nested-modules)
+for the benefits and limits.
 
 ### Cache identity and save policy
 

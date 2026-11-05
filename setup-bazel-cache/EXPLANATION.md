@@ -21,6 +21,44 @@ configure a remote cache. Bazel's normal configuration and the caller's
 `.bazelrc` continue to control other behavior, including repository download
 retries.
 
+## Caching root and nested modules
+
+A single setup call in the checkout root already lets subsequent root and nested
+builds use the configured disk and dependency-download caches. A nested build
+still uses its own Bazel configuration. It can download missing dependencies and
+build normally without another setup call.
+
+The limitation is what setup prepares and saves: it selects one module's Bazel
+version, checks one module's lockfile, and restores extracted dependencies into
+one module's Bazel output directory. If you choose to build the nested module in
+its own job, `working-directory` lets setup do that work for the nested module.
+
+| Cache behavior | Setup in root, then build both modules | Setup in a separate nested job |
+| --- | --- | --- |
+| Reuse cached build results | Both builds use the configured disk cache | The nested job can share the root job's disk cache through the same `disk-cache-key` |
+| Reuse downloaded dependency archives | Available to both builds | Still available; sharing does not depend on the disk key |
+| Restore the Bazel download cache | Selected using the root module's `.bazelversion` | Selected using the nested module's `.bazelversion` |
+| Check dependency changes for automatic restore decisions | Checks the root module's lockfile | Checks the nested module's lockfile |
+| Restore and save extracted dependencies | Uses the root module's Bazel output directory | Uses the nested module's Bazel output directory |
+
+In practice, a cache hit can avoid downloading the nested module's Bazel version
+again and re-extracting large dependencies. Extracted-dependency saving only
+includes eligible directories of at least 500 MiB; see
+[extracted external repositories](#extracted-external-repositories). A separate
+job is not inherently faster: cache misses and archive transfers still cost time.
+The choice to split jobs can also affect parallelism, independently of caching.
+
+`working-directory` does not automatically separate disk caches. Using the same
+`disk-cache-key` allows reuse of matching build results across jobs; different
+keys keep their archives and cleanup independent. A shared archive can improve
+reuse but also increases the amount of data each job transfers. Parallel saves
+do not merge their additions. The [restore and save rules](#cache-restore-and-save)
+below, including branch permissions, still apply.
+
+Use the [nested-job recipe](./HOW-TO.md#build-a-nested-module-in-its-own-job) to
+configure this layout. Multiple setup calls in one job are not currently
+supported.
+
 ## Cache restore and save
 
 GitHub Actions cache entries are immutable archives. The action restores them
@@ -68,12 +106,6 @@ The bounded hash limits the key space consumed by long directory paths without
 including runner-specific absolute paths. Download caches and content-addressed
 external-repository entries stay shared to avoid storing identical payloads per
 module.
-
-Sharing disk-cache keys can improve reuse between workspaces with matching Bazel
-actions, at the cost of transferring larger archives. A later job can restore a
-previously saved generation and extend it. Parallel jobs restore snapshots and
-publish independent generations; their additions are not automatically merged.
-Use different disk keys when jobs should save and clean up independently.
 
 Including legacy WORKSPACE files prevents workspaces with different legacy
 repository definitions from sharing extracted repositories.

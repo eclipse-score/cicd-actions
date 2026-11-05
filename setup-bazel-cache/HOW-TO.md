@@ -5,6 +5,53 @@ job setup, start with the [README](./README.md). For the full input contract,
 see the [reference](./REFERENCE.md); for cache behavior, see the
 [explanation](./EXPLANATION.md).
 
+## Build a nested module in its own job
+
+Use this recipe if you want a separate job for a nested Bazel module, such as
+`examples/integration`. Splitting your builds is optional: you can also run setup
+once in the root job and build both modules there.
+
+In the nested job, set `working-directory` on both cache setup and the Bazel run
+step. Setup then uses the nested module's Bazel version and lockfile and caches
+its large extracted dependencies. See
+[what this improves](./EXPLANATION.md#caching-root-and-nested-modules) before
+changing your job layout just for caching.
+
+As with the basic setup, make Bazel or Bazelisk available on `PATH` before
+running the action. Then use these steps:
+
+```yaml
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@<sha>
+
+      - uses: eclipse-score/cicd-actions/setup-bazel-cache@<sha>
+        with:
+          disk-cache-key: integration-linux
+          working-directory: examples/integration
+
+      - run: bazel test //...
+        working-directory: examples/integration
+```
+
+The action input selects which module to prepare caches for; the run step's
+setting selects where Bazel runs. Use one setup call per job; multiple calls in
+the same job are not currently supported.
+
+Choose `disk-cache-key` to match how you want the jobs to share build results:
+
+- Keep a distinct key such as `integration-linux` for an independent disk cache.
+  This lets parallel jobs save and clean up their own caches independently.
+- Use the same key as the root job to share a disk cache. Matching build results
+  can be reused, but the larger archive may take longer to transfer.
+
+A later job can reuse a cache saved by an earlier job. Parallel jobs do not
+automatically combine their new cache entries. Downloads can still be shared
+when disk keys differ. Cache saving remains subject to the branch policy and
+save settings; a separate job does not change those rules.
+
 ## Use the action in a build matrix
 
 Give each matrix configuration its own disk-cache key when the configurations
