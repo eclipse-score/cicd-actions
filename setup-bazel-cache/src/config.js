@@ -188,11 +188,6 @@ function createConfiguration(
     external: externalCacheEnabled
       ? {
         identityFiles: externalIdentityFiles(workspace),
-        // Cache versions include archive paths. Keep those paths independent
-        // of Bazel's workspace-specific output base so payloads can be shared.
-        // Version the archive layout so older, potentially nonportable
-        // payloads cannot be mistaken for validated portable repositories.
-        stagingRoot: path.join(runnerTemp, 'setup-bazel-cache-external-portable-v1'),
         manifest: {
           files: [],
           generational: true,

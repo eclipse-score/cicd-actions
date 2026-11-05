@@ -15,7 +15,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import * as core from '@actions/core';
-import { RESTORE_RESULT, restore, save, isExactCacheHit, skippedSaveSummary } from './cache.js';
+import { RESTORE_RESULT, restore, save } from './cache.js';
 import { cacheLabel } from './cache-keys.js';
 import { localPathSize } from './cache-size.js';
 import { formatCacheComponent } from './keys.js';
@@ -69,7 +69,7 @@ function configureExternalCache(configuration, outputBase) {
 /** Build the cache payload for one extracted external repository. */
 function externalRepositoryCache(configuration, name) {
   validateExternalRepositoryName(name);
-  const root = path.join(configuration.external.stagingRoot, name);
+  const root = configuration.external.root;
   const repositoryPath = path.join(root, name);
   const markerPath = path.join(root, `@${name}.marker`);
   return {
@@ -79,119 +79,6 @@ function externalRepositoryCache(configuration, name) {
     name: 'external',
     paths: [markerPath, repositoryPath],
   };
-}
-
-/**
- * Cache archives are staged at fixed runner-temp paths: GitHub hashes the paths
- * passed to its cache API as well as the content key. Archiving output_base
- * directly would make otherwise identical repositories workspace-specific.
- * Process one repository at a time and always remove its temporary payload.
- */
-async function withExternalStaging(configuration, name, operation) {
-  const cacheConfiguration = externalRepositoryCache(configuration, name);
-  const directory = path.dirname(cacheConfiguration.paths[0]);
-  fs.rmSync(directory, { recursive: true, force: true });
-  fs.mkdirSync(directory, { recursive: true });
-  try {
-    return await operation(cacheConfiguration, directory);
-  } finally {
-    fs.rmSync(directory, { recursive: true, force: true });
-  }
-}
-
-/**
- * Copy the repository and its optional Bazel marker without changing the live
- * output tree. Reflinks avoid copying large file contents where supported;
- * other filesystems fall back to copying. Preserve relative symlinks verbatim
- * so moving through the archive directory does not rewrite repository contents.
- */
-function stageExternalRepository(root, directory, name) {
-  for (const entry of [name, `@${name}.marker`]) {
-    const source = path.join(root, entry);
-    if (!fs.existsSync(source)) continue;
-    fs.cpSync(source, path.join(directory, entry), {
-      recursive: true,
-      preserveTimestamps: true,
-      verbatimSymlinks: true,
-      mode: fs.constants.COPYFILE_FICLONE,
-    });
-  }
-}
-
-/**
- * Shared archives must not retain paths into the producer's output tree or
- * workspace. Accept relative symlinks contained in this repository; exclude
- * absolute links, dangling links and relative links escaping it. Walk directory
- * entries without traversing symlinks; resolve each link target separately to
- * catch escapes through intermediate directory symlinks as well.
- */
-function findNonportableLink(repository) {
-  const canonicalRoot = fs.realpathSync(repository);
-  const pending = [repository];
-  while (pending.length > 0) {
-    const directory = pending.pop();
-    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-      const file = path.join(directory, entry.name);
-      if (entry.isDirectory()) pending.push(file);
-      if (!entry.isSymbolicLink()) continue;
-      const target = fs.readlinkSync(file);
-      if (path.isAbsolute(target)) return path.relative(repository, file);
-      let resolved;
-      try {
-        // Preserve '..' until native path resolution: normalizing it first can
-        // hide an escape through a preceding directory symlink.
-        resolved = fs.realpathSync.native(`${directory}${path.sep}${target}`);
-      } catch (error) {
-        if (!['ENOENT', 'ELOOP', 'ENOTDIR'].includes(error.code)) throw error;
-        return path.relative(repository, file);
-      }
-      const relative = path.relative(canonicalRoot, resolved);
-      if (relative === '..' || relative.startsWith(`..${path.sep}`)) {
-        return path.relative(repository, file);
-      }
-    }
-  }
-  return null;
-}
-
-/** Install a successfully restored payload into the selected Bazel output base. */
-function installExternalRepository(directory, root, name) {
-  // Validate before replacing anything: a missing or partial archive must not
-  // discard an existing repository from a persistent runner's output tree.
-  if (!fs.lstatSync(path.join(directory, name)).isDirectory()) {
-    throw new Error(`Restored external repository '${name}' is not a directory.`);
-  }
-  const nonportable = findNonportableLink(path.join(directory, name));
-  if (nonportable !== null) {
-    throw new Error(`Restored external repository '${name}' has a nonportable symlink '${nonportable}'.`);
-  }
-  fs.mkdirSync(root, { recursive: true });
-  // Invalidate BEFORE touching the repository. If a cross-filesystem copy runs
-  // out of space, Bazel must not trust partial files under an old valid marker.
-  // Publish the restored marker only after the whole directory is installed.
-  const marker = path.join(root, `@${name}.marker`);
-  fs.rmSync(marker, { force: true });
-  try {
-    for (const entry of [name, `@${name}.marker`]) {
-      const source = path.join(directory, entry);
-      const destination = path.join(root, entry);
-      fs.rmSync(destination, { recursive: true, force: true });
-      if (!fs.existsSync(source)) continue;
-      try {
-        fs.renameSync(source, destination);
-      } catch (error) {
-        // Runner temp and Bazel's output base can live on different filesystems.
-        // Retain symlink text and permissions when a rename is unavailable.
-        if (error.code !== 'EXDEV') throw error;
-        fs.cpSync(source, destination, {
-          recursive: true, preserveTimestamps: true, verbatimSymlinks: true,
-        });
-      }
-    }
-  } catch (error) {
-    fs.rmSync(marker, { force: true });
-    throw error;
-  }
 }
 
 /** Reject manifest names that could escape the Bazel external directory. */
@@ -280,9 +167,9 @@ function aggregateSize(manifestSize, repositoryDetails, field) {
 }
 
 /** Restore the manifest and then the extracted repositories named by it. */
-async function restoreExternalCaches(configuration, restoreCache = restore) {
+async function restoreExternalCaches(configuration) {
   const manifest = configuration.caches.externalManifest;
-  const manifestDetail = await restoreCache(configuration, manifest);
+  const manifestDetail = await restore(configuration, manifest);
   const repositoryDetails = {};
 
   if (manifestDetail.result === RESTORE_RESULT.TRUE || manifestDetail.result === RESTORE_RESULT.PARTIAL) {
@@ -301,18 +188,8 @@ async function restoreExternalCaches(configuration, restoreCache = restore) {
     }
 
     for (const name of names) {
-      try {
-        repositoryDetails[name] = await withExternalStaging(configuration, name, async (cacheConfiguration, directory) => {
-          const detail = await restoreCache(configuration, cacheConfiguration);
-          if (detail.result === RESTORE_RESULT.TRUE || detail.result === RESTORE_RESULT.PARTIAL) {
-            installExternalRepository(directory, configuration.external.root, name);
-          }
-          return detail;
-        });
-      } catch (error) {
-        core.warning(`Could not install external cache '${name}': ${error.message}`);
-        repositoryDetails[name] = { result: RESTORE_RESULT.UNKNOWN, sizeBefore: null, sizeAfter: null };
-      }
+      const cacheConfiguration = externalRepositoryCache(configuration, name);
+      repositoryDetails[name] = await restore(configuration, cacheConfiguration);
     }
   }
 
@@ -334,7 +211,6 @@ async function saveExternalCaches(
   manifestRestoreResult,
   repositoryRestoreResults,
   cleanupPreviousGeneration,
-  saveCache = save,
 ) {
   const root = configuration.external.root;
   const names = discoverExternalRepositories(root);
@@ -352,33 +228,13 @@ async function saveExternalCaches(
       continue;
     }
 
-    const cacheConfiguration = externalRepositoryCache(configuration, name);
-    if (isExactCacheHit(cacheConfiguration)) {
-      // The immutable payload already exists. Report its live size without
-      // copying hundreds of MiB just to discover that no upload is needed.
-      eligibleNames.push(name);
-      results.push(skippedSaveSummary(configuration, {
-        ...cacheConfiguration,
-        paths: [path.join(root, `@${name}.marker`), repositoryPath],
-      }, 'exact cache hit'));
-      continue;
-    }
-
-    const nonportable = findNonportableLink(repositoryPath);
-    if (nonportable !== null) {
-      core.info(`Skipping ${name} external cache because symlink '${nonportable}' is not portable between output directories`);
-      continue;
-    }
-
     eligibleNames.push(name);
-    const result = await withExternalStaging(configuration, name, async (cacheConfiguration, directory) => {
-      stageExternalRepository(root, directory, name);
-      return saveCache(
-        configuration,
-        cacheConfiguration,
-        repositoryRestoreResults[name] || RESTORE_RESULT.FALSE,
-      );
-    });
+    const cacheConfiguration = externalRepositoryCache(configuration, name);
+    const result = await save(
+      configuration,
+      cacheConfiguration,
+      repositoryRestoreResults[name] || RESTORE_RESULT.FALSE,
+    );
     results.push(result);
   }
 
@@ -388,7 +244,7 @@ async function saveExternalCaches(
     configuration.external.manifest.path,
     `${eligibleNames.join('\n')}\n`,
   );
-  const manifestResult = await saveCache(
+  const manifestResult = await save(
     configuration,
     configuration.caches.externalManifest,
     manifestRestoreResult,

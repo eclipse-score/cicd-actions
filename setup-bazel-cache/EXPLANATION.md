@@ -103,9 +103,9 @@ Cache keys have different scopes:
 The workspace namespace precedes the family name, so a root workspace's broad
 legacy manifest restore prefix cannot match a nested workspace's manifest.
 The bounded hash limits the key space consumed by long directory paths without
-including runner-specific absolute paths. Download caches and content-addressed
-external-repository entries stay shared to avoid storing identical payloads per
-module.
+including runner-specific absolute paths. Download caches remain shared across
+modules. Extracted-repository archives use the selected module's Bazel output directory; reuse across different output
+directories is not provided.
 
 Including legacy WORKSPACE files prevents workspaces with different legacy
 repository definitions from sharing extracted repositories.
@@ -146,26 +146,11 @@ manifest and then restores each listed repository separately. It can avoid
 both downloading and extracting large repositories.
 
 Only real extracted directories of at least 500 MiB are eligible for saving;
-symlinked local repositories are skipped. Repositories containing absolute
-symlinks, dangling symlinks or symlinks leading outside that repository are also
-skipped: those links cannot be reused reliably in another module's output
-directory. Relative links resolving inside the repository are preserved.
-The same checks run before installing a restored archive.
-
-External cache entries are keyed by repository identity and dependency-file
-content. The manifest is generational,
+symlinked local repositories are skipped. External cache entries are keyed by
+repository identity and dependency-file content. The manifest is generational,
 while per-repository entries are immutable. Changed dependency definitions
 create new entries; the action does not delete old per-repository entries.
 External caches are saved only after a successful job.
-
-Payload archives use a temporary location independent of the selected Bazel
-output directory. This lets root and nested modules reuse the same archive when
-their dependency identities match. After restore, the payload is moved into the
-selected module's output directory. Exact cache hits keep their manifest entry
-and save report without staging or uploading the payload again. For a cache miss,
-saving stages one repository at a time; where file cloning is unavailable, this
-requires an extra temporary copy of
-that repository. The temporary payload is removed after each transfer.
 
 ### Cache cleanup
 

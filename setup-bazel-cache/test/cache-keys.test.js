@@ -22,9 +22,6 @@ import {
   keyPlan,
 } from '../src/cache-keys.js';
 import { createConfiguration } from '../src/config.js';
-// Check the installed toolkit's cache-version algorithm as well as our keys.
-import { getCacheVersion } from '../node_modules/@actions/cache/lib/internal/cacheUtils.js';
-import { externalRepositoryCache } from '../src/external.js';
 
 test('cache families have explicit names', () => {
   const configuration = createConfiguration('/workspace', 'linux-debug');
@@ -176,9 +173,9 @@ test('manifest namespace is stable across runners and bounded for long workspace
 });
 
 
-test('nested workspaces still share Bazel downloads and identical extracted repositories', async (context) => {
+test('nested workspaces still share Bazel and dependency downloads', async (context) => {
   context.mock.method(Date, 'now', () => 1700000000000);
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bazel shared payloads-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bazel shared downloads-'));
   context.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const nested = path.join(root, 'nested');
   fs.mkdirSync(nested);
@@ -196,13 +193,6 @@ test('nested workspaces still share Bazel downloads and identical extracted repo
     const plans = await Promise.all(configurations.map((configuration) =>
       keyPlan(configuration, configuration.caches[family])));
     assert.deepEqual(plans[0], plans[1]);
-  }
-  const payloads = configurations.map((configuration) => externalRepositoryCache(configuration, 'rules_cc'));
-  const repositories = await Promise.all(configurations.map((configuration, index) =>
-    keyPlan(configuration, payloads[index])));
-  assert.deepEqual(repositories[0], repositories[1]);
-  for (const compression of ['gzip', 'zstd']) {
-    assert.equal(getCacheVersion(payloads[0].paths, compression), getCacheVersion(payloads[1].paths, compression));
   }
 });
 

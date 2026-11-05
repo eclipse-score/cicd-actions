@@ -22,7 +22,7 @@ const CACHE_HASH_LENGTH = 16;
 function cachePrefix(configuration, cacheConfiguration) {
   // The extracted-repository manifest describes one workspace. Disk sharing
   // is controlled by disk-cache-key, independently of the workspace directory.
-  // Downloads and content-addressed repositories remain reusable.
+  // Download caches remain shared across workspaces.
   // Scope BEFORE the family: root-manifest restore prefixes must never match
   // nested manifests, including broad legacy fallbacks and cleanup scans.
   let family = cacheConfiguration.name;
