@@ -18,3 +18,12 @@ To enable `linux-sandbox` locally, when using the devcontainer read the [devcont
 steps:
   - uses: eclipse-score/cicd-actions/unblock-user-namespace-for-linux-sandbox@<sha>
 ```
+
+`working-directory` defaults to `.` (the checkout root). For a nested Bazel workspace, set it to the workspace path relative to the checkout root so the action configures AppArmor for that workspace's `linux-sandbox` binary.
+
+```yaml
+steps:
+  - uses: eclipse-score/cicd-actions/unblock-user-namespace-for-linux-sandbox@<sha>
+    with:
+      working-directory: path/to/bazel-workspace
+```

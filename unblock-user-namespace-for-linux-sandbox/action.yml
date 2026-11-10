@@ -18,9 +18,16 @@ branding:
   icon: command
   color: gray-dark
 
+inputs:
+  working-directory:
+    description: "Directory of the Bazel workspace, relative to the checkout root."
+    required: false
+    default: "."
+
 runs:
   using: composite
   steps:
     - name: Allow linux-sandbox to create user namespace
       run: "${{ github.action_path }}/action_callable.sh"
       shell: bash
+      working-directory: ${{ inputs.working-directory }}

@@ -22,18 +22,25 @@ permissions:
 
 jobs:
   unblock-user-namespace:
-    name: linux-sandbox fails before and works after action
+    name: linux-sandbox fails before and works after action (${{ matrix.working-directory }})
     runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        working-directory: ['.', nested-workspace]
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
 
       - name: Create minimal Bazel workspace
         shell: bash
+        env:
+          BAZEL_WORKSPACE: ${{ matrix.working-directory }}
         run: |
           set -euo pipefail
-          echo 'module(name = "sandbox_test")' > "${GITHUB_WORKSPACE}/MODULE.bazel"
-          echo '8.3.0' > "${GITHUB_WORKSPACE}/.bazelversion"
+          # Keep the checkout root free of Bazel workspace files in the nested case.
+          mkdir -p "${BAZEL_WORKSPACE}"
+          echo 'module(name = "sandbox_test")' > "${BAZEL_WORKSPACE}/MODULE.bazel"
+          echo '8.3.0' > "${BAZEL_WORKSPACE}/.bazelversion"
 
       - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # 0.19.1
         with:
@@ -47,6 +54,7 @@ jobs:
       - name: Resolve linux-sandbox binary path
         id: sandbox
         shell: bash
+        working-directory: ${{ matrix.working-directory }}
         run: |
           set -euo pipefail
           INSTALL_BASE="$(bazel info install_base)"
@@ -68,10 +76,18 @@ jobs:
           echo "linux-sandbox /bin/true failed before action as expected"
 
       - name: Kill all bazel processes
+        working-directory: ${{ matrix.working-directory }}
         run: bazel clean --expunge
 
-      - name: Run unblock action
+      - name: Run unblock action with default working directory
+        if: matrix.working-directory == '.'
         uses: ./unblock-user-namespace-for-linux-sandbox
+
+      - name: Run unblock action in nested workspace
+        if: matrix.working-directory != '.'
+        uses: ./unblock-user-namespace-for-linux-sandbox
+        with:
+          working-directory: ${{ matrix.working-directory }}
 
       - name: Verify linux-sandbox succeeds after action
         shell: bash
