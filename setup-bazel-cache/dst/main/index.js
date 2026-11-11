@@ -2287,7 +2287,7 @@ var require_timers = __commonJS({
     var fastTimers = [];
     var NOT_IN_LIST = -2;
     var TO_BE_CLEARED = -1;
-    var PENDING = 0;
+    var PENDING2 = 0;
     var ACTIVE = 1;
     function onTick() {
       fastNow += TICK_MS;
@@ -2295,7 +2295,7 @@ var require_timers = __commonJS({
       let len = fastTimers.length;
       while (idx < len) {
         const timer = fastTimers[idx];
-        if (timer._state === PENDING) {
+        if (timer._state === PENDING2) {
           timer._idleStart = fastNow - TICK_MS;
           timer._state = ACTIVE;
         } else if (timer._state === ACTIVE && fastNow >= timer._idleStart + timer._idleTimeout) {
@@ -2400,7 +2400,7 @@ var require_timers = __commonJS({
         if (!fastNowTimeout || fastTimers.length === 1) {
           refreshTimeout();
         }
-        this._state = PENDING;
+        this._state = PENDING2;
       }
       /**
        * The `clear` method cancels the timer, preventing it from executing.
@@ -15756,8 +15756,8 @@ var require_cache = __commonJS({
        * @returns {requestResponseList}
        */
       #batchCacheOperations(operations) {
-        const cache = this.#relevantRequestResponseList;
-        const backupCache = [...cache];
+        const cache2 = this.#relevantRequestResponseList;
+        const backupCache = [...cache2];
         const addedItems = [];
         const resultList = [];
         try {
@@ -15784,9 +15784,9 @@ var require_cache = __commonJS({
                 return [];
               }
               for (const requestResponse of requestResponses) {
-                const idx = cache.indexOf(requestResponse);
+                const idx = cache2.indexOf(requestResponse);
                 assert4(idx !== -1);
-                cache.splice(idx, 1);
+                cache2.splice(idx, 1);
               }
             } else if (operation.type === "put") {
               if (operation.response == null) {
@@ -15816,11 +15816,11 @@ var require_cache = __commonJS({
               }
               requestResponses = this.#queryCache(operation.request);
               for (const requestResponse of requestResponses) {
-                const idx = cache.indexOf(requestResponse);
+                const idx = cache2.indexOf(requestResponse);
                 assert4(idx !== -1);
-                cache.splice(idx, 1);
+                cache2.splice(idx, 1);
               }
-              cache.push([operation.request, operation.response]);
+              cache2.push([operation.request, operation.response]);
               addedItems.push([operation.request, operation.response]);
             }
             resultList.push([operation.request, operation.response]);
@@ -15994,13 +15994,13 @@ var require_cachestorage = __commonJS({
         if (options.cacheName != null) {
           if (this.#caches.has(options.cacheName)) {
             const cacheList = this.#caches.get(options.cacheName);
-            const cache = new Cache(kConstruct, cacheList);
-            return await cache.match(request, options);
+            const cache2 = new Cache(kConstruct, cacheList);
+            return await cache2.match(request, options);
           }
         } else {
           for (const cacheList of this.#caches.values()) {
-            const cache = new Cache(kConstruct, cacheList);
-            const response = await cache.match(request, options);
+            const cache2 = new Cache(kConstruct, cacheList);
+            const response = await cache2.match(request, options);
             if (response !== void 0) {
               return response;
             }
@@ -16030,12 +16030,12 @@ var require_cachestorage = __commonJS({
         webidl.argumentLengthCheck(arguments, 1, prefix3);
         cacheName = webidl.converters.DOMString(cacheName, prefix3, "cacheName");
         if (this.#caches.has(cacheName)) {
-          const cache2 = this.#caches.get(cacheName);
-          return new Cache(kConstruct, cache2);
+          const cache3 = this.#caches.get(cacheName);
+          return new Cache(kConstruct, cache3);
         }
-        const cache = [];
-        this.#caches.set(cacheName, cache);
-        return new Cache(kConstruct, cache);
+        const cache2 = [];
+        this.#caches.set(cacheName, cache2);
+        return new Cache(kConstruct, cache2);
       }
       /**
        * @see https://w3c.github.io/ServiceWorker/#cache-storage-delete
@@ -20144,7 +20144,7 @@ var require_range = __commonJS({
         range3 = range3.replace(BUILDSTRIPRE, "");
         const memoOpts = (this.options.includePrerelease && FLAG_INCLUDE_PRERELEASE) | (this.options.loose && FLAG_LOOSE);
         const memoKey = memoOpts + ":" + range3;
-        const cached = cache.get(memoKey);
+        const cached = cache2.get(memoKey);
         if (cached) {
           return cached;
         }
@@ -20178,7 +20178,7 @@ var require_range = __commonJS({
           rangeMap.delete("");
         }
         const result = [...rangeMap.values()];
-        cache.set(memoKey, result);
+        cache2.set(memoKey, result);
         return result;
       }
       intersects(range3, options) {
@@ -20217,7 +20217,7 @@ var require_range = __commonJS({
     };
     module2.exports = Range;
     var LRU = require_lrucache();
-    var cache = new LRU();
+    var cache2 = new LRU();
     var parseOptions = require_parse_options();
     var Comparator = require_comparator();
     var debug2 = require_debug();
@@ -37789,16 +37789,16 @@ var createValidator = (production, { xmlVersion = "1.0", asciiOnly = false, maxC
     );
   }
   const regex = getRegexes(xmlVersion, asciiOnly)[production];
-  let cache = /* @__PURE__ */ new Map();
+  let cache2 = /* @__PURE__ */ new Map();
   const validator = (str) => {
-    const cached = cache.get(str);
+    const cached = cache2.get(str);
     if (cached !== void 0) return cached;
     const result = regex.test(str);
-    if (cache.size < maxCacheSize) cache.set(str, result);
+    if (cache2.size < maxCacheSize) cache2.set(str, result);
     return result;
   };
   validator.reset = () => {
-    cache = /* @__PURE__ */ new Map();
+    cache2 = /* @__PURE__ */ new Map();
   };
   return validator;
 };
@@ -44069,12 +44069,12 @@ var NativeCRC64 = (() => {
     }
     Module["getCache"] = getCache;
     function wrapPointer(ptr, __class__) {
-      var cache = getCache(__class__);
-      var ret = cache[ptr];
+      var cache2 = getCache(__class__);
+      var ret = cache2[ptr];
       if (ret) return ret;
       ret = Object.create((__class__ || WrapperObject).prototype);
       ret.ptr = ptr;
-      return cache[ptr] = ret;
+      return cache2[ptr] = ret;
     }
     Module["wrapPointer"] = wrapPointer;
     function castObject(obj, __class__) {
@@ -69715,7 +69715,23 @@ var minimatch2 = (p, pattern, options = {}) => {
   if (!options.nocomment && pattern.charAt(0) === "#") {
     return false;
   }
-  return new Minimatch2(pattern, options).match(p);
+  return cachedMinimatch(pattern, options).match(p);
+};
+var cache = /* @__PURE__ */ new Map();
+var cacheMax = 256;
+var cachedMinimatch = (pattern, options) => {
+  const key = pattern + "\0" + JSON.stringify(options);
+  let mm = cache.get(key);
+  if (mm) {
+    cache.delete(key);
+  } else {
+    mm = new Minimatch2(pattern, { ...options });
+    if (cache.size >= cacheMax) {
+      cache.delete(cache.keys().next().value);
+    }
+  }
+  cache.set(key, mm);
+  return mm;
 };
 var defaultPlatform2 = typeof process === "object" && process ? process.env?.__MINIMATCH_TESTING_PLATFORM__ || process.platform : "posix";
 var path18 = {
@@ -69763,6 +69779,8 @@ var braceExpand2 = (pattern, options = {}) => {
   return expand(pattern, { max: options.braceExpandMax });
 };
 minimatch2.braceExpand = braceExpand2;
+var RANGE_MIN = 100;
+var rangeRe = /(?<![\\$])\{(-?\d+)\.\.(-?\d+)\}/g;
 var match3 = (list, pattern, options = {}) => {
   const mm = new Minimatch2(pattern, options);
   list = list.filter((f) => mm.match(f));
@@ -69888,6 +69906,7 @@ var nextSep = (f, from, sep11) => {
   return s === -1 ? b : b === -1 ? s : Math.min(s, b);
 };
 var lastSep = (f, from, sep11) => sep11 !== "both" ? f.lastIndexOf(sep11, from) : Math.max(f.lastIndexOf("/", from), f.lastIndexOf("\\", from));
+var PENDING = {};
 var Minimatch2 = class {
   options;
   set;
@@ -69923,6 +69942,10 @@ var Minimatch2 = class {
   // brace expansion can make the same portion in many rows, so they
   // share one Matcher, and the states that it caches
   #matchers = /* @__PURE__ */ new Map();
+  // parse() returns PENDING in place of a Matcher
+  #pending = false;
+  // the char that marks numeric ranges in globSet, if any
+  #rangeMark;
   // the GlobstarParts of each pattern row, by start index and partial
   #globstarParts = /* @__PURE__ */ new WeakMap();
   constructor(pattern, options = {}) {
@@ -70026,9 +70049,10 @@ var Minimatch2 = class {
       return;
     }
     this.parseNegate();
-    this.globSet = [...new Set(this.braceExpand())];
+    this.globSet = [...new Set(this.#expandBraces())];
     const rawGlobParts = this.globSet.map((s) => this.#slashSplit(s));
     this.globParts = this.preprocess(rawGlobParts);
+    this.#pending = true;
     let set = this.globParts.map((s, _, __) => {
       if (this.isWindows && this.windowsNoMagicRoot) {
         const n = s[2] === "?" && isLongUNC(s[3]) ? 6 : 4;
@@ -70061,6 +70085,14 @@ var Minimatch2 = class {
     }
     if (!options.noext)
       this.mergeRows();
+    this.#pending = false;
+    this.set.forEach((row, i) => {
+      for (let k = 0; k < row.length; k++) {
+        if (row[k] === PENDING) {
+          row[k] = this.parse(this.globParts[i][k]);
+        }
+      }
+    });
   }
   // Merge rows that only differ in one portion, where each of them
   // is a Matcher, into one row that matches any of them with
@@ -70074,7 +70106,7 @@ var Minimatch2 = class {
       for (let k = 0; k < len; k++) {
         const groups = /* @__PURE__ */ new Map();
         this.set.forEach((row, i) => {
-          if (!(row[k] instanceof Matcher2) || !extSafe(this.globParts[i][k])) {
+          if (!(row[k] instanceof Matcher2 || row[k] === PENDING) || !extSafe(this.globParts[i][k])) {
             return;
           }
           const parts = [...this.globParts[i]];
@@ -70403,6 +70435,8 @@ var Minimatch2 = class {
   // this WOULD be allowed if ** did follow symlinks, or * didn't
   firstPhasePreProcess(globParts) {
     const { braceExpandMax = 1e5 } = this.options;
+    let splitCells = 0;
+    const maxSplitCells = 1e6;
     let didSomething = false;
     do {
       didSomething = false;
@@ -70421,13 +70455,18 @@ var Minimatch2 = class {
           const p2 = parts[gs + 3];
           if (next !== "..")
             continue;
-          if (!p || p === "." || p === ".." || !p2 || p2 === "." || p2 === ".." || globParts.length >= braceExpandMax) {
+          if (!p || p === "." || p === ".." || !p2 || p2 === "." || p2 === "..") {
             continue;
+          }
+          const addedCells = parts.length - 1;
+          if (globParts.length >= braceExpandMax || splitCells + addedCells > maxSplitCells) {
+            throw new RangeError(`optimizationLevel 2: too many patterns from '**/..'`);
           }
           didSomething = true;
           parts.splice(gs, 1);
           const other = parts.slice(0);
           other[gs] = "**";
+          splitCells += addedCells;
           globParts.push(other);
           gs--;
         }
@@ -70466,62 +70505,53 @@ var Minimatch2 = class {
     return globParts;
   }
   // second phase: multi-pattern dedupes
-  // {<pre>/*/<rest>,<pre>/<p>/<rest>} -> <pre>/*/<rest>
   // {<pre>/<rest>,<pre>/<rest>} -> <pre>/<rest>
-  // {<pre>/**/<rest>,<pre>/<rest>} -> <pre>/**/<rest>
-  //
-  // {<pre>/**/<rest>,<pre>/**/<p>/<rest>} -> <pre>/**/<rest>
-  // ^-- not valid because ** doens't follow symlinks
+  // {<pre>/*/<rest>,<pre>/<p>/<rest>} -> <pre>/*/<rest>
   secondPhasePreProcess(globParts) {
-    if (globParts.length > 1e3)
-      return globParts;
-    for (let i = 0; i < globParts.length - 1; i++) {
-      for (let j = i + 1; j < globParts.length; j++) {
-        const matched = this.partsMatch(globParts[i], globParts[j], !this.preserveMultipleSlashes);
-        if (matched) {
-          globParts[i] = [];
-          globParts[j] = matched;
-          break;
-        }
-      }
-    }
-    return globParts.filter((gs) => gs.length);
-  }
-  partsMatch(a, b, emptyGSMatch = false) {
-    let ai = 0;
-    let bi = 0;
-    let result = [];
-    let which2 = "";
-    while (ai < a.length && bi < b.length) {
-      if (a[ai] === b[bi]) {
-        result.push(which2 === "b" ? b[bi] : a[ai]);
-        ai++;
-        bi++;
-      } else if (emptyGSMatch && a[ai] === "**" && b[bi] === a[ai + 1]) {
-        result.push(a[ai]);
-        ai++;
-      } else if (emptyGSMatch && b[bi] === "**" && a[ai] === b[bi + 1]) {
-        result.push(b[bi]);
-        bi++;
-      } else if (a[ai] === "*" && b[bi] && (this.options.dot || !b[bi].startsWith(".")) && b[bi] !== "**") {
-        if (which2 === "b")
-          return false;
-        which2 = "a";
-        result.push(a[ai]);
-        ai++;
-        bi++;
-      } else if (b[bi] === "*" && a[ai] && (this.options.dot || !a[ai].startsWith(".")) && a[ai] !== "**") {
-        if (which2 === "a")
-          return false;
-        which2 = "b";
-        result.push(b[bi]);
-        ai++;
-        bi++;
-      } else {
+    const keys = /* @__PURE__ */ new Set();
+    const rows = globParts.filter((parts) => {
+      const key = parts.join("/");
+      if (keys.has(key))
         return false;
+      keys.add(key);
+      return true;
+    });
+    const stars = /* @__PURE__ */ new Map();
+    for (const parts of rows) {
+      const s = [];
+      for (let i = 0; i < parts.length; i++) {
+        if (parts[i] === "*")
+          s.push(i);
       }
+      if (s.length)
+        stars.set(s.join(","), s);
     }
-    return a.length === b.length && result;
+    if (!stars.size || rows.length * stars.size > 1e5)
+      return rows;
+    const { dot } = this.options;
+    return rows.filter((parts) => {
+      for (const s of stars.values()) {
+        if (s[s.length - 1] >= parts.length)
+          continue;
+        const c = [...parts];
+        let ok2 = true;
+        let changed = false;
+        for (const i of s) {
+          const p = parts[i];
+          if (p === "*")
+            continue;
+          if (!p || p === "**" || !dot && p.startsWith(".")) {
+            ok2 = false;
+            break;
+          }
+          c[i] = "*";
+          changed = true;
+        }
+        if (ok2 && changed && keys.has(c.join("/")))
+          return false;
+      }
+      return true;
+    });
   }
   parseNegate() {
     if (this.nonegate)
@@ -70731,6 +70761,44 @@ var Minimatch2 = class {
   braceExpand() {
     return braceExpand2(this.pattern, this.options);
   }
+  // Expand braces, except numeric ranges such as {0..999} with at
+  // least RANGE_MIN values. Each of those stays in its pattern as
+  // `<mark>0..999<mark>`, for the Matcher to test. If a range might
+  // be inside a [...] class, expand all of them instead.
+  #expandBraces() {
+    const { pattern } = this;
+    if (this.options.nobrace)
+      return this.braceExpand();
+    let code = 57344;
+    while (pattern.includes(String.fromCharCode(code))) {
+      if (++code > 63743)
+        return this.braceExpand();
+    }
+    const mark = String.fromCharCode(code);
+    let found = false;
+    const marked = pattern.replace(rangeRe, (m, lo, hi) => {
+      const a = Number(lo);
+      const b = Number(hi);
+      if (!Number.isSafeInteger(a) || !Number.isSafeInteger(b) || Math.abs(a - b) + 1 < RANGE_MIN) {
+        return m;
+      }
+      found = true;
+      return `${mark}${lo}..${hi}${mark}`;
+    });
+    if (!found)
+      return this.braceExpand();
+    const set = braceExpand2(marked, this.options);
+    for (const p of set) {
+      for (const portion of p.split("/")) {
+        const c = portion.indexOf("[");
+        if (c !== -1 && c < portion.lastIndexOf(mark)) {
+          return this.braceExpand();
+        }
+      }
+    }
+    this.#rangeMark = mark;
+    return set;
+  }
   parse(pattern) {
     assertValidPattern2(pattern);
     const options = this.options;
@@ -70739,13 +70807,22 @@ var Minimatch2 = class {
     if (pattern === "")
       return "";
     const { nocase, nocaseMagicOnly, noext = false, dot, normalize: normalize2 } = options;
-    const lit2 = literal(pattern, noext);
+    const rangeMark = this.#rangeMark;
+    const lit2 = rangeMark && pattern.includes(rangeMark) ? void 0 : literal(pattern, noext);
     if (lit2 !== void 0 && !(nocase && !nocaseMagicOnly && pattern.toUpperCase() !== pattern.toLowerCase())) {
       return this.#norm(lit2);
     }
+    if (this.#pending)
+      return PENDING;
     let m = this.#matchers.get(pattern);
     if (!m) {
-      m = new Matcher2(pattern, { nocase, noext, dot, normalize: normalize2 });
+      m = new Matcher2(pattern, {
+        nocase,
+        noext,
+        dot,
+        normalize: normalize2,
+        ...rangeMark && { rangeMark }
+      });
       this.#matchers.set(pattern, m);
     }
     return m;
@@ -71145,8 +71222,8 @@ async function run() {
       checkoutHistory,
       changed
     });
-    for (const cache of [configuration.caches.disk, configuration.caches.repository]) {
-      import_node_fs8.default.mkdirSync(cache.path, { recursive: true });
+    for (const cache2 of [configuration.caches.disk, configuration.caches.repository]) {
+      import_node_fs8.default.mkdirSync(cache2.path, { recursive: true });
     }
     const restoreDetails = {
       bazelisk: await restoreCache2(configuration, configuration.caches.bazelisk, restores.bazelisk),
