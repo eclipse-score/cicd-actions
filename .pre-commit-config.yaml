@@ -73,7 +73,7 @@ repos:
         language: node
         additional_dependencies: [npm@11.12.1]
         entry: setup-qnx-sdp/build.sh
-        files: ^(setup-qnx-sdp/src/.*\.js|setup-qnx-sdp/package\.json)$
+        files: ^setup-qnx-sdp/(src/.*\.js|package(-lock)?\.json|action\.yml|build\.sh|eslint\.config\.js)$
         pass_filenames: false
       - id: build-verify-cleanup
         name: Build verify-cleanup distribution files

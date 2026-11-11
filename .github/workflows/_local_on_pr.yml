@@ -32,6 +32,15 @@ jobs:
       id-token: write
       contents: read
 
+  dependabot-automation-tests:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Test distribution artifact validation and publishing
+        run: python3 -B -m unittest discover -s .github/scripts -p 'test_*.py' -v
+
   inter-repo-access-tests:
     uses: ./.github/workflows/test-inter-repo-access.yml
     permissions:
@@ -95,6 +104,7 @@ jobs:
     permissions: {}
     needs:
       - common
+      - dependabot-automation-tests
       - inter-repo-access-tests
       - setup-qnx-sdp-tests
       - unblock-user-namespace-for-linux-sandbox-tests
