@@ -15,7 +15,7 @@ set -euo pipefail
 
 readonly sources_file=/etc/apt/sources.list.d/ubuntu.sources
 readonly mirror_list_file=/etc/apt/apt-mirrors.txt
-readonly apt_retries_file=/etc/apt/apt.conf.d/80-acquire-retries
+readonly apt_retries_file=/etc/apt/apt.conf.d/80-acquire-retries.conf
 
 if [[ ! -r /etc/os-release ]]; then
   echo "ERROR: /etc/os-release is unavailable; this action requires Ubuntu."

@@ -39,6 +39,7 @@ jobs:
           sudo -u _apt test -r /etc/apt/apt-mirrors.txt
           grep -Fq $'https://mirror.pilotfiber.com/ubuntu/\tpriority:1' /etc/apt/apt-mirrors.txt
           grep -Fq $'http://mirror.arizona.edu/ubuntu/\tpriority:2' /etc/apt/apt-mirrors.txt
+          grep -Fq 'Acquire::Retries "3";' /etc/apt/apt.conf.d/80-acquire-retries.conf
           apt-config dump | grep -F 'Acquire::Retries "3";'
 
       - name: Update package lists and install Graphviz
