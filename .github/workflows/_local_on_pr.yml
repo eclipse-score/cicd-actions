@@ -46,6 +46,11 @@ jobs:
     permissions:
       contents: read
 
+  configure-apt-mirrors-tests:
+    uses: ./.github/workflows/test-configure-apt-mirrors.yml
+    permissions:
+      contents: read
+
   setup-qnx-sdp-tests:
     uses: ./.github/workflows/test-setup-qnx-sdp.yml
     permissions:
@@ -106,6 +111,7 @@ jobs:
       - common
       - dependabot-automation-tests
       - inter-repo-access-tests
+      - configure-apt-mirrors-tests
       - setup-qnx-sdp-tests
       - unblock-user-namespace-for-linux-sandbox-tests
       - setup-bazel-cache-tests

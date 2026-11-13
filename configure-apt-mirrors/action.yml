@@ -1,0 +1,39 @@
+# *******************************************************************************
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+name: Configure APT mirror fallback
+description: Configure ordered Ubuntu archive mirrors and APT retries.
+
+inputs:
+  mirrors:
+    description: >-
+      Ordered Ubuntu archive mirror base URLs, one per line. Earlier entries
+      receive higher APT priority and are tried first.
+    required: false
+    default: |
+      https://mirror.pilotfiber.com/ubuntu/
+      http://mirror.arizona.edu/ubuntu/
+  retries:
+    description: Number of times APT retries failed downloads.
+    required: false
+    default: "3"
+
+runs:
+  using: composite
+  steps:
+    - name: Configure Ubuntu APT mirror fallback
+      shell: bash
+      env:
+        APT_MIRRORS_INPUT: ${{ inputs.mirrors }}
+        APT_RETRIES: ${{ inputs.retries }}
+      run: bash "${{ github.action_path }}/configure-apt-mirrors.sh"
