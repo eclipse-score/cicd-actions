@@ -69710,27 +69710,114 @@ var unescape2 = (s, { windowsPathsNoEscape = false, magicalBraces = true } = {})
 };
 
 // node_modules/minimatch/dist/esm/index.js
-var minimatch2 = (p, pattern, options = {}) => {
+var DEFAULT_BRACE_EXPAND_MAX = 1e5;
+var DEFAULT_GLOB_STAR_RECURSION_MAX = 200;
+var AWE_KEY = "allowWindowsEscape";
+var minimatch2 = (p, pattern, options) => {
   assertValidPattern2(pattern);
-  if (!options.nocomment && pattern.charAt(0) === "#") {
+  if (!options?.nocomment && pattern.charAt(0) === "#") {
     return false;
   }
   return cachedMinimatch(pattern, options).match(p);
 };
 var cache = /* @__PURE__ */ new Map();
+var oldCache = /* @__PURE__ */ new Map();
+var cacheSize = 0;
 var cacheMax = 256;
-var cachedMinimatch = (pattern, options) => {
-  const key = pattern + "\0" + JSON.stringify(options);
-  let mm = cache.get(key);
-  if (mm) {
-    cache.delete(key);
-  } else {
-    mm = new Minimatch2(pattern, { ...options });
-    if (cache.size >= cacheMax) {
-      cache.delete(cache.keys().next().value);
+var tri = (v) => v === void 0 ? 0 : v ? 2 : 1;
+var booleanWeights = new Map(Object.keys({
+  nobrace: 0,
+  nocomment: 0,
+  nonegate: 0,
+  noglobstar: 0,
+  noext: 0,
+  nonull: 0,
+  partial: 0,
+  dot: 0,
+  nocase: 0,
+  nocaseMagicOnly: 0,
+  magicalBraces: 0,
+  matchBase: 0,
+  flipNegate: 0,
+  preserveMultipleSlashes: 0,
+  windowsNoMagicRoot: 0
+}).map((k, i) => [k, 24 * 3 ** i]));
+var optionsKey = (o) => {
+  let n = 0;
+  let wpe = false;
+  for (const k in o) {
+    const v = o[k];
+    switch (k) {
+      // the same test as the Minimatch constructor
+      case "windowsPathsNoEscape":
+        if (v)
+          wpe = true;
+        break;
+      case AWE_KEY:
+        if (v === false)
+          wpe = true;
+        break;
+      case "platform": {
+        const p = v || defaultPlatform2;
+        if (p === defaultPlatform2)
+          break;
+        if (p === "darwin")
+          n += 3;
+        else if (p === "win32")
+          n += 6;
+        else if (p === "linux")
+          n += 9;
+        else
+          return JSON.stringify(o);
+        break;
+      }
+      case "optimizationLevel":
+        if (v === void 0)
+          break;
+        n += v >= 2 ? 1 : v >= 1 ? 0 : 2;
+        break;
+      case "braceExpandMax":
+        if (v !== void 0 && v !== DEFAULT_BRACE_EXPAND_MAX) {
+          return JSON.stringify(o);
+        }
+        break;
+      case "maxGlobstarRecursion":
+        if (v !== void 0 && v !== DEFAULT_GLOB_STAR_RECURSION_MAX) {
+          return JSON.stringify(o);
+        }
+        break;
+      case "normalize":
+        if (v !== void 0)
+          return JSON.stringify(o);
+        break;
+      default:
+        n += (booleanWeights.get(k) ?? 0) * tri(v);
     }
   }
-  cache.set(key, mm);
+  return wpe ? n + 12 : n;
+};
+var copyOptions = (o) => {
+  const copy = {};
+  for (const k in o)
+    copy[k] = o[k];
+  return copy;
+};
+var cachedMinimatch = (pattern, options) => {
+  const key = options ? optionsKey(options) : 0;
+  let mm = cache.get(key)?.get(pattern);
+  if (mm)
+    return mm;
+  mm = oldCache.get(key)?.get(pattern) ?? new Minimatch2(pattern, copyOptions(options));
+  if (cacheSize >= cacheMax) {
+    oldCache = cache;
+    cache = /* @__PURE__ */ new Map();
+    cacheSize = 0;
+  }
+  let byPattern = cache.get(key);
+  if (!byPattern)
+    cache.set(key, byPattern = /* @__PURE__ */ new Map());
+  byPattern.set(pattern, mm);
+  cacheSize++;
   return mm;
 };
 var defaultPlatform2 = typeof process === "object" && process ? process.env?.__MINIMATCH_TESTING_PLATFORM__ || process.platform : "posix";
@@ -69742,7 +69829,10 @@ var sep10 = defaultPlatform2 === "win32" ? path18.win32.sep : path18.posix.sep;
 minimatch2.sep = sep10;
 var GLOBSTAR2 = /* @__PURE__ */ Symbol("globstar **");
 minimatch2.GLOBSTAR = GLOBSTAR2;
-var filter2 = (pattern, options = {}) => (p) => minimatch2(p, pattern, options);
+var filter2 = (pattern, options) => {
+  let mm;
+  return (p) => (mm ??= cachedMinimatch(pattern, options)).match(p);
+};
 minimatch2.filter = filter2;
 var ext2 = (a, b = {}) => Object.assign({}, a, b);
 var defaults2 = (def) => {
@@ -69952,12 +70042,11 @@ var Minimatch2 = class {
     assertValidPattern2(pattern);
     options = options || {};
     this.options = options;
-    this.maxGlobstarRecursion = options.maxGlobstarRecursion ?? 200;
+    this.maxGlobstarRecursion = options.maxGlobstarRecursion ?? DEFAULT_GLOB_STAR_RECURSION_MAX;
     this.pattern = pattern;
     this.platform = options.platform || defaultPlatform2;
     this.isWindows = this.platform === "win32";
-    const awe = "allowWindowsEscape";
-    this.windowsPathsNoEscape = !!options.windowsPathsNoEscape || options[awe] === false;
+    this.windowsPathsNoEscape = !!options.windowsPathsNoEscape || options[AWE_KEY] === false;
     if (this.windowsPathsNoEscape) {
       this.pattern = this.pattern.replace(/\\/g, "/");
     }
@@ -70434,7 +70523,7 @@ var Minimatch2 = class {
   // **/*/<rest> -> */**/<rest> <== not valid because ** doesn't follow
   // this WOULD be allowed if ** did follow symlinks, or * didn't
   firstPhasePreProcess(globParts) {
-    const { braceExpandMax = 1e5 } = this.options;
+    const { braceExpandMax = DEFAULT_BRACE_EXPAND_MAX } = this.options;
     let splitCells = 0;
     const maxSplitCells = 1e6;
     let didSomething = false;
