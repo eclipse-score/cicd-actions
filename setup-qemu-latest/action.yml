@@ -1,0 +1,365 @@
+# *******************************************************************************
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+name: Setup QEMU latest
+description: Build, install, validate, and cache QEMU from source.
+
+inputs:
+  qemu-version:
+    description: QEMU release version to build from source; must match X.Y.Z (digits and dots only).
+    required: false
+    default: "11.1.3"
+  allow-downgrade:
+    description: Build qemu-version instead of keeping a newer preinstalled QEMU.
+    required: false
+    default: "false"
+  qemu-targets:
+    description: Comma-separated list passed to QEMU's --target-list configure option.
+    required: false
+    default: "aarch64-softmmu,x86_64-softmmu"
+  install-prefix:
+    description: Base directory QEMU is installed under; relative paths resolve against the workspace, and the version is appended.
+    required: false
+    default: "/opt/qemu"
+  configure-args:
+    description: Newline-delimited arguments appended to the ./configure invocation; each non-empty line is one argument.
+    required: false
+    default: ""
+  extra-build-deps:
+    description: Extra space-separated apt packages for custom features; also installed on cache hits to provision their runtime libraries.
+    required: false
+    default: ""
+  nproc:
+    description: Number of parallel jobs used to build QEMU; defaults to the runner CPU count.
+    required: false
+    default: ""
+  validation-target:
+    description: QEMU target to validate with -machine help (e.g., aarch64);  empty disables validation.
+    required: false
+    default: "aarch64"
+  enable-kvm-access:
+    description: Grant the job's runner user ACL read/write access to /dev/kvm for hardware-accelerated execution; the original ACL is restored after the job. Leave disabled unless KVM acceleration is required.
+    required: false
+    default: "false"
+
+outputs:
+  install-prefix:
+    description: Prefix QEMU was installed under; empty when a preinstalled system QEMU was kept instead.
+    value: ${{ steps.qemu-policy.outputs.install-prefix }}
+  cache-key:
+    description: Cache key used for this QEMU build.
+    value: ${{ steps.vars.outputs.cache-key }}
+  cache-hit:
+    description: Whether the QEMU build cache was restored ("true") or missed ("false").
+    value: ${{ steps.cache.outputs.cache-hit || 'false' }}
+  bin-path:
+    description: Path to the QEMU bin directory.
+    value: ${{ steps.qemu-policy.outputs.bin-path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Compute cache key and paths
+      id: vars
+      shell: bash
+      env:
+        INSTALL_PREFIX_BASE: ${{ inputs.install-prefix }}
+        QEMU_VERSION: ${{ inputs.qemu-version }}
+        QEMU_TARGETS: ${{ inputs.qemu-targets }}
+        CONFIGURE_ARGS: ${{ inputs.configure-args }}
+        EXTRA_BUILD_DEPS: ${{ inputs.extra-build-deps }}
+      run: |
+        set -euo pipefail
+        if [[ ! "$QEMU_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "qemu-version '$QEMU_VERSION' must match X.Y.Z (digits and dots only)." >&2
+          exit 1
+        fi
+
+        if [[ -z "$INSTALL_PREFIX_BASE" ]]; then
+          echo "install-prefix must not be empty." >&2
+          exit 1
+        fi
+        if [[ "$INSTALL_PREFIX_BASE" == *$'\n'* || "$INSTALL_PREFIX_BASE" == *$'\r'* ]]; then
+          echo "install-prefix must not contain newline characters." >&2
+          exit 1
+        fi
+        if [[ "$INSTALL_PREFIX_BASE" != /* ]]; then
+          INSTALL_PREFIX_BASE="$GITHUB_WORKSPACE/$INSTALL_PREFIX_BASE"
+        fi
+        install_base="$(realpath -m -- "$INSTALL_PREFIX_BASE")"
+        install_prefix="$install_base/$QEMU_VERSION"
+        prefix_hash="$(printf '%s' "$install_prefix" | sha256sum | cut -d' ' -f1)"
+        config_hash="$(printf '%s' "$QEMU_TARGETS|$CONFIGURE_ARGS|$EXTRA_BUILD_DEPS" | sha256sum | cut -d' ' -f1)"
+        platform_hash="$( { uname -m; cat /etc/os-release; } | sha256sum | cut -d' ' -f1)"
+        cache_key="qemu-${{ runner.os }}-${platform_hash}-$QEMU_VERSION-${prefix_hash}-${config_hash}"
+
+        echo "install-base=$install_base" >> "$GITHUB_OUTPUT"
+        echo "install-prefix=$install_prefix" >> "$GITHUB_OUTPUT"
+        echo "cache-key=$cache_key" >> "$GITHUB_OUTPUT"
+        echo "bin-path=$install_prefix/bin" >> "$GITHUB_OUTPUT"
+
+    - name: Prepare QEMU install base
+      shell: bash
+      env:
+        INSTALL_PREFIX_BASE: ${{ steps.vars.outputs.install-base }}
+      run: |
+        set -euo pipefail
+        sudo install -d -o "$(id -u)" -g "$(id -g)" "$INSTALL_PREFIX_BASE"
+
+    - name: Install QEMU runtime dependencies
+      shell: bash
+      env:
+        EXTRA_BUILD_DEPS: ${{ inputs.extra-build-deps }}
+      run: |
+        set -euo pipefail
+        read -ra extra_build_deps <<< "$EXTRA_BUILD_DEPS"
+        sudo apt-get update
+        glib_package=libglib2.0-0
+        if apt-cache show libglib2.0-0t64 > /dev/null 2>&1; then
+          glib_package=libglib2.0-0t64
+        fi
+        sudo apt-get install -y \
+          libfdt1 "$glib_package" libpixman-1-0 zlib1g libstdc++6 libgcc-s1 \
+          "${extra_build_deps[@]}"
+
+    - name: Restore or save QEMU build cache
+      id: cache
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.vars.outputs.install-prefix }}
+        key: ${{ steps.vars.outputs.cache-key }}
+
+    - name: Select existing QEMU or source build
+      id: qemu-policy
+      shell: bash
+      env:
+        CACHE_HIT: ${{ steps.cache.outputs.cache-hit }}
+        QEMU_TARGETS: ${{ inputs.qemu-targets }}
+        QEMU_VERSION: ${{ inputs.qemu-version }}
+        ALLOW_DOWNGRADE: ${{ inputs.allow-downgrade }}
+        BUILT_INSTALL_PREFIX: ${{ steps.vars.outputs.install-prefix }}
+        BUILT_BIN_PATH: ${{ steps.vars.outputs.bin-path }}
+      run: |
+        set -euo pipefail
+        if [[ "$CACHE_HIT" == "true" ]]; then
+          echo "Using cached QEMU installation."
+          echo "use-system=false" >> "$GITHUB_OUTPUT"
+          echo "install-prefix=$BUILT_INSTALL_PREFIX" >> "$GITHUB_OUTPUT"
+          echo "bin-path=$BUILT_BIN_PATH" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        keep_system=true
+        system_bin_path=""
+        IFS=',' read -ra qemu_targets <<< "$QEMU_TARGETS"
+        for target in "${qemu_targets[@]}"; do
+          target="${target//[[:space:]]/}"
+          case "$target" in
+            *-softmmu) qemu_binary="qemu-system-${target%-softmmu}" ;;
+            *-linux-user) qemu_binary="qemu-${target%-linux-user}" ;;
+            *) keep_system=false; break ;;
+          esac
+          binary_path="$(command -v "$qemu_binary" 2>/dev/null || true)"
+          if [[ -z "$binary_path" ]]; then
+            keep_system=false
+            break
+          fi
+          version_output="$("$binary_path" --version 2>/dev/null || true)"
+          installed_version="$(awk -v binary="$qemu_binary" '
+            $1 == "QEMU" && $2 == "emulator" && $3 == "version" { print $4; exit }
+            $1 == binary && $2 == "version" { print $3; exit }
+          ' <<< "$version_output")"
+          if [[ ! "$installed_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+~.-].*)?$ ]]; then
+            keep_system=false
+            break
+          fi
+          if ! dpkg --compare-versions "$installed_version" eq "$QEMU_VERSION"; then
+            if [[ "$ALLOW_DOWNGRADE" == "true" ]] || ! dpkg --compare-versions "$installed_version" gt "$QEMU_VERSION"; then
+              keep_system=false
+              break
+            fi
+          fi
+          binary_dir="$(dirname "$binary_path")"
+          if [[ -n "$system_bin_path" && "$system_bin_path" != "$binary_dir" ]]; then
+            keep_system=false
+            break
+          fi
+          system_bin_path="$binary_dir"
+        done
+        if [[ -z "$system_bin_path" ]]; then
+          keep_system=false
+        fi
+
+        if [[ "$keep_system" == "true" ]]; then
+          echo "Keeping preinstalled QEMU targets in $system_bin_path (requested: $QEMU_VERSION)."
+          echo "use-system=true" >> "$GITHUB_OUTPUT"
+          echo "install-prefix=" >> "$GITHUB_OUTPUT"
+          echo "bin-path=$system_bin_path" >> "$GITHUB_OUTPUT"
+        else
+          echo "Building QEMU $QEMU_VERSION; not all requested targets satisfy the preinstalled version policy."
+
+          packages_to_remove=()
+          for target in "${qemu_targets[@]}"; do
+            target="${target//[[:space:]]/}"
+            case "$target" in
+              *-softmmu) qemu_binary="qemu-system-${target%-softmmu}" ;;
+              *-linux-user) qemu_binary="qemu-${target%-linux-user}" ;;
+              *) continue ;;
+            esac
+            binary_path="$(command -v "$qemu_binary" 2>/dev/null || true)"
+            [[ -z "$binary_path" ]] && continue
+            owning_package="$(dpkg -S "$binary_path" 2>/dev/null | cut -d: -f1 || true)"
+            [[ -n "$owning_package" ]] && packages_to_remove+=("$owning_package")
+          done
+          if [[ "${#packages_to_remove[@]}" -gt 0 ]]; then
+            mapfile -t packages_to_remove < <(printf '%s\n' "${packages_to_remove[@]}" | sort -u)
+            echo "Removing packages that own the QEMU binaries being replaced: ${packages_to_remove[*]}"
+            sudo apt-get remove -y --purge "${packages_to_remove[@]}" || true
+          fi
+
+          echo "use-system=false" >> "$GITHUB_OUTPUT"
+          echo "install-prefix=$BUILT_INSTALL_PREFIX" >> "$GITHUB_OUTPUT"
+          echo "bin-path=$BUILT_BIN_PATH" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Prepare QEMU source build install prefix
+      if: steps.qemu-policy.outputs.use-system != 'true' && steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        INSTALL_PREFIX: ${{ steps.vars.outputs.install-prefix }}
+      run: |
+        set -euo pipefail
+        install -d "$INSTALL_PREFIX"
+
+    - name: Install build dependencies
+      if: steps.qemu-policy.outputs.use-system != 'true' && steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        sudo apt-get install -y \
+          ninja-build build-essential libglib2.0-dev libpixman-1-dev \
+          libfdt-dev zlib1g-dev flex bison pkg-config python3 python3-venv gnupg
+
+    - name: Prepare isolated QEMU source directory
+      id: qemu-source
+      if: steps.qemu-policy.outputs.use-system != 'true' && steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        source_dir="$(mktemp -d "$RUNNER_TEMP/qemu-source.XXXXXX")"
+        echo "path=$source_dir" >> "$GITHUB_OUTPUT"
+
+    - name: Download, verify, extract QEMU source and cleanup downloads.
+      if: steps.qemu-policy.outputs.use-system != 'true' && steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      working-directory: ${{ steps.qemu-source.outputs.path }}
+      env:
+        QEMU_VERSION: ${{ inputs.qemu-version }}
+      run: |
+        set -euo pipefail
+        qemu_signing_key_fingerprint="CEACC9E15534EBABB82D3FA03353C9CEF108B584"
+        export GNUPGHOME="$(mktemp -d)"
+        chmod 700 "$GNUPGHOME"
+        trap 'rm -rf "$GNUPGHOME"' EXIT
+
+        curl -fsSLO "https://download.qemu.org/qemu-$QEMU_VERSION.tar.xz"
+        curl -fsSLO "https://download.qemu.org/qemu-$QEMU_VERSION.tar.xz.sig"
+        curl -fsSL "https://keys.openpgp.org/vks/v1/by-fingerprint/${qemu_signing_key_fingerprint}" | gpg --batch --import
+        actual_fingerprint="$(gpg --batch --with-colons --fingerprint "$qemu_signing_key_fingerprint" | awk -F: '/^fpr:/ { print $10; exit }')"
+        if [[ "$actual_fingerprint" != "$qemu_signing_key_fingerprint" ]]; then
+          echo "Imported QEMU signing key fingerprint '$actual_fingerprint' does not match expected '$qemu_signing_key_fingerprint'." >&2
+          exit 1
+        fi
+        gpg --batch --verify "qemu-$QEMU_VERSION.tar.xz.sig" "qemu-$QEMU_VERSION.tar.xz"
+        tar xf "qemu-$QEMU_VERSION.tar.xz"
+        rm -rf "qemu-$QEMU_VERSION.tar.xz" "qemu-$QEMU_VERSION.tar.xz.sig"
+
+    - name: Build and install QEMU and cleanup QEMU sources.
+      if: steps.qemu-policy.outputs.use-system != 'true' && steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      working-directory: ${{ steps.qemu-source.outputs.path }}/qemu-${{ inputs.qemu-version }}
+      env:
+        INSTALL_PREFIX: ${{ steps.vars.outputs.install-prefix }}
+        QEMU_TARGETS: ${{ inputs.qemu-targets }}
+        CONFIGURE_ARGS: ${{ inputs.configure-args }}
+        NPROC: ${{ inputs.nproc }}
+      run: |
+        set -euo pipefail
+        configure_args=()
+        while IFS= read -r configure_arg || [[ -n "$configure_arg" ]]; do
+          [[ -z "$configure_arg" ]] && continue
+          configure_args+=("$configure_arg")
+        done <<< "$CONFIGURE_ARGS"
+        ./configure \
+          --prefix="$INSTALL_PREFIX" \
+          --target-list="$QEMU_TARGETS" \
+          --disable-docs --disable-gtk --disable-sdl \
+          "${configure_args[@]}"
+        build_jobs="$NPROC"
+        if [[ -z "$build_jobs" || "$build_jobs" == "0" ]]; then
+          build_jobs="$(nproc)"
+        fi
+        make -j"$build_jobs"
+        make install
+
+    - name: Clean QEMU source
+      if: steps.qemu-policy.outputs.use-system != 'true' && steps.cache.outputs.cache-hit != 'true'
+      env:
+        SOURCE_DIR: ${{ steps.qemu-source.outputs.path }}
+      shell: bash
+      run: rm -rf -- "$SOURCE_DIR"
+
+    - name: Save QEMU build cache
+      if: steps.qemu-policy.outputs.use-system != 'true' && steps.cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.vars.outputs.install-prefix }}
+        key: ${{ steps.vars.outputs.cache-key }}
+
+    - name: Validate the installation
+      if: inputs.validation-target != ''
+      shell: bash
+      env:
+        VALIDATION_TARGET: ${{ inputs.validation-target }}
+        QEMU_TARGETS: ${{ inputs.qemu-targets }}
+        BIN_PATH: ${{ steps.qemu-policy.outputs.bin-path }}
+      run: |
+        set -euo pipefail
+        validation_target="$VALIDATION_TARGET"
+        target_configured=0
+        IFS=',' read -ra qemu_targets <<< "$QEMU_TARGETS"
+        for target in "${qemu_targets[@]}"; do
+          target="${target//[[:space:]]/}"
+          if [[ "$target" == "${validation_target}-softmmu" ]]; then
+            target_configured=1
+            break
+          fi
+        done
+
+        if [[ "$target_configured" -ne 1 ]]; then
+          echo "Validation target '$validation_target' is not present as a softmmu target in qemu-targets '$QEMU_TARGETS'. Set validation-target to an empty value to disable validation." >&2
+          exit 1
+        fi
+
+        "$BIN_PATH/qemu-system-${validation_target}" -machine help
+
+    - name: Add QEMU to PATH
+      if: steps.qemu-policy.outputs.use-system != 'true'
+      shell: bash
+      env:
+        BIN_PATH: ${{ steps.qemu-policy.outputs.bin-path }}
+      run: printf '%s\n' "$BIN_PATH" >> "$GITHUB_PATH"
+
+    - name: Enable KVM access
+      if: inputs.enable-kvm-access == 'true'
+      uses: eclipse-score/cicd-actions/setup-qemu-latest/kvm-access@a0f35e5915c8e65ae68619d0a86a8787c5999c38

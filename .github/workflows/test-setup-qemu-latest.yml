@@ -1,0 +1,383 @@
+# *******************************************************************************
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+name: Test Setup QEMU Latest
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unit-tests:
+    name: QEMU policy and KVM regression tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Run regression tests
+        working-directory: setup-qemu-latest
+        run: |
+          npm ci --ignore-scripts
+          npm test
+
+  build-from-source:
+    name: Build and validate QEMU
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Run setup-qemu-latest action
+        id: setup-qemu
+        uses: ./setup-qemu-latest
+        with:
+          validation-target: aarch64
+          nproc: "2"
+          enable-kvm-access: "true"
+
+      - name: Verify outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${{ steps.setup-qemu.outputs.install-prefix }}" ]]; then
+            echo "ERROR: install-prefix output is empty"
+            exit 1
+          fi
+
+          if [[ -z "${{ steps.setup-qemu.outputs.bin-path }}" ]]; then
+            echo "ERROR: bin-path output is empty"
+            exit 1
+          fi
+
+          if [[ -z "${{ steps.setup-qemu.outputs.cache-key }}" ]]; then
+            echo "ERROR: cache-key output is empty"
+            exit 1
+          fi
+
+      - name: Verify QEMU executable
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          qemu_bin="${{ steps.setup-qemu.outputs.bin-path }}/qemu-system-aarch64"
+          if [[ ! -x "$qemu_bin" ]]; then
+            echo "ERROR: expected QEMU binary not found: $qemu_bin"
+            exit 1
+          fi
+
+          "$qemu_bin" --version
+          "$qemu_bin" -machine help | grep -Eq '(^|[[:space:]])raspi4b([[:space:]]|$)'
+
+          x86_qemu_bin="${{ steps.setup-qemu.outputs.bin-path }}/qemu-system-x86_64"
+          if [[ ! -x "$x86_qemu_bin" ]]; then
+            echo "ERROR: expected QEMU binary not found: $x86_qemu_bin"
+            exit 1
+          fi
+
+          "$x86_qemu_bin" --version
+          if [[ -e /dev/kvm ]]; then
+            if [[ ! -r /dev/kvm || ! -w /dev/kvm ]]; then
+              echo "ERROR: expected rw access to /dev/kvm with enable-kvm-access: true"
+              exit 1
+            fi
+
+            if ! getfacl /dev/kvm | grep -q "^user:$(id -un):rw-"; then
+              echo "ERROR: expected an explicit rw ACL entry for $(id -un) on /dev/kvm"
+              getfacl /dev/kvm
+              exit 1
+            fi
+          else
+            echo "KVM device not available on this runner; skipping permission check."
+          fi
+
+      - name: Check out at workspace root before KVM cleanup
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+  cache-miss-then-hit:
+    name: Exercise cache miss and cache hit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Run setup-qemu-latest action (expect cache miss)
+        id: setup-qemu-1
+        uses: ./setup-qemu-latest
+        with:
+          qemu-targets: x86_64-softmmu
+          validation-target: x86_64
+          nproc: "2"
+          extra-build-deps: libslirp-dev
+          configure-args: |
+            --enable-slirp
+            --extra-cflags=-DTEST_RUN_${{ github.run_id }}_${{ github.run_attempt }}_CACHE
+
+      - name: Verify first invocation missed the cache
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ steps.setup-qemu-1.outputs.cache-hit }}" != "false" ]]; then
+            echo "ERROR: expected a cache miss on the first invocation of this isolated test"
+            exit 1
+          fi
+
+          if [[ -z "${{ steps.setup-qemu-1.outputs.install-prefix }}" ]]; then
+            echo "ERROR: install-prefix output is empty after a source build"
+            exit 1
+          fi
+
+      - name: Remove installation before cache restore
+        shell: bash
+        env:
+          INSTALL_PREFIX: ${{ steps.setup-qemu-1.outputs.install-prefix }}
+        run: |
+          set -euo pipefail
+          if [[ "$INSTALL_PREFIX" != /opt/qemu/11.1.3 ]]; then
+            echo "ERROR: unexpected test installation prefix '$INSTALL_PREFIX'" >&2
+            exit 1
+          fi
+          rm -rf -- "$INSTALL_PREFIX"
+
+      - name: Remove custom feature dependencies before cache restore
+        run: sudo apt-get remove -y libslirp-dev libslirp0
+
+      - name: Run setup-qemu-latest action (expect cache hit)
+        id: setup-qemu-2
+        uses: ./setup-qemu-latest
+        with:
+          qemu-targets: x86_64-softmmu
+          validation-target: x86_64
+          nproc: "2"
+          extra-build-deps: libslirp-dev
+          configure-args: |
+            --enable-slirp
+            --extra-cflags=-DTEST_RUN_${{ github.run_id }}_${{ github.run_attempt }}_CACHE
+
+      - name: Verify second invocation hit the cache
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ steps.setup-qemu-2.outputs.cache-hit }}" != "true" ]]; then
+            echo "ERROR: expected a cache hit on the second invocation with identical inputs"
+            exit 1
+          fi
+
+          if [[ "${{ steps.setup-qemu-2.outputs.cache-key }}" != "${{ steps.setup-qemu-1.outputs.cache-key }}" ]]; then
+            echo "ERROR: cache-key differed between the two invocations with identical inputs"
+            exit 1
+          fi
+
+          qemu_bin="${{ steps.setup-qemu-2.outputs.bin-path }}/qemu-system-x86_64"
+          if [[ ! -x "$qemu_bin" ]]; then
+            echo "ERROR: expected QEMU binary not found after cache hit: $qemu_bin"
+            exit 1
+          fi
+
+          "$qemu_bin" --version
+
+  preinstalled-exact-version-kept:
+    name: Keep preinstalled QEMU on exact version match
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install fake preinstalled QEMU
+        shell: bash
+        run: |
+          set -euo pipefail
+          fake_bin_dir="$RUNNER_TEMP/fake-qemu-bin"
+          mkdir -p "$fake_bin_dir"
+          cat > "$fake_bin_dir/qemu-system-x86_64" <<'EOF'
+          #!/usr/bin/env bash
+          if [[ "$1" == "--version" ]]; then
+            echo "QEMU emulator version 9.9.9 (fake)"
+            exit 0
+          fi
+          echo "fake qemu-system-x86_64 invoked with: $*"
+          exit 0
+          EOF
+          chmod +x "$fake_bin_dir/qemu-system-x86_64"
+          echo "$fake_bin_dir" >> "$GITHUB_PATH"
+
+      - name: Run setup-qemu-latest action
+        id: setup-qemu
+        uses: ./setup-qemu-latest
+        with:
+          qemu-version: "9.9.9"
+          qemu-targets: x86_64-softmmu
+          validation-target: x86_64
+          configure-args: |
+            --extra-cflags=-DTEST_RUN_${{ github.run_id }}_${{ github.run_attempt }}_EXACT
+
+      - name: Verify the preinstalled QEMU was kept
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -n "${{ steps.setup-qemu.outputs.install-prefix }}" ]]; then
+            echo "ERROR: expected install-prefix to be empty when the system QEMU is kept, got '${{ steps.setup-qemu.outputs.install-prefix }}'"
+            exit 1
+          fi
+
+          expected_bin_path="$(dirname "$(command -v qemu-system-x86_64)")"
+          if [[ "${{ steps.setup-qemu.outputs.bin-path }}" != "$expected_bin_path" ]]; then
+            echo "ERROR: expected bin-path '$expected_bin_path', got '${{ steps.setup-qemu.outputs.bin-path }}'"
+            exit 1
+          fi
+
+          version_output="$(qemu-system-x86_64 --version)"
+          if [[ "$version_output" != *"9.9.9"* ]]; then
+            echo "ERROR: expected the fake QEMU 9.9.9 to remain active, got: $version_output"
+            exit 1
+          fi
+
+          if [[ -d /opt/qemu/9.9.9 ]]; then
+            echo "ERROR: source build directory /opt/qemu/9.9.9 should not exist when the system QEMU is kept"
+            exit 1
+          fi
+
+  preinstalled-newer-version-kept:
+    name: Keep newer preinstalled QEMU without allow-downgrade
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install fake newer preinstalled QEMU
+        shell: bash
+        run: |
+          set -euo pipefail
+          fake_bin_dir="$RUNNER_TEMP/fake-qemu-bin"
+          mkdir -p "$fake_bin_dir"
+          cat > "$fake_bin_dir/qemu-system-x86_64" <<'EOF'
+          #!/usr/bin/env bash
+          if [[ "$1" == "--version" ]]; then
+            echo "QEMU emulator version 99.0.0 (fake)"
+            exit 0
+          fi
+          echo "fake qemu-system-x86_64 invoked with: $*"
+          exit 0
+          EOF
+          chmod +x "$fake_bin_dir/qemu-system-x86_64"
+          echo "$fake_bin_dir" >> "$GITHUB_PATH"
+
+      - name: Run setup-qemu-latest action
+        id: setup-qemu
+        uses: ./setup-qemu-latest
+        with:
+          qemu-version: "11.1.3"
+          allow-downgrade: "false"
+          qemu-targets: x86_64-softmmu
+          validation-target: x86_64
+          configure-args: |
+            --extra-cflags=-DTEST_RUN_${{ github.run_id }}_${{ github.run_attempt }}_NEWER
+
+      - name: Verify the newer preinstalled QEMU was kept
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -n "${{ steps.setup-qemu.outputs.install-prefix }}" ]]; then
+            echo "ERROR: expected install-prefix to be empty when the newer system QEMU is kept, got '${{ steps.setup-qemu.outputs.install-prefix }}'"
+            exit 1
+          fi
+
+          expected_bin_path="$(dirname "$(command -v qemu-system-x86_64)")"
+          if [[ "${{ steps.setup-qemu.outputs.bin-path }}" != "$expected_bin_path" ]]; then
+            echo "ERROR: expected bin-path '$expected_bin_path', got '${{ steps.setup-qemu.outputs.bin-path }}'"
+            exit 1
+          fi
+
+          version_output="$(qemu-system-x86_64 --version)"
+          if [[ "$version_output" != *"99.0.0"* ]]; then
+            echo "ERROR: expected the fake QEMU 99.0.0 to remain active, got: $version_output"
+            exit 1
+          fi
+
+          if [[ -d /opt/qemu/11.1.3 ]]; then
+            echo "ERROR: source build directory /opt/qemu/11.1.3 should not exist when the newer system QEMU is kept"
+            exit 1
+          fi
+
+  allow-downgrade-rebuilds:
+    name: Rebuild older version with allow-downgrade
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install fake newer preinstalled QEMU
+        shell: bash
+        run: |
+          set -euo pipefail
+          fake_bin_dir="$RUNNER_TEMP/fake-qemu-bin"
+          mkdir -p "$fake_bin_dir"
+          cat > "$fake_bin_dir/qemu-system-x86_64" <<'EOF'
+          #!/usr/bin/env bash
+          if [[ "$1" == "--version" ]]; then
+            echo "QEMU emulator version 99.0.0 (fake)"
+            exit 0
+          fi
+          echo "fake qemu-system-x86_64 invoked with: $*"
+          exit 0
+          EOF
+          chmod +x "$fake_bin_dir/qemu-system-x86_64"
+          echo "$fake_bin_dir" >> "$GITHUB_PATH"
+
+      - name: Run setup-qemu-latest action
+        id: setup-qemu
+        uses: ./setup-qemu-latest
+        with:
+          qemu-version: "11.1.3"
+          allow-downgrade: "true"
+          qemu-targets: x86_64-softmmu
+          validation-target: x86_64
+          nproc: "2"
+          configure-args: |
+            --extra-cflags=-DTEST_RUN_${{ github.run_id }}_${{ github.run_attempt }}_DOWNGRADE
+
+      - name: Verify the older version was built and took precedence
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ steps.setup-qemu.outputs.install-prefix }}" != "/opt/qemu/11.1.3" ]]; then
+            echo "ERROR: expected install-prefix '/opt/qemu/11.1.3', got '${{ steps.setup-qemu.outputs.install-prefix }}'"
+            exit 1
+          fi
+
+          qemu_bin="${{ steps.setup-qemu.outputs.bin-path }}/qemu-system-x86_64"
+          if [[ ! -x "$qemu_bin" ]]; then
+            echo "ERROR: expected QEMU binary not found: $qemu_bin"
+            exit 1
+          fi
+
+          version_output="$("$qemu_bin" --version)"
+          if [[ "$version_output" != *"11.1.3"* ]]; then
+            echo "ERROR: expected the rebuilt QEMU 11.1.3, got: $version_output"
+            exit 1
+          fi
+
+          resolved_bin="$(command -v qemu-system-x86_64)"
+          if [[ "$resolved_bin" != "$qemu_bin" ]]; then
+            echo "ERROR: expected PATH to resolve qemu-system-x86_64 to the rebuilt binary '$qemu_bin', got '$resolved_bin'"
+            exit 1
+          fi
