@@ -26,6 +26,9 @@ jobs:
   github-token-mode:
     name: Self-test github.token mode
     runs-on: ubuntu-24.04
+    # The selected identity must also replace an inherited CLI token.
+    env:
+      GH_TOKEN: token-that-must-be-replaced
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -83,6 +86,16 @@ jobs:
             exit 1
           fi
 
+          if [[ "${GH_TOKEN:-}" != "$SELECTED_TOKEN" ]]; then
+            echo "GH_TOKEN does not match the selected token."
+            exit 1
+          fi
+
+          if [[ "$(gh auth token)" != "$SELECTED_TOKEN" ]]; then
+            echo "GitHub CLI is not using the selected token."
+            exit 1
+          fi
+
           server_url="${SERVER_URL%/}"
           host="${server_url#https://}"
           token_url="https://x-access-token:${SELECTED_TOKEN}@${host}/"
@@ -123,6 +136,9 @@ jobs:
     # Secrets are only available for this manual path; workflow_call covers github.token mode.
     if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-24.04
+    # The selected identity must also replace an inherited CLI token.
+    env:
+      GH_TOKEN: token-that-must-be-replaced
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -170,6 +186,16 @@ jobs:
 
           if [[ -z "$SELECTED_TOKEN" ]]; then
             echo "Expected a non-empty selected token output."
+            exit 1
+          fi
+
+          if [[ "${GH_TOKEN:-}" != "$SELECTED_TOKEN" ]]; then
+            echo "GH_TOKEN does not match the selected token."
+            exit 1
+          fi
+
+          if [[ "$(gh auth token)" != "$SELECTED_TOKEN" ]]; then
+            echo "GitHub CLI is not using the selected token."
             exit 1
           fi
 

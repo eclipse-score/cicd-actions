@@ -12,7 +12,7 @@
 # *******************************************************************************
 
 name: Inter-Repo Access
-description: Resolve one token source and configure git for consistent GitHub cross-repository access.
+description: Resolve one token source and configure git and GH_TOKEN for consistent GitHub access.
 
 inputs:
   github-app-client-id:
@@ -104,6 +104,10 @@ runs:
         fi
 
         echo "::add-mask::$token"
+
+        # Keep subsequent CLI and download commands on the same identity as git.
+        printf 'GH_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
+
         echo "mode=$mode" >> "$GITHUB_OUTPUT"
         echo "actor=$actor" >> "$GITHUB_OUTPUT"
         echo "app_slug=$APP_SLUG" >> "$GITHUB_OUTPUT"

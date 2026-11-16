@@ -45,7 +45,13 @@ For subsequent `actions/checkout` steps, use `persist-credentials: false`. This 
 
 The rewrite host is derived from `github.server_url`, so the same behavior applies on GHES without extra inputs.
 
-The action also exposes the selected token as `outputs.token` for cases where a token must be passed explicitly (for example, to a GitHub API call).
+The action exports the same selected token as `GH_TOKEN` for subsequent steps,
+replacing any previously configured `GH_TOKEN`. On GitHub.com, the GitHub CLI
+uses it automatically; download tools that support `GH_TOKEN` can use the same
+credentials as git. The action does not change `GITHUB_TOKEN`.
+
+The selected token is also available as `outputs.token` for tools that require
+an explicit token argument.
 
 ## Required permissions
 
