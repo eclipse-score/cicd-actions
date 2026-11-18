@@ -11,11 +11,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // *******************************************************************************
 
-'use strict';
-
-const core = require('@actions/core');
-const os = require('os');
-const path = require('path');
+import * as core from '@actions/core';
+import * as os from 'os';
+import * as path from 'path';
 
 /** Absolute path to the current user's .netrc file. */
 const NETRC_PATH = path.join(os.homedir(), '.netrc');
@@ -66,4 +64,4 @@ function exportVar(name, value) {
   }
 }
 
-module.exports = { NETRC_PATH, NETRC_MACHINE, buildNetrcEntry, NETRC_ENTRY_REGEX, EXPORTED_ENV_VARS, exportVar };
+export { NETRC_PATH, NETRC_MACHINE, buildNetrcEntry, NETRC_ENTRY_REGEX, EXPORTED_ENV_VARS, exportVar };

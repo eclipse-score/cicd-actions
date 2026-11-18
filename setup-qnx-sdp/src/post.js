@@ -11,13 +11,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // *******************************************************************************
 
-'use strict';
-
-const core = require('@actions/core');
-const exec = require('@actions/exec');
-const fs = require('fs');
-const os = require('os');
-const { NETRC_PATH, NETRC_ENTRY_REGEX, EXPORTED_ENV_VARS } = require('./common');
+import * as core from '@actions/core';
+import * as exec from '@actions/exec';
+import * as fs from 'fs';
+import * as os from 'os';
+import { NETRC_PATH, NETRC_ENTRY_REGEX, EXPORTED_ENV_VARS } from './common.js';
 
 async function cleanupNetrc() {
   core.startGroup('Cleanup qnx.com entry from .netrc');

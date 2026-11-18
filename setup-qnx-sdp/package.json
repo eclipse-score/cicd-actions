@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Setup QNX SDP GitHub Action",
   "private": true,
+  "type": "module",
   "engines": {
     "node": ">=24"
   },

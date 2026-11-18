@@ -10,11 +10,9 @@
 //
 // SPDX - License - Identifier: Apache - 2.0
 // *******************************************************************************
-'use strict';
+import js from '@eslint/js';
 
-const js = require('@eslint/js');
-
-module.exports = [
+export default [
   js.configs.recommended,
   {
     languageOptions: {

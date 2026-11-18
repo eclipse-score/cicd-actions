@@ -11,14 +11,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // *******************************************************************************
 
-'use strict';
-
-const core = require('@actions/core');
-const exec = require('@actions/exec');
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
-const { NETRC_PATH, buildNetrcEntry, exportVar } = require('./common');
+import * as core from '@actions/core';
+import * as exec from '@actions/exec';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
+import { NETRC_PATH, buildNetrcEntry, exportVar } from './common.js';
 
 async function prepareCredentialHelper(credHelper) {
   core.startGroup('Check for qnx.com credential helper existence');
