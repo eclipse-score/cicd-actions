@@ -1,0 +1,44 @@
+# *******************************************************************************
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+# Share component paths between PR labels and the release overview.
+# Include manifests, source files and distribution bundles for each action.
+comp-inter-repo-access:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "inter-repo-access/**"
+
+comp-setup-qnx-sdp:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "setup-qnx-sdp/**"
+
+comp-setup-bazel-cache:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "setup-bazel-cache/**"
+
+comp-unblock-user-namespace-for-linux-sandbox:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "unblock-user-namespace-for-linux-sandbox/**"
+
+comp-prune-cache:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "prune-cache/**"
+
+comp-warm-bazel-repository-cache:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "warm-bazel-repository-cache/**"

@@ -28,6 +28,9 @@ concurrency:
 jobs:
   common:
     uses: eclipse-score/cicd-workflows/.github/workflows/on-pr.yml@v0.0.3
+    with:
+      # The uv project supplies maintainer tooling; Python tests have their own job.
+      skip-python-tests: true
     permissions:
       id-token: write
       contents: read

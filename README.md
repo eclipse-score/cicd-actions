@@ -15,6 +15,25 @@ Reusable GitHub Actions for S-CORE CI/CD automation. For reusable workflows, see
 
 Most actions have a self-test workflow in the `.github/workflows` directory (`test-*.yml`) that exercises the action in a real runner environment. These workflows are reusable (`workflow_call`) and are executed from the [`PR workflow`](./.github/workflows/_local_on_pr.yml).
 
+## Release overview
+
+Run `uv run --locked monorepo-releases` from this checkout to see which actions
+have changed since their latest `<action-name>/vMAJOR.MINOR.PATCH` tag. Refresh
+local tags first if needed. Actions without a component tag appear as unreleased;
+repository-wide tags such as `v0.0.2` are not component release baselines.
+
+The [Monorepo releases workflow](.github/workflows/monorepo-releases.yml) runs on
+pull requests against `main`, pushes to `main` and manual starts. Its job summary
+shows release status and relevant commits for each action. It does not create
+tags or releases. Maintenance commits (`chore`, `test` and `ci`, unless marked as
+breaking) do not require a release; add `--no-filter` to display them too.
+
+The `comp-*` rules in [the labeler configuration](.github/labeler.yml) define
+the action directories for both the release overview and automatic PR labels. The
+labeler reads configuration from the base branch, so new rules take effect after
+merging. The tool itself is pinned to a `cicd-workflows` commit in `pyproject.toml`
+and resolved through `uv.lock`.
+
 ## Dependency updates
 
 Dependabot groups npm security updates across `setup-bazel-cache` and

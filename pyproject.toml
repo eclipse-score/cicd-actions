@@ -1,0 +1,15 @@
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+# SPDX-License-Identifier: Apache-2.0
+
+[project]
+name = "score-cicd-actions"
+version = "0.1.0"
+description = "Maintainer tooling for SCORE CI actions"
+requires-python = ">=3.12"
+dependencies = ["monorepo-releases"]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+monorepo-releases = { git = "https://github.com/eclipse-score/cicd-workflows", rev = "200f97be787848974e55d1f4ef5615efbaa97ff8", subdirectory = "tools/monorepo-releases" }
