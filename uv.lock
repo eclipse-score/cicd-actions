@@ -5,7 +5,7 @@ requires-python = ">=3.12"
 [[package]]
 name = "monorepo-releases"
 version = "0.1.0"
-source = { git = "https://github.com/eclipse-score/cicd-workflows?subdirectory=tools%2Fmonorepo-releases&rev=200f97be787848974e55d1f4ef5615efbaa97ff8#200f97be787848974e55d1f4ef5615efbaa97ff8" }
+source = { git = "https://github.com/eclipse-score/cicd-workflows?subdirectory=tools%2Fmonorepo-releases&tag=monorepo-releases%2Fv0.0.0#7766592103689a909d119829b770aa1425acf889" }
 dependencies = [
     { name = "pyyaml" },
 ]
@@ -65,4 +65,4 @@ dependencies = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "monorepo-releases", git = "https://github.com/eclipse-score/cicd-workflows?subdirectory=tools%2Fmonorepo-releases&rev=200f97be787848974e55d1f4ef5615efbaa97ff8" }]
+requires-dist = [{ name = "monorepo-releases", git = "https://github.com/eclipse-score/cicd-workflows?subdirectory=tools%2Fmonorepo-releases&tag=monorepo-releases%2Fv0.0.0" }]

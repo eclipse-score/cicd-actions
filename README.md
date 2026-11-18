@@ -28,11 +28,11 @@ shows release status and relevant commits for each action. It does not create
 tags or releases. Maintenance commits (`chore`, `test` and `ci`, unless marked as
 breaking) do not require a release; add `--no-filter` to display them too.
 
-The `comp-*` rules in [the labeler configuration](.github/labeler.yml) define
+The action-name rules in [the labeler configuration](.github/labeler.yml) define
 the action directories for both the release overview and automatic PR labels. The
 labeler reads configuration from the base branch, so new rules take effect after
-merging. The tool itself is pinned to a `cicd-workflows` commit in `pyproject.toml`
-and resolved through `uv.lock`.
+merging. The tool itself is pinned to a `cicd-workflows` release tag in `pyproject.toml`
+and resolved through `uv.lock`. Dependabot checks the uv dependencies daily.
 
 ## Dependency updates
 

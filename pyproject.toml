@@ -12,4 +12,4 @@ dependencies = ["monorepo-releases"]
 package = false
 
 [tool.uv.sources]
-monorepo-releases = { git = "https://github.com/eclipse-score/cicd-workflows", rev = "200f97be787848974e55d1f4ef5615efbaa97ff8", subdirectory = "tools/monorepo-releases" }
+monorepo-releases = { git = "https://github.com/eclipse-score/cicd-workflows", tag = "monorepo-releases/v0.0.0", subdirectory = "tools/monorepo-releases" }
