@@ -69900,6 +69900,24 @@ var braceExpand2 = (pattern, options = {}) => {
 minimatch2.braceExpand = braceExpand2;
 var RANGE_MIN = 100;
 var rangeRe = /(?<![\\$])\{(-?\d+)\.\.(-?\d+)\}/g;
+var inRepeatOrNegExt = (portion, mark) => {
+  const stack = [];
+  for (let i = 0; i < portion.length; i++) {
+    const c = portion.charAt(i);
+    if (c === "\\") {
+      i++;
+    } else if (c === mark) {
+      if (stack.some((t) => t !== "@" && t !== "?"))
+        return true;
+    } else if (portion.charAt(i + 1) === "(" && "!?+*@".includes(c)) {
+      stack.push(c);
+      i++;
+    } else if (c === ")") {
+      stack.pop();
+    }
+  }
+  return false;
+};
 var match3 = (list, pattern, options = {}) => {
   const mm = new Minimatch2(pattern, options);
   list = list.filter((f) => mm.match(f));
@@ -70984,6 +71002,9 @@ var Minimatch2 = class {
       for (const portion of p.split("/")) {
         const c = portion.indexOf("[");
         if (c !== -1 && c < portion.lastIndexOf(mark)) {
+          return this.braceExpand();
+        }
+        if (!this.options.noext && inRepeatOrNegExt(portion, mark)) {
           return this.braceExpand();
         }
       }
