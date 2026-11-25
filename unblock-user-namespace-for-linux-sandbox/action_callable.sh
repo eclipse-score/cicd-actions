@@ -30,7 +30,16 @@ profile linux-sandbox ${INSTALL_BASE}/linux-sandbox flags=(unconfined) {
   include if exists <local/score-linux-sandbox>
 }
 EOF
-sudo apparmor_parser -r /etc/apparmor.d/score-linux-sandbox
+# Loading an AppArmor profile is a kernel operation that is impossible inside a
+# container (e.g. Kubernetes-hosted self-hosted runners). On such runners the
+# host must already permit unprivileged user namespaces (e.g.
+# kernel.apparmor_restrict_unprivileged_userns=0), making the profile
+# unnecessary. Warn instead of failing, and let the functional check below
+# decide whether linux-sandbox actually works.
+if ! sudo apparmor_parser -r /etc/apparmor.d/score-linux-sandbox; then
+  echo "WARNING: could not load the AppArmor profile (no AppArmor kernel access," \
+       "e.g. running inside a container); relying on the host configuration."
+fi
 
 set +e
 "${INSTALL_BASE}/linux-sandbox" "/bin/true"
