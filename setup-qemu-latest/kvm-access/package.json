@@ -1,0 +1,16 @@
+{
+  "name": "kvm-access",
+  "version": "1.0.0",
+  "description": "Grant scoped /dev/kvm ACL access and restore the original ACL after a job",
+  "private": true,
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.14.0"
+  }
+}
